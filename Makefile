@@ -38,4 +38,10 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all clean fclean re
+test:
+	@$(MAKE) -C tests
+
+testclean:
+	@$(MAKE) -C tests fclean
+
+.PHONY: all clean fclean re test testclean
