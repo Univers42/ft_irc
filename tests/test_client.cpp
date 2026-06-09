@@ -105,17 +105,16 @@ TEST(ClientBuffer, EmptyLinesSkipped)
 
 TEST(ClientBuffer, MixedCRLFAndLF)
 {
-	/* Implementation scans for \r\n first, then bare \n.
-	   "A\r\nB\nC\r\n" → first pass finds \r\n at 1 ("A"),
-	   then \r\n at 5 ("B\nC").  Two messages total. */
+	/* Every '\n' is a line boundary, with an optional preceding '\r'
+	   stripped — mixed CRLF/LF peers can never produce a "line" with an
+	   embedded newline. "A\r\nB\nC\r\n" → "A", "B", "C". */
 	Client c(51, "127.0.0.1");
 	c.appendToRecvBuffer("A\r\nB\nC\r\n");
 	std::vector<std::string> msgs = c.extractMessages();
-	ASSERT_EQ(msgs.size(), 2u);
+	ASSERT_EQ(msgs.size(), 3u);
 	EXPECT_EQ(msgs[0], "A");
-	/* Second message includes the bare \n since \r\n takes priority */
-	EXPECT_NE(msgs[1].find("B"), std::string::npos);
-	EXPECT_NE(msgs[1].find("C"), std::string::npos);
+	EXPECT_EQ(msgs[1], "B");
+	EXPECT_EQ(msgs[2], "C");
 }
 
 /* ════════════════════════════════════════════════════════════════════════

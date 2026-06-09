@@ -58,7 +58,8 @@ TEST_SRCS	= test_main.cpp \
 			  test_channel.cpp \
 			  test_bot.cpp \
 			  test_integration.cpp \
-			  test_robustness.cpp
+			  test_robustness.cpp \
+			  test_security.cpp
 
 # ── Vendor sources ────────────────────────────────────────────
 GTEST_SRC	= ../vendor/googletest/googletest/src/gtest-all.cc

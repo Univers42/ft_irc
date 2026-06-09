@@ -5,6 +5,8 @@
 # include <vector>
 # include <ctime>
 
+# include "libcpp98/buffered_socket.hpp"
+
 class Client
 {
 public:
@@ -66,8 +68,7 @@ private:
 	bool		_nickSet;
 	bool		_userSet;
 
-	std::string	_recvBuffer;
-	std::string	_sendBuffer;
+	libcpp98::BufferedSocket	_io;
 
 	time_t		_lastActivity;
 	bool		_pingSent;

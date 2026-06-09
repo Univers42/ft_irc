@@ -11,6 +11,7 @@ Client::Client(int fd, const std::string &hostname)
 	  _passSent(false),
 	  _nickSet(false),
 	  _userSet(false),
+	  _io(MAX_MSGLEN, 0),
 	  _lastActivity(std::time(NULL)),
 	  _pingSent(false)
 {
@@ -57,57 +58,54 @@ void	Client::setPingSent(bool sent) { _pingSent = sent; }
 
 void Client::appendToRecvBuffer(const std::string &data)
 {
-	_recvBuffer += data;
+	_io.feed(data);
+}
+
+/* One choke point sanitizes every extracted line: stray CR and NUL bytes are
+** stripped so no parameter can ever smuggle a second IRC line ("a\rQUIT") or
+** truncate C-string views downstream.  \x01 (CTCP/DCC) passes untouched. */
+static std::string sanitizeLine(const std::string &line)
+{
+	std::string out;
+	out.reserve(line.size());
+	for (std::string::size_type i = 0; i < line.size(); ++i)
+	{
+		if (line[i] != '\r' && line[i] != '\0')
+			out += line[i];
+	}
+	return out;
 }
 
 std::vector<std::string> Client::extractMessages()
 {
 	std::vector<std::string> messages;
-	std::string::size_type pos;
+	std::string line;
 
-	while ((pos = _recvBuffer.find("\r\n")) != std::string::npos)
+	while (_io.nextLine(line))
 	{
-		std::string line = _recvBuffer.substr(0, pos);
-		_recvBuffer.erase(0, pos + 2);
+		line = sanitizeLine(line);
 		if (!line.empty())
 			messages.push_back(line);
-	}
-	// Also handle bare \n (some clients / nc may send it)
-	while ((pos = _recvBuffer.find('\n')) != std::string::npos)
-	{
-		std::string line = _recvBuffer.substr(0, pos);
-		_recvBuffer.erase(0, pos + 1);
-		// Remove trailing \r if present
-		if (!line.empty() && line[line.size() - 1] == '\r')
-			line.erase(line.size() - 1);
-		if (!line.empty())
-			messages.push_back(line);
-	}
-	// Safety: prevent buffer from growing indefinitely without newline
-	if (_recvBuffer.size() > MAX_MSGLEN)
-	{
-		messages.push_back(_recvBuffer.substr(0, MAX_MSGLEN));
-		_recvBuffer.clear();
 	}
 	return messages;
 }
 
 void Client::queueMessage(const std::string &msg)
 {
-	_sendBuffer += msg + "\r\n";
+	_io.queue(msg);
 }
 
 const std::string &Client::getSendBuffer() const
 {
-	return _sendBuffer;
+	return _io.outData();
 }
 
 void Client::clearSendBuffer(size_t bytesSent)
 {
-	_sendBuffer.erase(0, bytesSent);
+	_io.consume(bytesSent);
 }
 
 bool Client::hasPendingData() const
 {
-	return !_sendBuffer.empty();
+	return _io.hasPending();
 }
