@@ -1,0 +1,12 @@
+# Build artifacts
+obj/
+ircserv
+
+# Test build artifacts
+tests/obj/
+tests/test_runner
+
+# Editor/OS noise
+*.o
+*.d
+.DS_Store
