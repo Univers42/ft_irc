@@ -58,7 +58,11 @@ jobs:
         run: docker build -t ircserv .
       - name: ai-assistant image (cargo --locked)
         run: docker build -t ai-assistant companions/ai-assistant
-      - name: validate compose config
+      - name: realtime-bridge image (cargo --locked)
+        run: docker build -t realtime-bridge companions/realtime-bridge
+      - name: validate compose config (default + platform profile)
         env:
           ANTHROPIC_API_KEY: dummy
-        run: docker compose config >/dev/null
+        run: |
+          docker compose config >/dev/null
+          docker compose --profile platform config >/dev/null
