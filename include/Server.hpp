@@ -25,6 +25,7 @@ public:
 
 	/* ─── Client management ─── */
 	Client	*findClientByNick(const std::string &nickname) const;
+	Client	*findClientByFd(int fd) const;
 	void	sendToClient(Client *client, const std::string &msg);
 	void	disconnectClient(int fd, const std::string &reason);
 

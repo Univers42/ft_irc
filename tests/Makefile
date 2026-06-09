@@ -52,7 +52,8 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/CommandMessaging.cpp \
 			  ../src/CommandOperator.cpp \
 			  ../src/CommandQuery.cpp \
-			  ../src/Bot.cpp
+			  ../src/Bot.cpp \
+			  ../src/bonus/FileTransferExt.cpp
 
 # ── Test sources ──────────────────────────────────────────────
 TEST_SRCS	= test_main.cpp \
@@ -62,7 +63,8 @@ TEST_SRCS	= test_main.cpp \
 			  test_bot.cpp \
 			  test_integration.cpp \
 			  test_robustness.cpp \
-			  test_security.cpp
+			  test_security.cpp \
+			  test_filetransfer.cpp
 
 # ── Vendor sources ────────────────────────────────────────────
 GTEST_SRC	= ../vendor/googletest/googletest/src/gtest-all.cc

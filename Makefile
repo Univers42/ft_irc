@@ -39,7 +39,8 @@ CORE_NAMES	= main \
 			  CommandOperator \
 			  CommandQuery
 
-BONUS_NAMES	= Bot
+BONUS_NAMES	= Bot \
+			  bonus/FileTransferExt
 
 EXTRA_NAMES	= PlatformBus \
 			  AuditLog \

@@ -418,6 +418,12 @@ void Server::dispatchCommand(Client *client, const Message &msg)
 
 /* ─── Client management ─── */
 
+Client *Server::findClientByFd(int fd) const
+{
+	std::map<int, Client *>::const_iterator it = _clients.find(fd);
+	return it == _clients.end() ? NULL : it->second;
+}
+
 Client *Server::findClientByNick(const std::string &nickname) const
 {
 	for (std::map<int, Client *>::const_iterator it = _clients.begin();

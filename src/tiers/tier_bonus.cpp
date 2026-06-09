@@ -7,6 +7,7 @@
 #include "ext/RegisterExtensions.hpp"
 #include "Server.hpp"
 #include "Bot.hpp"
+#include "bonus/FileTransferExt.hpp"
 #include "Log.hpp"
 
 #include <new>
@@ -16,9 +17,10 @@ void registerExtensions(Server &server)
 	try
 	{
 		server.addExtension(new Bot(&server));
+		server.addExtension(new FileTransferExt());
 	}
 	catch (const std::bad_alloc &)
 	{
-		Log::warn("could not create bot (out of memory)");
+		Log::warn("could not create bonus extensions (out of memory)");
 	}
 }
