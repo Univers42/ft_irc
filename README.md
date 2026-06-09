@@ -52,6 +52,40 @@ Use `make mandatory` to demonstrate the strict subject build.
 - `port`: The TCP port to listen on (e.g., 6667)
 - `password`: Connection password required by clients
 
+### Running with Docker
+
+The whole stack — the C++ server plus the Claude-backed AI companion — runs
+with one command. Docker and Compose v2 required.
+
+```bash
+cp .env.example .env          # then set ANTHROPIC_API_KEY (and a password)
+docker compose up --build
+```
+
+This starts `ircserv` (published on `${IRC_PORT:-6667}`) and the
+`ai-assistant` companion, which connects to the server over the compose
+network, joins `$IRC_CHANNELS`, and answers when addressed (`!ai …`,
+`assistant: …`, or a direct message). Secrets live only in the gitignored
+`.env`.
+
+Server only, no companion:
+
+```bash
+docker build -t ircserv .
+docker run --rm -p 6667:6667 ircserv 6667 mypassword
+```
+
+Run the test suite in a clean container:
+
+```bash
+docker build --target test -t ircserv-test .
+```
+
+> The `ai-assistant` is a separate process (see `companions/ai-assistant/`),
+> not part of the C++98 server or its 42 build — the server stays
+> subject-clean and is unaware the companion is AI. See that directory's
+> README for how it works.
+
 ### Connecting with HexChat
 
 1. Open HexChat → Add a new network
