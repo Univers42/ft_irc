@@ -9,9 +9,11 @@
 # ---- build ----------------------------------------------------------------
 FROM rust:1-slim AS build
 WORKDIR /app
-COPY Cargo.toml ./
+# Cargo.lock is committed, so --locked guarantees a reproducible dependency
+# graph (CI fails if the lock is stale).
+COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # ---- runtime --------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
