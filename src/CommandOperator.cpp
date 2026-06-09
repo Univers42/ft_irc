@@ -3,8 +3,24 @@
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
 
+#include <cerrno>
 #include <cstdlib>
 #include <iostream>
+
+/* A channel key must be short and contain no space, comma or control
+** character — it travels as a single middle parameter of JOIN/MODE. */
+static bool isValidChannelKey(const std::string &key)
+{
+	if (key.empty() || key.size() > MAX_KEYLEN)
+		return false;
+	for (std::string::size_type i = 0; i < key.size(); ++i)
+	{
+		unsigned char c = static_cast<unsigned char>(key[i]);
+		if (c <= ' ' || c == ',')
+			return false;
+	}
+	return true;
+}
 
 /* ─── KICK ─── */
 
@@ -179,7 +195,10 @@ void Server::cmdTopic(Client *client, const Message &msg)
 		return;
 	}
 
-	const std::string &newTopic = msg.params[1];
+	/* Enforce the TOPICLEN=390 advertised in 005: truncate, don't reject. */
+	std::string newTopic = msg.params[1];
+	if (newTopic.size() > MAX_TOPICLEN)
+		newTopic.erase(MAX_TOPICLEN);
 	chan->setTopic(newTopic, client->getNickname());
 
 	chan->broadcastMessage(":" + client->getPrefix() + " TOPIC "
@@ -337,6 +356,12 @@ void Server::handleChannelMode(Client *client, Channel *channel,
 						continue;
 					}
 					std::string key = msg.params[paramIdx++];
+					if (!isValidChannelKey(key))
+					{
+						sendReply(client, ERR_INVALIDKEY,
+								  channel->getName() + " :Key is not well-formed");
+						continue;
+					}
 					channel->setKey(key);
 					if (adding != currentSign || appliedModes.empty())
 					{
@@ -403,8 +428,13 @@ void Server::handleChannelMode(Client *client, Channel *channel,
 						continue;
 					}
 					std::string limitStr = msg.params[paramIdx++];
-					int limit = std::atoi(limitStr.c_str());
-					if (limit <= 0)
+					/* Full-string strtol parse with bounds: rejects "12abc",
+					** negatives, and values that overflow size_t when cast. */
+					errno = 0;
+					char *end = NULL;
+					long limit = std::strtol(limitStr.c_str(), &end, 10);
+					if (errno == ERANGE || end == limitStr.c_str() || *end != '\0'
+						|| limit <= 0 || limit > MAX_USERLIMIT)
 						continue;
 					channel->setUserLimit(static_cast<size_t>(limit));
 					if (adding != currentSign || appliedModes.empty())
@@ -415,7 +445,8 @@ void Server::handleChannelMode(Client *client, Channel *channel,
 					appliedModes += "l";
 					if (!appliedParams.empty())
 						appliedParams += " ";
-					appliedParams += limitStr;
+					/* Echo the canonical parsed number, not the raw text. */
+					appliedParams += libcpp::str::to_string(limit);
 				}
 				else
 				{

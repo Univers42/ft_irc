@@ -132,6 +132,107 @@ TEST_F(SecurityTest, NickCollisionIsCaseInsensitive)
 	EXPECT_TRUE(b.hasNumeric(reply, "433")) << "Expected ERR_NICKNAMEINUSE, got: " << reply;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+ * Suite: ModeBounds — MODE +l / +k / TOPIC parameter validation
+ * ════════════════════════════════════════════════════════════════════ */
+
+class ModeBoundsTest : public IrcServerTest
+{
+protected:
+	int portBase() const override { return 17400; }
+
+	/* Register an op and join #mb; returns the connected client. */
+	void setUpOp(TestClient &op)
+	{
+		ASSERT_TRUE(op.connect(serverPort));
+		op.registerClient("testpass", "modeop", "modeop");
+		op.sendCmd("JOIN #mb");
+		std::this_thread::sleep_for(std::chrono::milliseconds(150));
+		op.recvAll();
+	}
+
+	std::string queryMode(TestClient &op)
+	{
+		op.sendCmd("MODE #mb");
+		std::this_thread::sleep_for(std::chrono::milliseconds(150));
+		return op.recvAll();
+	}
+};
+
+TEST_F(ModeBoundsTest, LimitRejectsGarbageAndNegative)
+{
+	TestClient op;
+	setUpOp(op);
+
+	op.sendCmd("MODE #mb +l -5");
+	op.sendCmd("MODE #mb +l 12abc");
+	op.sendCmd("MODE #mb +l 99999999999999999999");
+	op.sendCmd("MODE #mb +l 0");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	op.recvAll();
+
+	std::string modes = queryMode(op);
+	EXPECT_TRUE(op.hasNumeric(modes, "324")) << modes;
+	EXPECT_EQ(modes.find('l'), std::string::npos)
+		<< "no limit should be set: " << modes;
+}
+
+TEST_F(ModeBoundsTest, LimitAcceptsCanonicalNumber)
+{
+	TestClient op;
+	setUpOp(op);
+
+	op.sendCmd("MODE #mb +l 050");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	std::string echo = op.recvAll();
+	/* The broadcast echoes the canonical parsed value, not the raw text */
+	EXPECT_NE(echo.find("+l 50"), std::string::npos) << echo;
+}
+
+TEST_F(ModeBoundsTest, KeyRejectsSpacesAndControls)
+{
+	TestClient op;
+	setUpOp(op);
+
+	op.sendCmd("MODE #mb +k bad,key");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	std::string reply = op.recvAll();
+	EXPECT_TRUE(op.hasNumeric(reply, "525")) << "Expected ERR_INVALIDKEY: " << reply;
+
+	std::string modes = queryMode(op);
+	EXPECT_EQ(modes.find("+k"), std::string::npos) << modes;
+}
+
+TEST_F(ModeBoundsTest, KeyRejectsOverlong)
+{
+	TestClient op;
+	setUpOp(op);
+
+	op.sendCmd("MODE #mb +k " + std::string(40, 'x'));
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	std::string reply = op.recvAll();
+	EXPECT_TRUE(op.hasNumeric(reply, "525")) << reply;
+}
+
+TEST_F(ModeBoundsTest, TopicTruncatedToAdvertisedLimit)
+{
+	TestClient op;
+	setUpOp(op);
+
+	std::string longTopic(600, 'T');
+	op.sendCmd("TOPIC #mb :" + longTopic);
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	op.recvAll();
+
+	op.sendCmd("TOPIC #mb");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	std::string reply = op.recvAll();
+
+	/* 332 reply carries the stored topic: exactly 390 'T's, not 600 */
+	EXPECT_NE(reply.find(std::string(390, 'T')), std::string::npos) << reply;
+	EXPECT_EQ(reply.find(std::string(391, 'T')), std::string::npos) << reply;
+}
+
 TEST_F(SecurityTest, ChannelNamesAreCaseInsensitive)
 {
 	TestClient a, b;
