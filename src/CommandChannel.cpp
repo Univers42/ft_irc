@@ -98,6 +98,7 @@ void Server::cmdJoin(Client *client, const Message &msg)
 		// Broadcast JOIN to all channel members (including the joiner)
 		chan->broadcastMessage(":" + client->getPrefix()
 							  + " JOIN " + name, NULL);
+		audit("join", client->getNickname(), name);
 
 		// Send topic
 		if (!chan->getTopic().empty())
@@ -166,6 +167,7 @@ void Server::cmdPart(Client *client, const Message &msg)
 			partMsg += " :" + reason;
 
 		chan->broadcastMessage(partMsg, NULL);
+		audit("part", client->getNickname(), chanName);
 		chan->removeMember(client);
 
 		if (chan->isEmpty())

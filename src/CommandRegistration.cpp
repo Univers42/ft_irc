@@ -182,4 +182,5 @@ void Server::completeRegistration(Client *client)
 
 	Log::success("registered " + nick + " ("
 			  + client->getUsername() + "@" + client->getHostname() + ")");
+	audit("register", nick, client->getUsername() + "@" + client->getHostname());
 }

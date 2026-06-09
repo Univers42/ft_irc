@@ -2,6 +2,7 @@
 #include "Bot.hpp"
 #include "Log.hpp"
 #include "PlatformBus.hpp"
+#include "AuditLog.hpp"
 #include "libcpp/str/format.hpp"
 #include "libcpp/util/config.hpp"
 
@@ -30,6 +31,7 @@ Server::Server(int port, const std::string &password)
 	  _epollFd(-1),
 	  _bot(NULL),
 	  _bus(NULL),
+	  _audit(NULL),
 	  _lastPingCheck(std::time(NULL))
 {
 	createListenSocket();
@@ -45,21 +47,25 @@ Server::Server(int port, const std::string &password)
 		_bot = NULL;
 	}
 	Log::banner("ft_irc - listening on port " + libcpp::str::to_string(_port));
-	setupPlatformBus();
+	setupPlatformFeatures();
 }
 
 /*
-** Optional real-time platform bus. Enabled only when the env var FT_IRC_CONFIG
-** points to an INI file with [bus] enabled = true. Without it, ircserv is the
-** plain RFC server the subject grades.
+** Optional real-time platform features. Enabled only when the env var
+** FT_IRC_CONFIG points to an INI file. Without it, ircserv is the plain RFC
+** server the subject grades.
 **
 **   [bus]
 **   enabled = true
 **   port    = 6700
 **   secret  = change-me
 **   nick    = platform
+**
+**   [audit]
+**   enabled = true
+**   path    = ./ircserv-audit.csv
 */
-void Server::setupPlatformBus()
+void Server::setupPlatformFeatures()
 {
 	const char *cfgPath = std::getenv("FT_IRC_CONFIG");
 	if (!cfgPath)
@@ -71,32 +77,61 @@ void Server::setupPlatformBus()
 		Log::warn(std::string("could not read FT_IRC_CONFIG: ") + cfgPath);
 		return;
 	}
-	if (!cfg.get_bool("bus", "enabled", false))
-		return;
 
-	int port = cfg.get_int("bus", "port", 6700);
-	std::string secret = cfg.get("bus", "secret", "");
-	std::string nick = cfg.get("bus", "nick", "platform");
+	if (cfg.get_bool("audit", "enabled", false))
+	{
+		std::string path = cfg.get("audit", "path", "./ircserv-audit.csv");
+		try
+		{
+			_audit = new AuditLog(path);
+		}
+		catch (const std::bad_alloc &)
+		{
+			_audit = NULL;
+		}
+		if (_audit && !_audit->ok())
+		{
+			Log::warn("could not open audit log: " + path);
+			delete _audit;
+			_audit = NULL;
+		}
+		else if (_audit)
+			Log::info("audit log: " + path);
+	}
 
-	try
+	if (cfg.get_bool("bus", "enabled", false))
 	{
-		_bus = new PlatformBus(this, port, secret, nick);
+		int port = cfg.get_int("bus", "port", 6700);
+		std::string secret = cfg.get("bus", "secret", "");
+		std::string nick = cfg.get("bus", "nick", "platform");
+
+		try
+		{
+			_bus = new PlatformBus(this, port, secret, nick);
+		}
+		catch (const std::bad_alloc &)
+		{
+			Log::warn("could not create platform bus (out of memory)");
+			_bus = NULL;
+		}
+		if (_bus && !_bus->start())
+		{
+			delete _bus;
+			_bus = NULL;
+		}
 	}
-	catch (const std::bad_alloc &)
-	{
-		Log::warn("could not create platform bus (out of memory)");
-		_bus = NULL;
-		return;
-	}
-	if (!_bus->start())
-	{
-		delete _bus;
-		_bus = NULL;
-	}
+}
+
+void Server::audit(const std::string &event, const std::string &actor,
+				   const std::string &detail)
+{
+	if (_audit)
+		_audit->log(event, actor, detail);
 }
 
 Server::~Server()
 {
+	delete _audit;
 	delete _bus;
 	delete _bot;
 	for (std::map<int, Client *>::iterator it = _clients.begin();
@@ -462,6 +497,7 @@ void Server::disconnectClient(int fd, const std::string &reason)
 	close(fd);
 	Log::info("client disconnected: " + client->getNickname()
 			  + " (" + reason + ")");
+	audit("disconnect", client->getNickname(), reason);
 	delete client;
 	_clients.erase(fd);
 }

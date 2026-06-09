@@ -13,6 +13,7 @@
 
 class Bot;
 class PlatformBus;
+class AuditLog;
 
 class Server
 {
@@ -43,6 +44,10 @@ public:
 	/* ─── Reply helpers ─── */
 	void	sendReply(Client *client, const std::string &numeric,
 					const std::string &params);
+
+	/* ─── Audit hook (no-op unless [audit] is enabled in config) ─── */
+	void	audit(const std::string &event, const std::string &actor,
+				const std::string &detail);
 
 	/* ─── Static ─── */
 	static bool	isRunning;
@@ -106,8 +111,8 @@ private:
 	bool	isValidChannelName(const std::string &name) const;
 	void	broadcastToChannels(Client *client, const std::string &msg);
 
-	/* ─── Platform bus (optional, config-gated) ─── */
-	void	setupPlatformBus();
+	/* ─── Platform features (optional, config-gated) ─── */
+	void	setupPlatformFeatures();
 
 	/* ─── Data ─── */
 	int							_port;
@@ -119,6 +124,7 @@ private:
 	std::map<std::string, Channel *>	_channels;
 	Bot							*_bot;
 	PlatformBus					*_bus;
+	AuditLog					*_audit;
 	time_t						_lastPingCheck;
 
 	static const int			MAX_EVENTS = 64;

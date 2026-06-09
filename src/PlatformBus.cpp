@@ -230,4 +230,5 @@ void PlatformBus::publish(const std::string &channel, const std::string &type,
 	std::string line = ":" + _serviceNick + "!svc@" + _server->getServerName()
 					 + " PRIVMSG " + channel + " :" + body;
 	chan->broadcastMessage(line, NULL);
+	_server->audit("publish", _serviceNick, channel + " " + type);
 }
