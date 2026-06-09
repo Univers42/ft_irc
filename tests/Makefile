@@ -22,6 +22,7 @@ LIBCPP		= ../vendor/libcpp
 LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
 			  $(LIBCPP)/src/str/case.cpp \
 			  $(LIBCPP)/src/str/utf8.cpp \
+			  $(LIBCPP)/src/util/config.cpp \
 			  $(LIBCPP)/src/term/color.cpp \
 			  $(LIBCPP)/src/term/style.cpp \
 			  $(LIBCPP)/src/term/table.cpp \
@@ -31,6 +32,7 @@ LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
 # ── Project sources (everything except main.cpp) ──────────────
 PROJ_SRCS	= ../src/Server.cpp \
 			  ../src/Log.cpp \
+			  ../src/PlatformBus.cpp \
 			  ../src/Client.cpp \
 			  ../src/Channel.cpp \
 			  ../src/Message.cpp \

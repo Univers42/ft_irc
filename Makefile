@@ -15,6 +15,7 @@ INCLUDES	= -I include -I $(LIBCPP)/include
 LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
 			  $(LIBCPP)/src/str/case.cpp \
 			  $(LIBCPP)/src/str/utf8.cpp \
+			  $(LIBCPP)/src/util/config.cpp \
 			  $(LIBCPP)/src/term/color.cpp \
 			  $(LIBCPP)/src/term/style.cpp \
 			  $(LIBCPP)/src/term/table.cpp \
@@ -24,6 +25,7 @@ LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
 SRCS		= $(SRCDIR)/main.cpp \
 			  $(SRCDIR)/Server.cpp \
 			  $(SRCDIR)/Log.cpp \
+			  $(SRCDIR)/PlatformBus.cpp \
 			  $(SRCDIR)/Client.cpp \
 			  $(SRCDIR)/Channel.cpp \
 			  $(SRCDIR)/Message.cpp \
