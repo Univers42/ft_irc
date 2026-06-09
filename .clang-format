@@ -1,23 +1,37 @@
-# ft_irc style — matches the existing hand-written code:
-#   tabs for indentation, Allman braces, pointer glued to the name,
-#   and NO automatic line wrapping (manual line breaks are preserved).
+# ft_irc style — a clang-format BASELINE for new code, not a gate.
+#
+# The hand-written code uses two conventions clang-format (18) cannot
+# reproduce, so they are preserved by hand and excluded from enforcement:
+#   1. a space after a top-level '#'  ("# define" / "# include") — no
+#      clang-format option adds it; AfterHash only indents *nested* directives.
+#   2. manual column alignment of one-liner declarations and of wrapped
+#      expression continuations (see the getter block in Client.cpp, the
+#      WHO/WHOIS reply chains) — no alignment option reproduces it.
+# scripts/normalize.sh therefore treats clang-format diffs as advisory and
+# enforces only the safe whitespace fixes (trailing space, final newline).
+#
+# What this config DOES pin for new code: tabs everywhere, Allman braces,
+# pointer glued to the name, no reflow/wrapping.
 Language:        Cpp
 Standard:        c++03
 BasedOnStyle:    LLVM
 
-# Indentation
-UseTab:          ForIndentation
+# Indentation — tabs for both block indent AND alignment, so generated
+# output matches the hand-written tab usage instead of emitting spaces.
+UseTab:          Always
 TabWidth:        4
 IndentWidth:     4
 ContinuationIndentWidth: 4
 AccessModifierOffset: -4
 NamespaceIndentation: All
 
-# Preserve the existing "# define" / "# include" convention inside guards
+# AfterHash still indents nested directives; it cannot add the space the
+# house "# define" convention uses on top-level directives (see header note).
 IndentPPDirectives: AfterHash
 
-# Keep the column-aligned declarations the headers already use
-AlignConsecutiveDeclarations: true
+# Off: the code aligns declarations by hand into columns, which no
+# clang-format setting reproduces — leave it untouched rather than collapse it.
+AlignConsecutiveDeclarations: false
 
 # Braces — Allman (opening brace on its own line)
 BreakBeforeBraces: Allman
