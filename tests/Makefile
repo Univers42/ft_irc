@@ -14,7 +14,19 @@ INC_PROJ	= -I ../include
 INC_GTEST	= -I ../vendor/googletest/googletest/include \
 			  -I ../vendor/googletest/googletest
 INC_PM		= -I ../vendor
-INCLUDES	= $(INC_PROJ) $(INC_GTEST) $(INC_PM)
+INC_LIBCPP	= -I ../vendor/libcpp/include
+INCLUDES	= $(INC_PROJ) $(INC_GTEST) $(INC_PM) $(INC_LIBCPP)
+
+# ── libcpp str/term modules used by the project sources ───────
+LIBCPP		= ../vendor/libcpp
+LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
+			  $(LIBCPP)/src/str/case.cpp \
+			  $(LIBCPP)/src/str/utf8.cpp \
+			  $(LIBCPP)/src/term/color.cpp \
+			  $(LIBCPP)/src/term/style.cpp \
+			  $(LIBCPP)/src/term/table.cpp \
+			  $(LIBCPP)/src/term/stylesheet.cpp \
+			  $(LIBCPP)/src/term/writer.cpp
 
 # ── Project sources (everything except main.cpp) ──────────────
 PROJ_SRCS	= ../src/Server.cpp \
@@ -45,11 +57,12 @@ PM_SRC		= ../vendor/PostMan.cpp
 OBJDIR		= obj
 
 PROJ_OBJS	= $(patsubst ../src/%.cpp,$(OBJDIR)/proj_%.o,$(PROJ_SRCS))
+LIBCPP_OBJS	= $(patsubst $(LIBCPP)/src/%.cpp,$(OBJDIR)/libcpp/%.o,$(LIBCPP_SRCS))
 TEST_OBJS	= $(patsubst %.cpp,$(OBJDIR)/%.o,$(TEST_SRCS))
 GTEST_OBJ	= $(OBJDIR)/gtest-all.o
 PM_OBJ		= $(OBJDIR)/PostMan.o
 
-ALL_OBJS	= $(PROJ_OBJS) $(TEST_OBJS) $(GTEST_OBJ) $(PM_OBJ)
+ALL_OBJS	= $(PROJ_OBJS) $(LIBCPP_OBJS) $(TEST_OBJS) $(GTEST_OBJ) $(PM_OBJ)
 
 # ══════════════════════════════════════════════════════════════
 #  Targets
@@ -65,6 +78,11 @@ $(NAME): $(ALL_OBJS)
 # Project sources
 $(OBJDIR)/proj_%.o: ../src/%.cpp
 	@mkdir -p $(OBJDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# libcpp str/term modules
+$(OBJDIR)/libcpp/%.o: $(LIBCPP)/src/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # Test sources

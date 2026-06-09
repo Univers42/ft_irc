@@ -2,10 +2,24 @@ NAME		= ircserv
 
 CXX			= c++
 CXXFLAGS	= -Wall -Wextra -Werror -std=c++98
-INCLUDES	= -I include
 
 SRCDIR		= src
 OBJDIR		= obj
+
+# ── libcpp: reuse the project's own C++98-clean str/term modules ──────────────
+#  These sources compile cleanly under -std=c++98 -Wall -Wextra -Werror; they
+#  are built from source as part of ircserv (no external library is linked).
+LIBCPP		= vendor/libcpp
+INCLUDES	= -I include -I $(LIBCPP)/include
+
+LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
+			  $(LIBCPP)/src/str/case.cpp \
+			  $(LIBCPP)/src/str/utf8.cpp \
+			  $(LIBCPP)/src/term/color.cpp \
+			  $(LIBCPP)/src/term/style.cpp \
+			  $(LIBCPP)/src/term/table.cpp \
+			  $(LIBCPP)/src/term/stylesheet.cpp \
+			  $(LIBCPP)/src/term/writer.cpp
 
 SRCS		= $(SRCDIR)/main.cpp \
 			  $(SRCDIR)/Server.cpp \
@@ -20,14 +34,19 @@ SRCS		= $(SRCDIR)/main.cpp \
 			  $(SRCDIR)/Bot.cpp
 
 OBJS		= $(SRCS:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+LIBCPP_OBJS	= $(LIBCPP_SRCS:$(LIBCPP)/src/%.cpp=$(OBJDIR)/libcpp/%.o)
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+$(NAME): $(OBJS) $(LIBCPP_OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) $(LIBCPP_OBJS) -o $(NAME)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
-	@mkdir -p $(OBJDIR)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJDIR)/libcpp/%.o: $(LIBCPP)/src/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
