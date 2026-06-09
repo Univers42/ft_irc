@@ -478,6 +478,15 @@ void Server::disconnectClient(int fd, const std::string &reason)
 	for (size_t i = 0; i < _extensions.size(); ++i)
 		_extensions[i]->onClientDisconnect(*this, *client, reason);
 
+	// Best-effort flush of replies queued before this disconnect (e.g. the
+	// 001-005 burst when the client QUITs immediately after registering).
+	// Single non-blocking send; whatever the kernel refuses is dropped.
+	if (client->hasPendingData())
+	{
+		const std::string &pending = client->getSendBuffer();
+		send(fd, pending.c_str(), pending.size(), 0);
+	}
+
 	removeFromEpoll(fd);
 	close(fd);
 	Log::info("client disconnected: " + client->getNickname()
