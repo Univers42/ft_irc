@@ -2,9 +2,8 @@
 
 #include "Server.hpp"
 #include "Bot.hpp"
+#include "Log.hpp"
 #include "libcpp/str/case.hpp"
-
-#include <iostream>
 
 /* ─── CAP ─── */
 
@@ -181,7 +180,6 @@ void Server::completeRegistration(Client *client)
 	sendReply(client, ERR_NOMOTD,
 			  ":MOTD File is missing");
 
-	std::cout << "Client registered: " << nick << " ("
-			  << client->getUsername() << "@" << client->getHostname()
-			  << ")" << std::endl;
+	Log::success("registered " + nick + " ("
+			  + client->getUsername() + "@" + client->getHostname() + ")");
 }

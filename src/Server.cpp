@@ -1,5 +1,7 @@
 #include "Server.hpp"
 #include "Bot.hpp"
+#include "Log.hpp"
+#include "libcpp/str/format.hpp"
 
 #include <iostream>
 #include <cstring>
@@ -36,10 +38,10 @@ Server::Server(int port, const std::string &password)
 	}
 	catch (const std::bad_alloc &)
 	{
-		std::cerr << "Warning: could not create bot (out of memory)" << std::endl;
+		Log::warn("could not create bot (out of memory)");
 		_bot = NULL;
 	}
-	std::cout << "Server started on port " << _port << std::endl;
+	Log::banner("ft_irc - listening on port " + libcpp::str::to_string(_port));
 }
 
 Server::~Server()
@@ -183,14 +185,14 @@ void Server::acceptClient()
 	if (clientFd < 0)
 	{
 		if (errno != EAGAIN && errno != EWOULDBLOCK)
-			std::cerr << "accept() failed: " << strerror(errno) << std::endl;
+			Log::error(std::string("accept() failed: ") + strerror(errno));
 		return;
 	}
 
 	// Set non-blocking
 	if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0)
 	{
-		std::cerr << "fcntl() failed on client fd: " << strerror(errno) << std::endl;
+		Log::error(std::string("fcntl() failed on client fd: ") + strerror(errno));
 		close(clientFd);
 		return;
 	}
@@ -203,7 +205,7 @@ void Server::acceptClient()
 	}
 	catch (const std::bad_alloc &)
 	{
-		std::cerr << "Out of memory: cannot accept new client" << std::endl;
+		Log::error("out of memory: cannot accept new client");
 		close(clientFd);
 		return;
 	}
@@ -211,8 +213,8 @@ void Server::acceptClient()
 
 	addToEpoll(clientFd, EPOLLIN | EPOLLOUT);
 
-	std::cout << "New connection from " << hostname
-			  << " (fd " << clientFd << ")" << std::endl;
+	Log::info("new connection from " + hostname
+			  + " (fd " + libcpp::str::to_string(clientFd) + ")");
 }
 
 void Server::handleClientInput(int fd)
@@ -395,8 +397,8 @@ void Server::disconnectClient(int fd, const std::string &reason)
 
 	removeFromEpoll(fd);
 	close(fd);
-	std::cout << "Client disconnected: " << client->getNickname()
-			  << " (" << reason << ")" << std::endl;
+	Log::info("client disconnected: " + client->getNickname()
+			  + " (" + reason + ")");
 	delete client;
 	_clients.erase(fd);
 }
@@ -420,7 +422,7 @@ Channel *Server::createChannel(const std::string &name, Client *creator)
 	}
 	catch (const std::bad_alloc &)
 	{
-		std::cerr << "Out of memory: cannot create channel " << name << std::endl;
+		Log::error("out of memory: cannot create channel " + name);
 		return NULL;
 	}
 	_channels[name] = channel;

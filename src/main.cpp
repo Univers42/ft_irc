@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Log.hpp"
 
 #include <iostream>
 #include <cstdlib>
@@ -27,7 +28,7 @@ int main(int argc, char **argv)
 {
 	if (argc != 3)
 	{
-		std::cerr << "Usage: ./ircserv <port> <password>" << std::endl;
+		Log::error("usage: ./ircserv <port> <password>");
 		return 1;
 	}
 
@@ -36,20 +37,20 @@ int main(int argc, char **argv)
 
 	if (!isNumber(portStr))
 	{
-		std::cerr << "Error: port must be a number" << std::endl;
+		Log::error("port must be a number");
 		return 1;
 	}
 
 	int port = std::atoi(portStr.c_str());
 	if (port < 1 || port > 65535)
 	{
-		std::cerr << "Error: port must be between 1 and 65535" << std::endl;
+		Log::error("port must be between 1 and 65535");
 		return 1;
 	}
 
 	if (password.empty())
 	{
-		std::cerr << "Error: password cannot be empty" << std::endl;
+		Log::error("password cannot be empty");
 		return 1;
 	}
 
@@ -65,7 +66,7 @@ int main(int argc, char **argv)
 	}
 	catch (const std::exception &e)
 	{
-		std::cerr << "Fatal: " << e.what() << std::endl;
+		Log::error(std::string("fatal: ") + e.what());
 		return 1;
 	}
 
