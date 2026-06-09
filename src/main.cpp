@@ -2,15 +2,17 @@
 #include "Log.hpp"
 #include "ext/RegisterExtensions.hpp"
 
-#include <iostream>
+#include <cctype>
 #include <cstdlib>
 #include <csignal>
 
+// Async-signal-safe: only flip the flag. The run() loop notices it and
+// returns; the (non-signal-safe, pretty) shutdown line is printed from
+// main() afterwards, through the Log writer.
 static void signalHandler(int signum)
 {
 	(void)signum;
 	Server::isRunning = false;
-	std::cout << "\nShutting down..." << std::endl;
 }
 
 static bool isNumber(const std::string &str)
@@ -65,6 +67,7 @@ int main(int argc, char **argv)
 		Server server(port, password);
 		registerExtensions(server); /* which set depends on the build tier */
 		server.run();
+		Log::info("shutting down — server stopped cleanly");
 	}
 	catch (const std::exception &e)
 	{
