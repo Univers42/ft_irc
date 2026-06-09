@@ -1,0 +1,15 @@
+# Keep the build context small and free of host build artifacts.
+# NOTE: vendor/ (libcpp, googletest submodules) is deliberately NOT ignored —
+# the build compiles them from source.
+**/.git
+**/.gitignore
+obj/
+ircserv
+tests/obj/
+tests/test_runner
+companions/ai-assistant/target/
+*.o
+*.d
+*.csv
+.env
+.DS_Store
