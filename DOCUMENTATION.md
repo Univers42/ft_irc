@@ -541,7 +541,59 @@ DCC (Direct Client-to-Client) file transfer is supported through natural PRIVMSG
 4. Target's HexChat receives the DCC request and shows a file transfer dialog
 5. The actual file transfer occurs **peer-to-peer** directly between clients — the server only relays the handshake
 
-No special DCC code is needed in the server — proper PRIVMSG relay of all message content (including CTCP control characters) is sufficient.
+No special DCC code is needed in the server — proper PRIVMSG relay of all message content (including CTCP control characters) is sufficient. The line sanitizer strips only `\0`/`\r`; `\x01` CTCP framing survives byte-for-byte (pinned by `FileTransferTest.DccSendHandshakeRelaysByteForByte`).
+
+#### HexChat demo
+
+1. Run two HexChat instances on the server (`alice`, `bob`).
+2. In alice's window: right-click `bob` → *Send File* → pick a file.
+3. The DCC handshake travels through `ircserv` as a relayed CTCP PRIVMSG; the payload then flows **peer-to-peer**. Watch the raw log (`Ctrl+Shift+L`) to see the relayed `\x01DCC SEND ...\x01` line.
+
+### File Transfer (server-mediated `FILE` protocol)
+
+The original bonus addition: a relay protocol for clients that cannot open
+peer-to-peer connections (NAT, web gateways). The server validates and
+relays base64 chunks — it never decodes them and never touches the disk.
+Implemented as `FileTransferExt` (`src/bonus/FileTransferExt.cpp`) through
+the extension seam's `onCommand` hook, so it can never shadow an RFC command.
+
+```
+sender:    FILE SEND <nick> <filename> <size>
+  → recipient:  :<sender>  FILE OFFER <id> <filename> <size>
+recipient: FILE ACCEPT <id>   |   FILE REJECT <id>
+  → sender:     :<recipient> FILE OK <id>  |  FILE NO <id>
+sender:    FILE DATA <id> <base64 ≤ 400 chars>     (relayed verbatim)
+sender:    FILE END <id>
+either:    FILE ABORT <id>
+```
+
+Guarantees: casemapped target lookup, filename sanitized (no `/`, `\`,
+spaces, control chars), size capped at 50 MB via `strtoul` bounds, base64
+charset + running size-overrun validation, one active transfer per
+(sender, recipient), **flow control** (`FILE WAIT <id>` when the recipient's
+send queue is half full — sender retries), 60 s idle abort, abort + peer
+notification on disconnect.
+
+#### Scripted demo (nc)
+
+```bash
+# terminal 1 — recipient
+nc -C 127.0.0.1 6667
+PASS pass / NICK bob / USER bob 0 * :Bob        # one per line
+# wait for ":alice!… FILE OFFER 1 photo.jpg 1234", then:
+FILE ACCEPT 1
+# collect the FILE DATA chunks, then locally: base64 -d > photo.jpg
+
+# terminal 2 — sender
+nc -C 127.0.0.1 6667
+PASS pass / NICK alice / USER alice 0 * :Alice
+FILE SEND bob photo.jpg 1234
+FILE DATA 1 $(base64 -w 400 photo.jpg | head -1)   # one line per chunk
+FILE END 1
+```
+
+Byte-identical reassembly is pinned by
+`FileTransferTest.HappyPathReassemblesByteIdentical`.
 
 ---
 

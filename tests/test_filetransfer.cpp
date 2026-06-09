@@ -291,6 +291,42 @@ TEST_F(FileTransferTest, DisconnectAbortsAndNotifiesPeer)
 	EXPECT_NE(lineWith(a.recvAll(), "FILE ABRT"), "");
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+ * DCC relay hardening — the classic IRC file transfer is client-to-client:
+ * the server's whole job is relaying the CTCP (\x01) handshake VERBATIM.
+ * ════════════════════════════════════════════════════════════════════ */
+
+TEST_F(FileTransferTest, DccSendHandshakeRelaysByteForByte)
+{
+	TestClient a, b;
+	registerPair(a, b);
+
+	/* HexChat-style DCC SEND offer: ip-as-int, port, size */
+	std::string ctcp = "\x01" "DCC SEND tarball.tar.gz 2130706433 5001 482133\x01";
+	a.sendCmd("PRIVMSG frecv :" + ctcp);
+	pause();
+	std::string got = b.recvAll();
+	EXPECT_NE(got.find("PRIVMSG frecv :" + ctcp), std::string::npos)
+		<< "CTCP payload must relay untouched: " << got;
+}
+
+TEST_F(FileTransferTest, DccNearMaxLineRelays)
+{
+	TestClient a, b;
+	registerPair(a, b);
+
+	/* Fill the line close to the 512-byte limit around a CTCP frame */
+	std::string prefixPart = "PRIVMSG frecv :";
+	std::string body = "\x01" "DCC SEND ";
+	body += std::string(400, 'f');
+	body += " 2130706433 5001 99\x01";
+	a.sendCmd(prefixPart + body);
+	pause();
+	std::string got = b.recvAll();
+	EXPECT_NE(got.find(body), std::string::npos)
+		<< "long CTCP line must survive relay";
+}
+
 TEST_F(FileTransferTest, FileIsUnknownInMandatoryDispatchOnly)
 {
 	/* Sanity: with the full tier linked, FILE never reaches 421 */
