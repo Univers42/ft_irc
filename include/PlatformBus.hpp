@@ -4,6 +4,8 @@
 # include <string>
 # include <map>
 
+# include "libcpp98/line_buffer.hpp"
+
 class Server;
 
 /*
@@ -49,8 +51,8 @@ private:
 
 	struct Conn
 	{
-		bool		authed;
-		std::string	buffer;
+		bool				authed;
+		libcpp98::LineBuffer	buffer;
 
 		Conn() : authed(false), buffer() {}
 	};

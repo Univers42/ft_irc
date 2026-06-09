@@ -4,6 +4,11 @@
 #include "Log.hpp"
 #include "libcpp/str/case.hpp"
 #include "libcpp/str/format.hpp"
+#include "libcpp/str/secure.hpp"
+
+/* A protocol line on the bus is short ("PUB <#chan> <type> :<msg>"); anything
+** beyond this without a newline is garbage or a flood. */
+#define MAX_BUS_LINE 8192
 
 #include <cstring>
 #include <cerrno>
@@ -126,14 +131,20 @@ void PlatformBus::handleInput(int fd)
 
 	it->second.buffer.append(buf, static_cast<size_t>(n));
 
-	std::string::size_type pos;
-	while ((pos = it->second.buffer.find('\n')) != std::string::npos)
+	std::string line;
+	while (it->second.buffer.next(line))
 	{
-		std::string line = it->second.buffer.substr(0, pos);
-		it->second.buffer.erase(0, pos + 1);
 		handleLine(fd, libcpp::str::trim(line));
 		if (_conns.find(fd) == _conns.end()) /* closed mid-processing */
 			return;
+	}
+
+	/* Flood guard: a peer that streams kilobytes without a newline is not
+	** speaking the protocol — drop it instead of buffering without bound. */
+	if (it->second.buffer.size() > MAX_BUS_LINE)
+	{
+		send(fd, "ERR line too long");
+		closeConnection(fd);
 	}
 }
 
@@ -171,7 +182,8 @@ void PlatformBus::handleLine(int fd, const std::string &line)
 	}
 	if (cmd == "AUTH")
 	{
-		if (!_secret.empty() && libcpp::str::trim(rest) == _secret)
+		if (!_secret.empty()
+			&& libcpp::str::eq_consttime(libcpp::str::trim(rest), _secret))
 		{
 			conn.authed = true;
 			send(fd, "OK authenticated");
