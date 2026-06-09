@@ -14,20 +14,34 @@ ft_irc is an IRC (Internet Relay Chat) server implemented in C++98. It follows t
 - **Channel operators**: KICK, INVITE, TOPIC, and MODE commands
 - **Channel modes**: `+i` (invite-only), `+t` (topic restricted), `+k` (key/password), `+o` (operator), `+l` (user limit)
 - **Bonus: Bot** — Built-in `ircbot` that responds to `!help`, `!time`, `!info`, `!joke`
-- **Bonus: DCC** — Relays DCC file transfer handshake between clients
+- **Bonus: File transfer** — DCC handshake relay *and* an original server-mediated
+  `FILE` protocol (base64 relay with validation, flow control and timeouts)
 - **Partial message reassembly**: Handles fragmented TCP data correctly
 - **Ping/Pong keepalive**: Automatic timeout detection
+- **Hardened**: ascii casemapping, CR/LF/NUL line-injection sanitizer, SENDQ +
+  connection caps, bounded MODE/TOPIC/KEY parameters, timing-safe password check
 
 ## Instructions
 
-### Compilation
+### Compilation — build tiers
 
 ```bash
-make        # Build the ircserv binary
-make clean  # Remove object files
-make fclean # Remove object files and binary
-make re     # Full rebuild
+make mandatory  # strictly the subject's mandatory part (pure RFC kernel)
+make bonus      # mandatory + subject bonus (bot, FILE transfer)
+make            # full (default): bonus + optional platform extras
+make clean      # Remove object files
+make fclean     # Remove object files and binary
+make re         # Full rebuild (full tier)
+make test       # Build & run the test suite (Google Test, 138 assertions)
 ```
+
+All three tiers produce the same `ircserv` binary name from the same kernel
+sources; they differ only in which extensions are linked (per-tier object
+dirs, one `registerExtensions()` translation unit each — see
+`src/tiers/`). **Evaluation note:** the default `make` includes the extras,
+but they are dead code without the `FT_IRC_CONFIG` environment variable — a
+scripted session transcript is byte-identical across all three binaries.
+Use `make mandatory` to demonstrate the strict subject build.
 
 ### Running
 

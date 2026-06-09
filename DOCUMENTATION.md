@@ -123,14 +123,28 @@ ft_irc/
 
 ## Build System
 
-### Makefile
+### Makefile — three build tiers
 
-| Target   | Action                                    |
-|----------|-------------------------------------------|
-| `all`    | Build `ircserv` binary                    |
-| `clean`  | Remove `obj/` directory                   |
-| `fclean` | Remove `obj/` directory and `ircserv` binary |
-| `re`     | `fclean` + `all` (full rebuild)           |
+| Target      | Action                                                            |
+|-------------|-------------------------------------------------------------------|
+| `mandatory` | Strictly the subject's mandatory sources (pure RFC kernel)        |
+| `bonus`     | Mandatory + subject bonus (Bot, server-mediated FILE transfer)    |
+| `all`       | **Default.** Bonus + optional platform extras (PlatformBus, AuditLog, fancy console) |
+| `clean`     | Remove `obj/` directory (all tiers)                               |
+| `fclean`    | Remove `obj/` directory and `ircserv` binary                      |
+| `re`        | `fclean` + `all` (full rebuild)                                   |
+| `test`      | Build & run the Google Test suite                                 |
+
+The tiers share the kernel sources and differ **only at link time**:
+per-tier object dirs (`obj/mandatory`, `obj/bonus`, `obj/full`) prevent any
+stale-object mixing, a marker file (`obj/.tier_*`) forces a relink when
+switching tiers while a same-tier repeat stays a no-op, and exactly one
+`src/tiers/tier_<name>.cpp` (defining `registerExtensions(Server&)`) is
+linked per tier. There is no `#ifdef` anywhere in the kernel.
+
+The platform extras in the full tier are additionally **runtime-gated** by
+the `FT_IRC_CONFIG` environment variable: without it, a scripted session
+transcript is byte-identical across all three binaries.
 
 ### Compiler Settings
 
@@ -139,15 +153,45 @@ CXX      = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 ```
 
-Object files are placed in `obj/` — the directory is created automatically. Header search path is `include/`.
+Header search paths: `include/`, `vendor/libcpp/include`,
+`vendor/libcpp/c98/include`. The vendored libcpp modules (C++98-clean
+`str/*`, `util/config`, `term/*`, and the `c98/` tier: `LineBuffer`,
+`CsvWriter`, `Reactor`, `BufferedSocket`) are compiled **from source** into
+`ircserv` — no external library is linked.
 
 ### Usage
 
 ```bash
-make          # Build
-./ircserv 6667 mypassword    # Run
-make re       # Full rebuild
+make mandatory && ./ircserv 6667 mypassword    # the graded configuration
+make && FT_IRC_CONFIG=./realtime.conf ./ircserv 6667 mypassword  # full platform mode
+scripts/audit.sh                               # subject-compliance audit
 ```
+
+---
+
+## Extension Seam
+
+Everything outside the RFC kernel plugs in through
+**`include/ext/IServerExtension.hpp`** (observer pattern, C++98). The Server
+owns registered extensions (deletes them in reverse order) and fires:
+
+| Hook | Fired | Used by |
+|------|-------|---------|
+| `onServerStart(Server&)` | top of `run()` | PlatformBus (binds + listens) |
+| `onTick(Server&, now)` | every loop pass (~1 s) | FileTransferExt (idle abort) |
+| `onClientRegistered` | after the 001-005 burst | — |
+| `onClientDisconnect` | before the Client is freed | FileTransferExt (abort + notify peer) |
+| `onJoin` / `onPart` | after the broadcast | — |
+| `onCommand(...) → bool` | **only where ERR_UNKNOWNCOMMAND would go** | FileTransferExt (`FILE`) |
+| `onPrivmsg(sender, target, text) → bool` | per non-channel target, before nick lookup | Bot |
+| `reservesNick(nick) → bool` | during NICK validation | Bot |
+| `ownsFd(fd)` / `onFdEvent` | unrecognized epoll events | PlatformBus |
+| `onAudit(event, actor, detail)` | every `Server::audit()` call | AuditLog |
+
+Extensions with their own sockets register them into the **same epoll** via
+the public `Server::registerExternalFd` / `unregisterExternalFd` (single
+poll-equivalent preserved). `onCommand` runs after the core dispatch chain,
+so an extension can add commands but never shadow an RFC one.
 
 ---
 

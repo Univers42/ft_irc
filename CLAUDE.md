@@ -9,10 +9,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-make                      # Build the ircserv binary (C++98, -Wall -Wextra -Werror)
-make re                   # Full rebuild
+make mandatory            # strictly the subject's mandatory sources (pure RFC kernel)
+make bonus                # mandatory + subject bonus (Bot, FILE transfer)
+make                      # full (default): bonus + platform extras (PlatformBus, AuditLog, fancy console)
+make re                   # Full rebuild (full tier)
 make test                 # Build & run the Google Test suite (delegates to tests/Makefile)
 make testclean            # Clean test artifacts
+scripts/audit.sh          # Subject-compliance audit (builds all 3 tiers, C++98 token scan, single epoll check, ...)
 
 ./ircserv <port> <password>   # Run: e.g. ./ircserv 6667 mypass
 
@@ -23,36 +26,47 @@ make testclean            # Clean test artifacts
 
 Manual smoke test with netcat: `nc -C 127.0.0.1 6667`, then send `PASS`, `NICK`, `USER ... `, `JOIN #x`, etc.
 
+### Build tiers
+
+The three tiers share the kernel sources and differ **only at link time**: per-tier object dirs (`obj/<tier>/`), and exactly one `src/tiers/tier_<tier>.cpp` defining `registerExtensions(Server&)` (mandatory registers nothing; bonus adds Bot + FileTransferExt; full adds those + FancyLogSink + the `FT_IRC_CONFIG`-gated AuditLog/PlatformBus). A tier marker (`obj/.tier_*`) forces a relink when switching tiers. Zero `#ifdef` anywhere. The platform extras are additionally runtime-gated: without `FT_IRC_CONFIG`, the full binary's behavior is byte-identical to the bonus tier.
+
 ## Critical build constraint
 
-The **server** compiles under **C++98** (`Makefile`). The **test suite** compiles under **C++17** (`tests/Makefile`, required by Google Test 1.16). This means project sources in `src/` must stay C++98-clean *while also* compiling under C++17 — do not introduce C++11+ constructs into `src/`, even though `make test` would accept them. `tests/` and `vendor/` may use C++17 freely.
+The **server** compiles under **C++98** (`Makefile`). The **test suite** compiles under **C++17** (`tests/Makefile`, required by Google Test 1.16). This means project sources in `src/` — and the vendored **`vendor/libcpp/c98/`** tier — must stay C++98-clean *while also* compiling under C++17. Do not introduce C++11+ constructs into `src/` or `vendor/libcpp/c98/`, even though `make test` would accept them. `tests/` and the rest of `vendor/` may use C++17 freely.
 
-`vendor/googletest` is a git submodule — run `git submodule update --init --recursive` before `make test` on a fresh clone. (`.gitmodules` also lists an `ircd` reference submodule, not part of the build.)
+`vendor/googletest` and `vendor/libcpp` are git submodules — run `git submodule update --init --recursive` before building on a fresh clone. libcpp's C++98-clean modules (`str/*`, `util/config`, `term/*`, plus the dedicated `c98/` tier: `LineBuffer`, `CsvWriter`, `Reactor`, `BufferedSocket`, namespace `libcpp98`) are **compiled from source into ircserv** — no external library is linked (subject-safe). Changes to libcpp are committed inside the submodule first, then the pointer is bumped here.
 
 ## Architecture
 
-The event loop and all command handling live in a single **`Server`** instance (`src/Server.cpp`, `include/Server.hpp`). It owns everything:
+The event loop and all command handling live in a single **`Server`** instance (`src/Server.cpp`, `include/Server.hpp`):
 
-- `Server::run()` — the `epoll_wait` loop. Sockets are non-blocking; client fds register for `EPOLLIN | EPOLLOUT`. `EPOLLIN` → `handleClientInput` (read into recv buffer), `EPOLLOUT` → `handleClientOutput` (drain send buffer). The loop also calls `checkTimeouts()` for PING/PONG keepalive.
-- `_clients` (`map<int fd, Client*>`) and `_channels` (`map<string name, Channel*>`) are the live state. `Server` owns and frees these pointers.
-- `main.cpp` ignores `SIGPIPE` (essential — `send()` to a closed socket) and traps `SIGINT`/`SIGTERM` into `Server::isRunning`.
+- `Server::run()` — the **single** `epoll_wait` call (annotated in `src/Server.cpp`; epoll lifecycle/ctl ops live behind `libcpp98::Reactor`). Client fds register for `EPOLLIN | EPOLLOUT`. `EPOLLIN` → `handleClientInput`, `EPOLLOUT` → `handleClientOutput`. The loop also runs `checkTimeouts()` (PING/PONG keepalive, SENDQ sweep) and fires `onTick` on extensions every pass.
+- `_clients` (`map<int fd, Client*>`) and `_channels` (keyed by **casemapped** name — display case lives in `Channel::_name`) are the live state. `Server` owns and frees these pointers, plus all registered extensions (deleted in reverse order).
+- `main.cpp` ignores `SIGPIPE`, traps `SIGINT`/`SIGTERM` into `Server::isRunning`, and calls `registerExtensions(server)` (tier-dependent) before `run()`.
 
-**I/O is fully buffered, never blocking.** Input: `Client::appendToRecvBuffer` accumulates raw bytes, then `Client::extractMessages()` splits on `\r\n` and returns only complete lines (partial TCP fragments stay buffered — this is the partial-message reassembly). Output: handlers never call `send()` directly; they call `Server::sendToClient` / `sendReply`, which append to the client's send buffer, drained on `EPOLLOUT`. When iterating extracted messages, code re-checks `_clients.find(fd)` after each because a handler may have disconnected the client.
+**Extension seam** (`include/ext/IServerExtension.hpp`): everything optional plugs in through this observer interface — hooks for lifecycle (`onServerStart`, `onTick`), client events (`onClientRegistered`, `onClientDisconnect`), channel events (`onJoin`, `onPart`), interception (`onCommand` — fired only where ERR_UNKNOWNCOMMAND would go, so extensions can add commands like `FILE` but never shadow RFC ones; `onPrivmsg` — fired per non-channel target so virtual participants claim messages; `reservesNick`), foreign fds (`ownsFd`/`onFdEvent` + public `Server::registerExternalFd` — how PlatformBus multiplexes its socket into the same epoll), and `onAudit` fan-out (`Server::audit()` → AuditLog extension). The kernel never names a concrete extension.
 
-**Command dispatch** (`Server::dispatchCommand`) is a linear `if (cmd == ...)` chain, split across files by category — when adding a command, declare it in the `Server` private section and add it to the dispatch chain:
-- `CommandRegistration.cpp` — CAP, PASS, NICK, USER, `completeRegistration`
-- `CommandChannel.cpp` — JOIN, PART, KICK, INVITE, TOPIC, MODE (+ channel/user mode helpers)
+**I/O is fully buffered, never blocking.** `Client` delegates to `libcpp98::BufferedSocket` (512-byte line cap, 64 KiB SENDQ — overflow latches and the client is disconnected at the next sweep point, never mid-broadcast). Every extracted line passes one sanitizer stripping stray `\r`/`\0` (kills IRC line injection; `\x01` CTCP/DCC bytes pass untouched). Handlers never call `send()` directly — they queue via `Server::sendToClient`/`sendReply`/`Client::queueMessage`, drained on `EPOLLOUT` (plus a best-effort flush in `disconnectClient`). When iterating extracted messages, code re-checks `_clients.find(fd)` after each because a handler may have disconnected the client.
+
+**Command dispatch** (`Server::dispatchCommand`) is a linear `if (cmd == ...)` chain, split across files by category:
+- `CommandRegistration.cpp` — CAP, PASS, NICK, USER, `completeRegistration` (timing-safe password check via `libcpp::str::eq_consttime`)
+- `CommandChannel.cpp` — JOIN, PART; `CommandOperator.cpp` — KICK, INVITE, TOPIC, MODE (i/t/k/o/l with strtol-bounded `+l`, validated `+k`, truncated TOPIC)
 - `CommandMessaging.cpp` — PRIVMSG, NOTICE, PING, PONG, QUIT
 - `CommandQuery.cpp` — WHO, WHOIS, USERHOST
 
-Dispatch enforces a **registration gate**: only CAP/PASS/NICK/USER/QUIT/PONG run before `Client::isRegistered()`; everything else returns `ERR_NOTREGISTERED`. Registration completes (`completeRegistration`) once PASS + NICK + USER have all been received with the correct password.
+Dispatch enforces a **registration gate**: only CAP/PASS/NICK/USER/QUIT/PONG run before `Client::isRegistered()`. Unknown commands reach the extensions' `onCommand` before `ERR_UNKNOWNCOMMAND`.
 
-**`Message::parse`** (`Message.cpp`) turns one raw line into `{prefix, command, params}` per RFC 2812 (handles the leading `:prefix` and the trailing `:param with spaces`). All handlers consume this struct.
+**Casemapping**: nicks/channels/invites compare case-insensitively over ASCII (`ircEquals`/`ircToLower` in `src/IrcCase.cpp`, matching the `CASEMAPPING=ascii` 005 token). Use these — never `==` — for nick/channel comparisons.
 
-**Numeric replies** are `#define`d string macros in `include/Replies.hpp` (e.g. `RPL_WELCOME` `"001"`, `ERR_NOTREGISTERED`). Use these constants with `Server::sendReply`, which formats the `:servername numeric nick params` envelope — don't hand-build numeric lines.
+**Numeric replies** are `#define`d string macros in `include/Replies.hpp` (also home to the limits: `MAX_MSGLEN`, `MAX_SENDQ`, `MAX_CLIENTS`, `MAX_TOPICLEN`, `MAX_KEYLEN`, `MAX_USERLIMIT`). Use them with `Server::sendReply` — don't hand-build numeric lines.
 
-**Bot** (`Bot.cpp`, bonus): a virtual `ircbot` not backed by a real socket. PRIVMSG handling routes messages addressed to the bot's nick into `Bot::handleMessage`, which dispatches `!help`/`!time`/`!info`/`!joke`.
+**Extensions** (all via the seam):
+- **Bot** (`src/Bot.cpp`, bonus) — virtual `ircbot`; claims PRIVMSGs to its nick (`onPrivmsg`), reserves it (`reservesNick`); `!help`/`!time`/`!info`/`!joke`.
+- **FileTransferExt** (`src/bonus/FileTransferExt.cpp`, bonus) — server-mediated base64 relay (`FILE SEND/ACCEPT/REJECT/DATA/END/ABORT`), relay-only (never decodes, never touches disk), flow control via `FILE WAIT` at SENDQ/2, 60 s idle abort. Protocol spec in `DOCUMENTATION.md`.
+- **PlatformBus** (`src/PlatformBus.cpp`, extra) — loopback-only TCP socket in the same epoll; line protocol `AUTH <secret>` / `PUB <#chan> <type> :<msg>` injects platform events into channels. Config-gated (`FT_IRC_CONFIG` ini: `[bus]`).
+- **AuditLog** (`src/AuditLog.cpp`, extra) — append-only CSV trail via `libcpp98::CsvWriter` on the `onAudit` fan-out. Config-gated (`[audit]`).
+- **FancyLogSink** (`src/extras/FancyLogSink.cpp`, extra) — TermWriter console renderer installed via `Log::setSink`; the kernel's `Log` falls back to plain iostream.
 
 ## Testing
 
-Tests use Google Test but also feed every result into **PostMan** (`vendor/PostMan.cpp`), a styled Unicode-table reporter — `tests/test_main.cpp` bridges the two via a custom `TestEventListener`. `tests/Makefile` builds all of `src/` *except* `main.cpp` against the test binary, so handlers are tested directly. Test files map to units: `test_message`, `test_client`, `test_channel`, `test_bot`, plus `test_integration` and `test_robustness`.
+Tests use Google Test but also feed every result into **PostMan** (`vendor/PostMan.cpp`), a styled Unicode-table reporter — `tests/test_main.cpp` bridges the two via a custom `TestEventListener`. `tests/Makefile` builds all of `src/` *except* `main.cpp` (linking `tier_full.cpp` as the one `registerExtensions` definition). Protocol-level suites share `tests/TestHarness.hpp` (TCP `TestClient` + `IrcServerTest` fixture; subclass and override `portBase()` per suite, `onServerReady()` to inject probe extensions). Test files: `test_message`, `test_client`, `test_channel`, `test_bot`, `test_integration`, `test_robustness`, `test_security`, `test_filetransfer`, `test_extensions`, `test_libcpp98`. Suite is 138/138; PostMan's leak counter is atomic and `assertNoLeaks` takes `const char*` (a `std::string` argument would count itself as a leak — keep it that way).
