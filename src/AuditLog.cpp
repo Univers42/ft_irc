@@ -1,27 +1,27 @@
 #include "AuditLog.hpp"
 
 #include <ctime>
+#include <vector>
 
 AuditLog::AuditLog(const std::string &path)
-	: _out()
+	: _csv()
 {
-	/* Detect a fresh/empty file so we only write the header once. */
-	bool needHeader = true;
+	/* CsvWriter probes the file before opening, so the header is written
+	** exactly once per file lifetime. */
+	if (_csv.open(path) && _csv.isNewFile())
 	{
-		std::ifstream probe(path.c_str());
-		if (probe.good() && probe.peek() != std::ifstream::traits_type::eof())
-			needHeader = false;
+		std::vector<std::string> header;
+		header.push_back("timestamp");
+		header.push_back("event");
+		header.push_back("actor");
+		header.push_back("detail");
+		_csv.row(header);
 	}
-
-	_out.open(path.c_str(), std::ios::out | std::ios::app);
-	if (_out.is_open() && needHeader)
-		_out << "timestamp,event,actor,detail\n" << std::flush;
 }
 
 AuditLog::~AuditLog()
 {
-	if (_out.is_open())
-		_out.close();
+	_csv.close();
 }
 
 /* ─── IServerExtension ─── */
@@ -39,7 +39,7 @@ void AuditLog::onAudit(const std::string &event, const std::string &actor,
 
 bool AuditLog::ok() const
 {
-	return _out.is_open();
+	return _csv.ok();
 }
 
 std::string AuditLog::timestamp()
@@ -51,34 +51,15 @@ std::string AuditLog::timestamp()
 	return std::string(buf);
 }
 
-std::string AuditLog::escape(const std::string &field)
-{
-	bool needQuote = field.find(',') != std::string::npos
-				  || field.find('"') != std::string::npos
-				  || field.find('\n') != std::string::npos;
-	if (!needQuote)
-		return field;
-
-	std::string out = "\"";
-	for (std::string::size_type i = 0; i < field.size(); ++i)
-	{
-		if (field[i] == '"')
-			out += "\"\""; /* CSV doubles embedded quotes */
-		else
-			out += field[i];
-	}
-	out += "\"";
-	return out;
-}
-
 void AuditLog::log(const std::string &event, const std::string &actor,
 				   const std::string &detail)
 {
-	if (!_out.is_open())
+	if (!_csv.ok())
 		return;
-	_out << timestamp() << ','
-		 << escape(event) << ','
-		 << escape(actor) << ','
-		 << escape(detail) << '\n'
-		 << std::flush;
+	std::vector<std::string> row;
+	row.push_back(timestamp());
+	row.push_back(event);
+	row.push_back(actor);
+	row.push_back(detail);
+	_csv.row(row);
 }

@@ -2,9 +2,9 @@
 # define AUDITLOG_HPP
 
 # include <string>
-# include <fstream>
 
 # include "ext/IServerExtension.hpp"
+# include "libcpp98/csv_writer.hpp"
 
 /*
 ** AuditLog — append-only CSV trail of server activity (connections, joins,
@@ -38,9 +38,8 @@ private:
 	AuditLog &operator=(const AuditLog &other);
 
 	static std::string	timestamp();
-	static std::string	escape(const std::string &field);
 
-	std::ofstream	_out;
+	libcpp98::CsvWriter	_csv;
 };
 
 #endif /* AUDITLOG_HPP */

@@ -10,6 +10,7 @@
 # include "Channel.hpp"
 # include "Message.hpp"
 # include "Replies.hpp"
+# include "libcpp98/reactor.hpp"
 
 class IServerExtension;
 
@@ -119,7 +120,9 @@ private:
 	std::string					_password;
 	std::string					_serverName;
 	int							_listenFd;
-	int							_epollFd;
+	/* epoll lifecycle + checked ctl ops; the single epoll_wait() call
+	** stays below in run() (src/Server.cpp). */
+	libcpp98::Reactor			_reactor;
 	std::map<int, Client *>		_clients;
 	std::map<std::string, Channel *>	_channels;
 	std::vector<IServerExtension *>	_extensions;

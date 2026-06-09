@@ -26,7 +26,7 @@ Server::Server(int port, const std::string &password)
 	  _password(password),
 	  _serverName(SERVER_NAME),
 	  _listenFd(-1),
-	  _epollFd(-1),
+	  _reactor(),
 	  _lastPingCheck(std::time(NULL))
 {
 	createListenSocket();
@@ -83,8 +83,7 @@ Server::~Server()
 	{
 		delete it->second;
 	}
-	if (_epollFd >= 0)
-		close(_epollFd);
+	/* _reactor closes its epoll fd itself */
 	if (_listenFd >= 0)
 		close(_listenFd);
 }
@@ -120,35 +119,25 @@ void Server::createListenSocket()
 
 void Server::createEpoll()
 {
-	_epollFd = epoll_create1(0);
-	if (_epollFd < 0)
+	if (!_reactor.open())
 		throw std::runtime_error("epoll_create1() failed: " + std::string(strerror(errno)));
 }
 
 void Server::addToEpoll(int fd, uint32_t events)
 {
-	struct epoll_event ev;
-	std::memset(&ev, 0, sizeof(ev));
-	ev.events = events;
-	ev.data.fd = fd;
-	if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, fd, &ev) < 0)
+	if (!_reactor.add(fd, events))
 		throw std::runtime_error("epoll_ctl ADD failed: " + std::string(strerror(errno)));
 }
 
 void Server::modifyEpoll(int fd, uint32_t events)
 {
-	struct epoll_event ev;
-	std::memset(&ev, 0, sizeof(ev));
-	ev.events = events;
-	ev.data.fd = fd;
-	if (epoll_ctl(_epollFd, EPOLL_CTL_MOD, fd, &ev) < 0)
+	if (!_reactor.modify(fd, events))
 		Log::error(std::string("epoll_ctl MOD failed: ") + strerror(errno));
 }
 
 void Server::removeFromEpoll(int fd)
 {
-	if (epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL) < 0
-		&& errno != ENOENT && errno != EBADF)
+	if (!_reactor.remove(fd) && errno != ENOENT && errno != EBADF)
 		Log::error(std::string("epoll_ctl DEL failed: ") + strerror(errno));
 }
 
@@ -165,7 +154,8 @@ void Server::run()
 
 	while (isRunning)
 	{
-		int nfds = epoll_wait(_epollFd, events, MAX_EVENTS, 1000);
+		/* The subject's single poll-equivalent call site. */
+		int nfds = epoll_wait(_reactor.fd(), events, MAX_EVENTS, 1000);
 		if (nfds < 0)
 		{
 			if (errno == EINTR)
