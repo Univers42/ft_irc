@@ -133,6 +133,8 @@ class IrcServerTest : public ::testing::Test
 {
 protected:
 	virtual int portBase() const { return 17100; }
+	/* Override to act on the server after construction, before run(). */
+	virtual void onServerReady(Server &server) { (void)server; }
 
 	void SetUp() override
 	{
@@ -153,6 +155,9 @@ protected:
 
 		/* Tests link the full tier's registration TU */
 		registerExtensions(*server);
+
+		/* Suite-specific setup (e.g. extra extensions) before run() */
+		onServerReady(*server);
 
 		/* Run server in a background thread */
 		serverThread = std::thread([this]() {
