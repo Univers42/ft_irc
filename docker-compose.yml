@@ -44,15 +44,21 @@ services:
 
   # ── Optional real-time / web tier (docker compose --profile platform up) ──
   realtime:
-    image: dlesieur/realtime-agnostic:latest
+    # Pinned to an immutable digest. The :latest tag is mutable and flipped
+    # builds under us mid-session; pinning makes the stack reproducible.
+    # To update: docker pull dlesieur/realtime-agnostic:latest && \
+    #            docker inspect --format '{{index .RepoDigests 0}}' \
+    #            dlesieur/realtime-agnostic:latest
+    image: dlesieur/realtime-agnostic@sha256:c5e069295e6e6055b1c2be08c864391b423474c7e0a8bc06e483394eb93d4f86
     profiles: ["platform"]
     ports:
-      - "${REALTIME_PORT:-4000}:4000"
+      # Host port defaults to 4455 — 4000 commonly clashes with other local
+      # stacks. The container always listens on 4000 internally.
+      - "${REALTIME_PORT:-4455}:4000"
     environment:
       RUST_LOG: "${RUST_LOG:-info}"
-    # No healthcheck: the realtime image is distroless (no curl/sh to probe
-    # with). The bridge below has its own 3s reconnect loop, which is the real
-    # readiness gate.
+    # The pinned image ships a working healthcheck (curl /v1/health), so the
+    # bridge gates on service_healthy below.
     restart: unless-stopped
 
   realtime-bridge:
@@ -64,7 +70,7 @@ services:
       ircserv:
         condition: service_started
       realtime:
-        condition: service_started
+        condition: service_healthy
     environment:
       IRC_HOST: ircserv
       IRC_PORT: "6667"

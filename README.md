@@ -93,14 +93,17 @@ docker compose --profile platform up --build
 ```
 
 Adds two more services: **realtime-agnostic** (a Rust WebSocket pub/sub
-fan-out engine on `:4000`, with database change-capture) and
+fan-out engine with database change-capture, pinned to an immutable digest and
+published on the host at `${REALTIME_PORT:-4455}` → container `4000`) and
 **realtime-bridge** — a companion that mirrors IRC and realtime in *both*
 directions. IRC channel messages are published to realtime (so browser /
-WebSocket clients and DB-CDC consumers see live IRC), and realtime events
-(`pg/**`, `mongo/**`, browser publishes under `irc-in/<channel>`) are injected
-back into IRC channels. Both directions are verified end-to-end. The default
-`docker compose up` is unchanged; this tier is purely additive and outside the
-42 build. See `companions/realtime-bridge/`.
+WebSocket clients and DB-CDC consumers see live IRC), and realtime chat events
+(browser publishes under `irc-in/<channel>`) are injected back into IRC, each
+web user appearing under **its own IRC nick** via a short-lived puppet
+connection; `pg/**` / `mongo/**` CDC events inject via the `rtbridge` service.
+Both directions are verified end-to-end. The default `docker compose up` is
+unchanged; this tier is purely additive and outside the 42 build. See
+`companions/realtime-bridge/`.
 
 ### Connecting with HexChat
 
