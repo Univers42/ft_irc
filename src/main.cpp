@@ -72,8 +72,10 @@ int main(int argc, char **argv)
 	catch (const std::exception &e)
 	{
 		Log::error(std::string("fatal: ") + e.what());
+		Log::setSink(NULL); /* free any installed log sink before exit */
 		return 1;
 	}
 
+	Log::setSink(NULL); /* free any installed log sink — nothing left in use at exit */
 	return 0;
 }
