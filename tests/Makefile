@@ -3,6 +3,12 @@
 #  Compiles with C++17 (required by Google Test 1.16.0)
 # ────────────────────────────────────────────────────────────────
 
+# ── Build parallelism cap ──────────────────────────────────────
+#  See root Makefile: -j2 costs no more time than higher, and an
+#  unbounded make plus VS Code + an agent can swap-freeze the machine.
+#  Enforced by make; `make -j12` cannot exceed it.
+MAKEFLAGS += -j2
+
 NAME		= test_runner
 
 CXX			= c++
