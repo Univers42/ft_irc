@@ -11,13 +11,14 @@ TEST(MessageParser, SimpleCommand)
 	EXPECT_EQ(msg.command, "NICK");
 	ASSERT_EQ(msg.params.size(), 1u);
 	EXPECT_EQ(msg.params[0], "foo");
-	EXPECT_TRUE(msg.prefix.empty());
 }
 
+/* Message no longer stores the prefix (nothing in src/ read it), so these
+ * assert what actually matters: a leading ":prefix " is stepped over and
+ * never mistaken for the command or an extra parameter. */
 TEST(MessageParser, CommandWithPrefix)
 {
 	Message msg = Message::parse(":server 001 nick :Welcome to IRC");
-	EXPECT_EQ(msg.prefix, "server");
 	EXPECT_EQ(msg.command, "001");
 	ASSERT_GE(msg.params.size(), 2u);
 	EXPECT_EQ(msg.params[0], "nick");
@@ -27,7 +28,6 @@ TEST(MessageParser, CommandWithPrefix)
 TEST(MessageParser, TrailingParameter)
 {
 	Message msg = Message::parse(":nick!user@host PRIVMSG #chan :hello world");
-	EXPECT_EQ(msg.prefix, "nick!user@host");
 	EXPECT_EQ(msg.command, "PRIVMSG");
 	ASSERT_EQ(msg.params.size(), 2u);
 	EXPECT_EQ(msg.params[0], "#chan");
@@ -45,7 +45,6 @@ TEST(MessageParser, EmptyInput)
 	Message msg = Message::parse("");
 	EXPECT_TRUE(msg.command.empty());
 	EXPECT_TRUE(msg.params.empty());
-	EXPECT_TRUE(msg.prefix.empty());
 }
 
 TEST(MessageParser, MultipleSpacesBetweenParams)
@@ -67,9 +66,12 @@ TEST(MessageParser, CommandOnly)
 
 TEST(MessageParser, PrefixOnly)
 {
+	/* Nothing but a prefix carries no command, so it must parse to an empty
+	 * message -- never to a command named after the prefix, which the
+	 * dispatcher would then try to run. */
 	Message msg = Message::parse(":onlyprefix");
-	EXPECT_EQ(msg.prefix, "onlyprefix");
 	EXPECT_TRUE(msg.command.empty());
+	EXPECT_TRUE(msg.params.empty());
 }
 
 TEST(MessageParser, MultipleMiddleAndTrailing)
@@ -120,7 +122,6 @@ TEST(MessageParser, JoinWithKey)
 TEST(MessageParser, KickWithReason)
 {
 	Message msg = Message::parse(":op!u@h KICK #chan target :bad behavior");
-	EXPECT_EQ(msg.prefix, "op!u@h");
 	EXPECT_EQ(msg.command, "KICK");
 	ASSERT_EQ(msg.params.size(), 3u);
 	EXPECT_EQ(msg.params[0], "#chan");

@@ -7,7 +7,6 @@
 #include "libcpp/str/format.hpp"
 
 #include <ctime>
-#include <cstdlib>
 
 const char *Bot::_jokes[] = {
 	"Why do programmers prefer dark mode? Because light attracts bugs.",
@@ -24,7 +23,8 @@ const int Bot::_jokeCount = 8;
 
 Bot::Bot(Server *server)
 	: _server(server),
-	  _nickname("ircbot")
+	  _nickname("ircbot"),
+	  _nextJoke(0)
 {
 }
 
@@ -50,11 +50,6 @@ bool Bot::onPrivmsg(Server &server, Client &sender,
 bool Bot::reservesNick(const std::string &nick) const
 {
 	return ircEquals(nick, _nickname);
-}
-
-const std::string &Bot::getNickname() const
-{
-	return _nickname;
 }
 
 void Bot::handleMessage(Client *sender, const std::string &text)
@@ -127,11 +122,15 @@ void Bot::cmdInfo(Client *sender, const std::string &param)
 		reply(sender, "Topic: " + chan->getTopic());
 }
 
+/* Rotates through the jokes instead of drawing a random one. The old form
+** reseeded the global PRNG on every call with a one-second-granularity seed,
+** so consecutive calls inside the same second returned the identical joke --
+** and it clobbered the process-wide rand() sequence for everything else. A
+** counter needs no seed and actually varies. */
 void Bot::cmdJoke(Client *sender)
 {
-	std::srand(static_cast<unsigned int>(std::time(NULL)));
-	int idx = std::rand() % _jokeCount;
-	reply(sender, _jokes[idx]);
+	reply(sender, _jokes[_nextJoke]);
+	_nextJoke = (_nextJoke + 1) % _jokeCount;
 }
 
 void Bot::reply(Client *sender, const std::string &text)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`ft_irc` is a 42 school project: an IRC server in **C++98** implementing RFC 2812, targeting **HexChat** as the reference client. Single-threaded, non-blocking I/O via `epoll()`. The full assignment is in `subject.txt` / `en.subject.pdf`; deeper design notes live in `DOCUMENTATION.md`.
+`ft_irc` is a 42 school project: an IRC server in **C++98** implementing RFC 2812, targeting **HexChat** as the reference client. Single-threaded, non-blocking I/O via `epoll()`. The full assignment is in `subject.txt` / `en.subject.pdf`; deeper design notes live in `DOCUMENTATION.md`. The repo also ships an out-of-band layer — Rust companion processes under `companions/` plus a Docker stack — that talks to `ircserv` only as ordinary IRC clients and is not part of the 42 build (see "Companions & Docker").
 
 ## Commands
 
@@ -13,13 +13,17 @@ make mandatory            # strictly the subject's mandatory sources (pure RFC k
 make bonus                # mandatory + subject bonus (Bot, FILE transfer)
 make                      # full (default): bonus + platform extras (PlatformBus, AuditLog, fancy console)
 make re                   # Full rebuild (full tier)
+make verify-tiers         # Build all 3 tiers in strict sequence (the safe cross-tier -Werror check)
 make test                 # Build & run the Google Test suite (delegates to tests/Makefile)
 make testclean            # Clean test artifacts
 scripts/audit.sh          # Subject-compliance audit (builds all 3 tiers, C++98 token scan, single epoll check, ...)
+scripts/memcheck.sh --auto  # Valgrind gate: scripted multi-client session, SIGTERM with clients live (see Known traps)
+scripts/normalize.sh      # Apply the whitespace gate in place (--check = CI mode; see CI & style)
 
 ./ircserv <port> <password>   # Run: e.g. ./ircserv 6667 mypass
 
-# Run a single test (after `cd tests && make`):
+# Run a single test — `make -C tests build` compiles test_runner WITHOUT running
+# the whole suite (plain `make -C tests` builds and runs everything):
 ./tests/test_runner --gtest_filter='SuiteName.TestName'
 ./tests/test_runner --gtest_filter='Channel*'
 ```
@@ -34,7 +38,7 @@ The three tiers share the kernel sources and differ **only at link time**: per-t
 
 The **server** compiles under **C++98** (`Makefile`). The **test suite** compiles under **C++17** (`tests/Makefile`, required by Google Test 1.16). This means project sources in `src/` — and the vendored **`vendor/libcpp/c98/`** tier — must stay C++98-clean *while also* compiling under C++17. Do not introduce C++11+ constructs into `src/` or `vendor/libcpp/c98/`, even though `make test` would accept them. `tests/` and the rest of `vendor/` may use C++17 freely.
 
-`vendor/googletest` and `vendor/libcpp` are git submodules — run `git submodule update --init --recursive` before building on a fresh clone. libcpp's C++98-clean modules (`str/*`, `util/config`, `term/*`, plus the dedicated `c98/` tier: `LineBuffer`, `CsvWriter`, `Reactor`, `BufferedSocket`, namespace `libcpp98`) are **compiled from source into ircserv** — no external library is linked (subject-safe). Changes to libcpp are committed inside the submodule first, then the pointer is bumped here.
+`vendor/googletest`, `vendor/libcpp`, and `vendor/scripts` (grab-bag utility repo, unused by the build) are git submodules — run `git submodule update --init --recursive` before building on a fresh clone (`--recursive` because `audit.sh`'s header-cycle check runs from libcpp's own nested scripts submodule; `.gitmodules` also lists a stale `ircd` entry with nothing checked out). Submodule URLs are SSH — without a GitHub key, rewrite first as CI does: `git config --global url."https://github.com/".insteadOf "git@github.com:"`. libcpp's C++98-clean modules (`str/*`, `util/config`, `term/*`, plus the dedicated `c98/` tier: `LineBuffer`, `CsvWriter`, `Reactor`, `BufferedSocket`, namespace `libcpp98`) are **compiled from source into ircserv** — no external library is linked (subject-safe). Changes to libcpp are committed inside the submodule first, then the pointer is bumped here.
 
 ## Architecture
 
@@ -46,7 +50,11 @@ The event loop and all command handling live in a single **`Server`** instance (
 
 **Extension seam** (`include/ext/IServerExtension.hpp`): everything optional plugs in through this observer interface — hooks for lifecycle (`onServerStart`, `onTick`), client events (`onClientRegistered`, `onClientDisconnect`), channel events (`onJoin`, `onPart`), interception (`onCommand` — fired only where ERR_UNKNOWNCOMMAND would go, so extensions can add commands like `FILE` but never shadow RFC ones; `onPrivmsg` — fired per non-channel target so virtual participants claim messages; `reservesNick`), foreign fds (`ownsFd`/`onFdEvent` + public `Server::registerExternalFd` — how PlatformBus multiplexes its socket into the same epoll), and `onAudit` fan-out (`Server::audit()` → AuditLog extension). The kernel never names a concrete extension.
 
-**I/O is fully buffered, never blocking.** `Client` delegates to `libcpp98::BufferedSocket` (512-byte line cap, 64 KiB SENDQ — overflow latches and the client is disconnected at the next sweep point, never mid-broadcast). Every extracted line passes one sanitizer stripping stray `\r`/`\0` (kills IRC line injection; `\x01` CTCP/DCC bytes pass untouched). Handlers never call `send()` directly — they queue via `Server::sendToClient`/`sendReply`/`Client::queueMessage`, drained on `EPOLLOUT`; `disconnectClient` deliberately does **not** flush before closing (see Known traps). When iterating extracted messages, code re-checks `_clients.find(fd)` after each because a handler may have disconnected the client.
+**I/O is fully buffered, never blocking.** `Client` delegates to `libcpp98::BufferedSocket` (512-byte *inbound* line cap, 64 KiB SENDQ — overflow latches and the client is disconnected at the next sweep point, never mid-broadcast). Every extracted line passes one sanitizer stripping stray `\r`/`\0` (kills IRC line injection; `\x01` CTCP/DCC bytes pass untouched).
+
+**Outbound lines are capped in `Client::queueMessage`** (510 payload + CRLF = RFC 2812's 512). `BufferedSocket::queue()` enforces only the SENDQ cap, not a line length, so the limit lives at this one choke point that every reply and relay funnels through. It cannot live at the inbound edge: the server re-frames a client's line with a prefix (`:nick!user@host PRIVMSG #chan :`) before relaying, so a legal inbound line becomes an illegal outbound one. A caller that would rather split than lose bytes must chunk *before* queueing — `RPL_NAMREPLY` does, via `Channel::getNamesChunks(budget)` (`cmdJoin` derives the budget from the 353 framing + `= <channel> :` head and emits one 353 per chunk). `RPL_WHOISCHANNELS` deliberately does **not** chunk: it grows with how many channels one user joined, which nothing here exercises, so it just truncates.
+
+**Channel invites are keyed by fd, never by nickname** (`Channel::_inviteList` is a `std::set<int>`). A nick is a label a client can drop (NICK) or free (QUIT), and the next client to claim it would inherit the invite into a `+i` channel. `Server::teardownClientState()` retires a departing client's invites from *every* channel — including ones it never joined, which is exactly where an unredeemed invite hides — so a recycled fd can't inherit one either. Handlers never call `send()` directly — they queue via `Server::sendToClient`/`sendReply`/`Client::queueMessage`, drained on `EPOLLOUT`; `disconnectClient` deliberately does **not** flush before closing (see Known traps). When iterating extracted messages, code re-checks `_clients.find(fd)` after each because a handler may have disconnected the client.
 
 **Command dispatch** (`Server::dispatchCommand`) is a linear `if (cmd == ...)` chain, split across files by category:
 - `CommandRegistration.cpp` — CAP, PASS, NICK, USER, `completeRegistration` (timing-safe password check via `libcpp::str::eq_consttime`)
@@ -56,7 +64,17 @@ The event loop and all command handling live in a single **`Server`** instance (
 
 Dispatch enforces a **registration gate**: only CAP/PASS/NICK/USER/QUIT/PONG run before `Client::isRegistered()`. Unknown commands reach the extensions' `onCommand` before `ERR_UNKNOWNCOMMAND`.
 
-**Casemapping**: nicks/channels/invites compare case-insensitively over ASCII (`ircEquals`/`ircToLower` in `src/IrcCase.cpp`, matching the `CASEMAPPING=ascii` 005 token). Use these — never `==` — for nick/channel comparisons.
+**Casemapping**: nicks/channels compare case-insensitively over ASCII (`ircEquals`/`ircToLower` in `src/IrcCase.cpp`, matching the `CASEMAPPING=ascii` 005 token). Use these — never `==` — for nick/channel comparisons. `ircEquals` folds in place and exits on the first difference; it must stay allocation-free, since `findClientByNick` runs it over every client for each PRIVMSG-to-nick, INVITE, WHOIS and NICK. Don't swap in `libcpp::str::eq_nocase`: that one is UTF-8 aware and would fold non-ASCII letters the ascii casemapping requires to stay distinct.
+
+**Anything echoed back to clients uses the canonical stored form**, not the spelling the sender typed — `chan->getName()` and `target->getNickname()`, never `msg.params[i]`, in JOIN/PART/KICK/TOPIC/MODE broadcasts, and `it->second->getName()` rather than the casemapped `_channels` key in 319. A client that matches its channel or user list by string desyncs otherwise.
+
+**Two different nick lookups, and picking the wrong one is a security bug**:
+- `findClientByNick()` — clients that may be *addressed*: registered and not tearing down. Everything that delivers or targets (PRIVMSG, NOTICE, INVITE, WHOIS, WHO, USERHOST, extensions' `FILE SEND`) must use this. An unregistered connection never passed the PASS gate, and a tearing-down one is about to have its fd closed and recycled — binding a session to either leaks traffic or lets the next client to receive that fd inherit the session.
+- `isNickInUse(nick, except)` — nick *ownership*, which additionally counts connections that have sent NICK but not finished registering. Only `cmdNick`'s collision check wants this; without it two pre-registration connections could both claim a name and both register it.
+
+**Channel-mode reads need the same membership check as mode writes**: `RPL_CHANNELMODEIS` carries the `+k` key as a parameter, so an unguarded `MODE #chan` query hands the channel password to any stranger and defeats `+k`.
+
+**`Replies.hpp` is an inventory of what this server actually sends** — the macros for commands it doesn't implement (LIST, MOTD, AWAY, INFO, OPER, LUSERS) were deleted. Don't re-add a numeric before the code that sends it. Likewise `Message` has no `prefix` field and `Client` has no `_authenticated` (it was write-only and redundant with `_registered`); both were dead. `ERR_INVALIDMODEPARAM` (696) covers a rejected `+l` — `+k` keeps its more specific `ERR_INVALIDKEY` (525).
 
 **Numeric replies** are `#define`d string macros in `include/Replies.hpp` (also home to the limits: `MAX_MSGLEN`, `MAX_SENDQ`, `MAX_CLIENTS`, `MAX_TOPICLEN`, `MAX_KEYLEN`, `MAX_USERLIMIT`). Use them with `Server::sendReply` — don't hand-build numeric lines.
 
@@ -67,9 +85,32 @@ Dispatch enforces a **registration gate**: only CAP/PASS/NICK/USER/QUIT/PONG run
 - **AuditLog** (`src/AuditLog.cpp`, extra) — append-only CSV trail via `libcpp98::CsvWriter` on the `onAudit` fan-out. Config-gated (`[audit]`).
 - **FancyLogSink** (`src/extras/FancyLogSink.cpp`, extra) — TermWriter console renderer installed via `Log::setSink`; the kernel's `Log` falls back to plain iostream.
 
+## Companions & Docker (outside the 42 build)
+
+`companions/` holds two Rust processes that connect to `ircserv` as **ordinary IRC clients** over TCP — the C++98 server is subject-clean and unaware of them; no make tier includes them. Each builds with plain cargo (`Cargo.lock` committed; CI builds `--locked`):
+
+- **ai-assistant** — Claude-backed channel bot (nick `assistant`), answers only when addressed (`!ai …`, `assistant: …`, or direct PRIVMSG). Raw Messages API over reqwest; all outbound IRC lines funnel through a single writer task so multi-second model calls never delay PING/PONG.
+- **realtime-bridge** — bidirectional bridge to `realtime-agnostic` (WebSocket pub/sub + DB change-capture; compose pins its image by digest). IRC→realtime publishes under `irc:**`, which the bridge never subscribes to (loop-free by namespace); realtime→IRC injects `irc-in/<channel>` chat events via short-lived **puppet** connections registering the web user's own nick (derived to a valid ≤9-char nick, 433 collisions suffixed, idle-TTL + pool cap, write-only), and CDC events (`pg/**`, `mongo/**`) via its main `rtbridge` client.
+
+Docker stack (`docker-compose.yml`; secrets only in the gitignored `.env`, from `.env.example` — `ANTHROPIC_API_KEY` required):
+
+```bash
+docker compose up --build                     # ircserv + ai-assistant
+docker compose --profile platform up --build  # + realtime-agnostic + realtime-bridge
+docker build --target test -t ircserv-test .  # full-tier build + test suite in-container
+```
+
+## CI & style
+
+`.github/workflows/ci.yml` (push to main + PRs): a native job runs `scripts/audit.sh` then `scripts/normalize.sh --check`; a docker job runs the test suite in-container (`--target test`), builds every image, and validates `docker compose config` for both profiles.
+
+The **enforced** style gate is whitespace-only: no trailing whitespace, final newline, on every file under `src/` and `include/`. `.clang-format` is **advisory** — clang-format cannot reproduce two house conventions (the space in `# define`/`# include`, manual column alignment of declaration/continuation blocks), so a clang-format diff does not mean a file is wrong; never run `clang-format -i` over existing files (`normalize.sh --clang-format` is the deliberate opt-in).
+
 ## Testing
 
-Tests use Google Test but also feed every result into **PostMan** (`vendor/PostMan.cpp`), a styled Unicode-table reporter — `tests/test_main.cpp` bridges the two via a custom `TestEventListener`. `tests/Makefile` builds all of `src/` *except* `main.cpp` (linking `tier_full.cpp` as the one `registerExtensions` definition). Protocol-level suites share `tests/TestHarness.hpp` (TCP `TestClient` + `IrcServerTest` fixture; subclass and override `portBase()` per suite, `onServerReady()` to inject probe extensions). Test files: `test_message`, `test_client`, `test_channel`, `test_bot`, `test_integration`, `test_robustness`, `test_security`, `test_filetransfer`, `test_extensions`, `test_libcpp98`. ~155 product tests (reported as 456 PostMan assertions — 301 of those are PostManTruncationRegression's own self-checks, not IRC coverage); PostMan's leak counter is atomic and `assertNoLeaks` takes `const char*` (a `std::string` argument would count itself as a leak — keep it that way).
+Tests use Google Test but also feed every result into **PostMan** (`vendor/PostMan.cpp`), a styled Unicode-table reporter — `tests/test_main.cpp` bridges the two via a custom `TestEventListener`. `tests/Makefile` builds all of `src/` *except* `main.cpp` (linking `tier_full.cpp` as the one `registerExtensions` definition). Protocol-level suites share `tests/TestHarness.hpp` (TCP `TestClient` + `IrcServerTest` fixture; subclass and override `portBase()` per suite, `onServerReady()` to inject probe extensions). Test files: `test_message`, `test_client`, `test_channel`, `test_bot`, `test_integration`, `test_robustness`, `test_security`, `test_filetransfer`, `test_extensions`, `test_libcpp98`, `test_postman`, `test_conformance` (RFC line limits, invite lifetime, casemapping — each test in it was written red against the pre-fix tree and its header records what was broken). ~182 product tests (reported as 483 PostMan assertions — 301 of those are PostManTruncationRegression's own self-checks, not IRC coverage); PostMan's leak counter is atomic and `assertNoLeaks` takes `const char*` (a `std::string` argument would count itself as a leak — keep it that way).
+
+`tests/TESTING.md` is the QA discipline: every regression test needs a recorded red state (seen failing on the broken code), and the fix's author must not edit or weaken the test. `tests/COVERAGE.md` maps the 42 evaluation sheet to what the repo proves (defend on the `make mandatory` binary). Counts elsewhere are stale — README, Dockerfile, and ci.yml comments still say "138 assertions", and COVERAGE.md cites a since-removed `EventLoopTest`; the numbers here are current, don't re-import those.
 
 ## Known traps
 
@@ -157,6 +198,18 @@ Tests use Google Test but also feed every result into **PostMan** (`vendor/PostM
   leaving a green table against a red exit code. `_rows` is now a
   `std::vector` with no cap. **Any `--gtest_repeat` validation done before T7
   may have read a truncated report.**
+- **A server-side probe cannot build backlog from one huge line**: the
+  512-byte outbound cap in `Client::queueMessage` means
+  `sendToClient(client, std::string(50000, 'A'))` queues **512 bytes**, not
+  50 KB. `DeadlineRefillProbe` (`test_integration.cpp`) did exactly that to
+  keep `_out` from ever draining, and when the cap was introduced the line
+  drained instantly — so `FrozenPeerClosedByDeadlineNotDrain` failed on its
+  "closed too fast, looks like drain-completion" assertion. The test was
+  depending on the absence of the line cap. It now builds the same backlog
+  from many maximum-length legal lines (502 payload + `":ft_irc "` = 510,
+  +CRLF = 512, so nothing is truncated and each call adds a predictable 512
+  bytes). Any future probe that needs a large SENDQ must do the same, and
+  must stay clear of `MAX_SENDQ` or it turns into a SendQ close instead.
 - **checkTimeouts() disconnect reasons**: SendQ-exceeded and ping-timeout are
   distinct causes collected in the same sweep; each carries its own reason
   string (fixed — both used to report "Ping timeout"). Don't re-flatten them.

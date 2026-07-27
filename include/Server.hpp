@@ -26,10 +26,14 @@ public:
 	~Server();
 
 	void	run();
-	void	shutdown();
 
 	/* ─── Client management ─── */
+	/* Addressable clients only (registered, not tearing down). For "is this
+	** name taken?" use isNickInUse() -- it counts pre-registration holders
+	** too. */
 	Client	*findClientByNick(const std::string &nickname) const;
+	bool	isNickInUse(const std::string &nickname,
+					   const Client *except) const;
 	Client	*findClientByFd(int fd) const;
 	void	sendToClient(Client *client, const std::string &msg);
 	void	disconnectClient(int fd, const std::string &reason);
@@ -40,7 +44,6 @@ public:
 	void	removeChannel(const std::string &name);
 
 	/* ─── Getters ─── */
-	const std::string	&getPassword() const;
 	const std::string	&getServerName() const;
 
 	/* ─── Reply helpers ─── */

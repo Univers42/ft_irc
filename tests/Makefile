@@ -69,6 +69,7 @@ TEST_SRCS	= test_main.cpp \
 			  test_filetransfer.cpp \
 			  test_extensions.cpp \
 			  test_libcpp98.cpp \
+			  test_conformance.cpp \
 			  test_postman.cpp
 
 # ── Vendor sources ────────────────────────────────────────────

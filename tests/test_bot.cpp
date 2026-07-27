@@ -70,7 +70,13 @@ protected:
 
 TEST_F(BotTest, Nickname)
 {
-	EXPECT_EQ(bot->getNickname(), "ircbot");
+	/* getNickname() was deleted as dead product code -- nothing in src/
+	 * ever called it. reservesNick() is the accessor the server actually
+	 * consults (cmdNick uses it to refuse the bot's name), so assert
+	 * through that instead: same fact, and it covers casemapping too. */
+	EXPECT_TRUE(bot->reservesNick("ircbot"));
+	EXPECT_TRUE(bot->reservesNick("IRCBOT"));
+	EXPECT_FALSE(bot->reservesNick("someoneelse"));
 }
 
 TEST_F(BotTest, HelpCommand)

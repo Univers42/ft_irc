@@ -64,19 +64,37 @@ std::string Channel::getModeParams() const
 	return params;
 }
 
-std::string Channel::getNamesList() const
+/* Packs members into chunks of at most `budget` bytes so the caller can emit
+** one RPL_NAMREPLY per chunk. A single member never straddles two chunks; if
+** one entry alone exceeds the budget it gets its own (over-long) chunk and
+** Client::queueMessage's cap is what keeps the wire legal -- unreachable in
+** practice with NICKLEN=9. */
+std::vector<std::string> Channel::getNamesChunks(size_t budget) const
 {
-	std::string names;
+	std::vector<std::string> chunks;
+	std::string cur;
+
 	for (std::map<int, Client *>::const_iterator it = _members.begin();
 		 it != _members.end(); ++it)
 	{
-		if (!names.empty())
-			names += " ";
-		if (_operators.count(it->first))
-			names += "@";
-		names += it->second->getNickname();
+		std::string entry = _operators.count(it->first) ? "@" : "";
+		entry += it->second->getNickname();
+
+		if (!cur.empty() && cur.size() + 1 + entry.size() > budget)
+		{
+			chunks.push_back(cur);
+			cur.clear();
+		}
+		if (!cur.empty())
+			cur += " ";
+		cur += entry;
 	}
-	return names;
+	if (!cur.empty())
+		chunks.push_back(cur);
+	/* An empty channel still owes the client one (empty) 353. */
+	if (chunks.empty())
+		chunks.push_back(std::string());
+	return chunks;
 }
 
 /* ─── Setters ─── */
@@ -115,11 +133,6 @@ bool Channel::isMember(Client *client) const
 	return _members.count(client->getFd()) > 0;
 }
 
-bool Channel::isMember(const std::string &nickname) const
-{
-	return findMember(nickname) != NULL;
-}
-
 bool Channel::isEmpty() const
 {
 	return _members.empty();
@@ -142,21 +155,25 @@ void Channel::setOperator(Client *client, bool op)
 
 /* ─── Invite management ─── */
 
-/* Invites are stored casemapped so "INVITE Bob" honours a later "JOIN" as
-** "bob" (CASEMAPPING=ascii). */
-void Channel::addInvite(const std::string &nickname)
+/* Invites are held against the invited connection's fd, not its nickname.
+** A nick is a label a client can drop (NICK) or release (QUIT), and the next
+** client to claim it would otherwise inherit the invite and walk into a +i
+** channel. Keyed this way an invite follows its holder across renames and
+** dies with the connection -- Server::teardownClientState() clears it from
+** every channel so a recycled fd can never inherit one either. */
+void Channel::addInvite(Client *client)
 {
-	_inviteList.insert(ircToLower(nickname));
+	_inviteList.insert(client->getFd());
 }
 
-bool Channel::isInvited(const std::string &nickname) const
+bool Channel::isInvited(Client *client) const
 {
-	return _inviteList.count(ircToLower(nickname)) > 0;
+	return _inviteList.count(client->getFd()) > 0;
 }
 
-void Channel::removeInvite(const std::string &nickname)
+void Channel::removeInvite(Client *client)
 {
-	_inviteList.erase(ircToLower(nickname));
+	_inviteList.erase(client->getFd());
 }
 
 /* ─── Messaging ─── */

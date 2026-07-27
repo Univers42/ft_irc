@@ -11,17 +11,15 @@ Message Message::parse(const std::string &raw)
 	while (pos < line.size() && line[pos] == ' ')
 		++pos;
 
-	// Parse optional prefix (starts with ':')
+	/* Skip an optional prefix (starts with ':'). It is discarded rather than
+	** stored -- see Message.hpp -- but it must still be stepped over, or it
+	** would be parsed as the command. A line that is nothing but a prefix
+	** carries no command and parses to an empty message. */
 	if (pos < line.size() && line[pos] == ':')
 	{
-		++pos;
 		std::string::size_type end = line.find(' ', pos);
 		if (end == std::string::npos)
-		{
-			msg.prefix = line.substr(pos);
 			return msg;
-		}
-		msg.prefix = line.substr(pos, end - pos);
 		pos = end;
 		while (pos < line.size() && line[pos] == ' ')
 			++pos;

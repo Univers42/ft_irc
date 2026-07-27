@@ -4,11 +4,8 @@
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
 
-#include <iostream>
 #include <cstring>
 #include <cerrno>
-#include <cstdlib>
-#include <sstream>
 #include <new>
 
 #include <sys/socket.h>
@@ -217,11 +214,6 @@ bool Server::dispatchExtensionFd(int fd, uint32_t events)
 		}
 	}
 	return false;
-}
-
-void Server::shutdown()
-{
-	isRunning = false;
 }
 
 /* ─── Event handlers ─── */
@@ -506,15 +498,50 @@ Client *Server::findClientByFd(int fd) const
 	return it == _clients.end() ? NULL : it->second;
 }
 
+/* Resolves a nick to a client that may actually be addressed: registered,
+** and not already tearing down. Both exclusions matter.
+**
+** Unregistered: a connection that sent NICK but no PASS never passed the
+** password gate, so delivering PRIVMSG/INVITE/FILE SEND to it would leak
+** traffic to an unauthenticated peer (and its username is still empty,
+** which makes 311/352 replies malformed).
+**
+** Tearing down: such a client has already broadcast its QUIT and left every
+** channel -- it is logically gone -- but it lingers in _clients while _out
+** drains (deferred close, T4). Binding anything to it means binding to an fd
+** that is about to be closed and handed to the next accept(), so a session
+** created in that window gets inherited by whoever receives the recycled fd.
+**
+** Nick *ownership* is a different question -- see isNickInUse(). */
 Client *Server::findClientByNick(const std::string &nickname) const
 {
 	for (std::map<int, Client *>::const_iterator it = _clients.begin();
 		 it != _clients.end(); ++it)
 	{
+		if (!it->second->isRegistered() || it->second->isTearingDown())
+			continue;
 		if (ircEquals(it->second->getNickname(), nickname))
 			return it->second;
 	}
 	return NULL;
+}
+
+/* Is this nickname spoken for? Unlike findClientByNick() this *does* count
+** connections that have sent NICK but not finished registering: they hold
+** the name, otherwise two of them could claim it and both complete
+** registration as the same nick. Clients already tearing down have given
+** their name back. `except` lets a client keep its own nick. */
+bool Server::isNickInUse(const std::string &nickname, const Client *except) const
+{
+	for (std::map<int, Client *>::const_iterator it = _clients.begin();
+		 it != _clients.end(); ++it)
+	{
+		if (it->second == except || it->second->isTearingDown())
+			continue;
+		if (ircEquals(it->second->getNickname(), nickname))
+			return true;
+	}
+	return false;
 }
 
 void Server::sendToClient(Client *client, const std::string &msg)
@@ -558,6 +585,11 @@ void Server::teardownClientState(Client *client, const std::string &reason)
 		 it != _channels.end();)
 	{
 		Channel *chan = it->second;
+		/* Retire any invite this connection holds, in every channel --
+		** not just the ones it joined, since an unredeemed invite is
+		** precisely the one that outlives its holder. Without this the
+		** fd could be recycled by a new client that inherits it. */
+		chan->removeInvite(client);
 		if (chan->isMember(client))
 		{
 			std::vector<Client *> members = chan->getMembers();
@@ -702,7 +734,6 @@ void Server::removeChannel(const std::string &name)
 
 /* ─── Getters ─── */
 
-const std::string &Server::getPassword() const { return _password; }
 const std::string &Server::getServerName() const { return _serverName; }
 
 /* ─── Utility ─── */

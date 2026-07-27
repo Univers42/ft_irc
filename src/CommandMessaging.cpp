@@ -5,19 +5,24 @@
 #include "ext/IServerExtension.hpp"
 
 #include <sstream>
-#include <iostream>
 
 /* ─── PRIVMSG ─── */
 
 void Server::cmdPrivmsg(Client *client, const Message &msg)
 {
-	if (msg.params.empty())
+	/* An empty target is a missing target, not something to interpolate
+	** into a numeric (where it collapses two spaces and shifts the
+	** parameter list for a strict parser). */
+	if (msg.params.empty() || msg.params[0].empty())
 	{
 		sendReply(client, ERR_NORECIPIENT,
 				  ":No recipient given (PRIVMSG)");
 		return;
 	}
-	if (msg.params.size() < 2)
+	/* A trailing ":" parses to a present-but-empty second parameter, so a
+	** bare size check lets "PRIVMSG #chan :" through and relays an empty
+	** message. RFC 2812 wants 412 here. */
+	if (msg.params.size() < 2 || msg.params[1].empty())
 	{
 		sendReply(client, ERR_NOTEXTTOSEND,
 				  ":No text to send");
@@ -82,8 +87,9 @@ void Server::cmdPrivmsg(Client *client, const Message &msg)
 
 void Server::cmdNotice(Client *client, const Message &msg)
 {
-	// NOTICE is like PRIVMSG but must never generate automatic replies
-	if (msg.params.size() < 2)
+	// NOTICE is like PRIVMSG but must never generate automatic replies --
+	// so an empty text is dropped silently rather than drawing a 412.
+	if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
 		return;
 
 	std::string targets = msg.params[0];

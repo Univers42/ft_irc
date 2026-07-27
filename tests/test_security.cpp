@@ -97,16 +97,36 @@ TEST(IrcCasemap, Equals)
 	EXPECT_FALSE(ircEquals("bob", "bub"));
 }
 
-TEST(IrcCasemap, InviteListIsCaseInsensitive)
+/* Supersedes an earlier InviteListIsCaseInsensitive test. That one asserted
+ * invites were stored casemapped by nickname -- the very design that let a
+ * client inherit an invite by claiming the invitee's released nick. Invites
+ * are now keyed by connection, which makes casemapping moot and the check
+ * below strictly stronger: it holds for every spelling of the nick at once,
+ * and for a renamed or reconnected holder too. */
+TEST(InviteBinding, NicknameSpellingCannotConferAnInvite)
 {
 	Client op(70, "127.0.0.1");
 	op.setNickname("op");
 	Channel chan("#sec", &op);
-	chan.addInvite("Bob");
-	EXPECT_TRUE(chan.isInvited("bob"));
-	EXPECT_TRUE(chan.isInvited("BOB"));
-	chan.removeInvite("bOb");
-	EXPECT_FALSE(chan.isInvited("Bob"));
+
+	Client bob(75, "127.0.0.1");
+	bob.setNickname("Bob");
+	chan.addInvite(&bob);
+	EXPECT_TRUE(chan.isInvited(&bob));
+
+	/* Every case-variant of the invitee's nick, worn by a different
+	 * connection, must be refused -- the old nick-keyed list accepted them. */
+	const char *spellings[] = { "Bob", "bob", "BOB", "bOb" };
+	for (size_t i = 0; i < sizeof(spellings) / sizeof(spellings[0]); ++i)
+	{
+		Client impostor(80 + static_cast<int>(i), "127.0.0.1");
+		impostor.setNickname(spellings[i]);
+		EXPECT_FALSE(chan.isInvited(&impostor))
+			<< "nick spelling '" << spellings[i] << "' conferred an invite";
+	}
+
+	chan.removeInvite(&bob);
+	EXPECT_FALSE(chan.isInvited(&bob));
 }
 
 TEST(IrcCasemap, FindMemberIsCaseInsensitive)
@@ -115,7 +135,7 @@ TEST(IrcCasemap, FindMemberIsCaseInsensitive)
 	op.setNickname("Alice");
 	Channel chan("#sec2", &op);
 	EXPECT_EQ(chan.findMember("alice"), &op);
-	EXPECT_TRUE(chan.isMember(std::string("ALICE")));
+	EXPECT_EQ(chan.findMember(std::string("ALICE")), &op);
 }
 
 TEST_F(SecurityTest, NickCollisionIsCaseInsensitive)

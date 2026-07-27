@@ -1,12 +1,10 @@
 #include "Client.hpp"
 #include "Replies.hpp"
-#include <cstring>
 
 Client::Client(int fd, const std::string &hostname)
 	: _fd(fd),
 	  _nickname("*"),
 	  _hostname(hostname),
-	  _authenticated(false),
 	  _registered(false),
 	  _passSent(false),
 	  _nickSet(false),
@@ -30,7 +28,6 @@ const std::string	&Client::getUsername() const { return _username; }
 const std::string	&Client::getRealname() const { return _realname; }
 const std::string	&Client::getHostname() const { return _hostname; }
 const std::string	&Client::getPassword() const { return _password; }
-bool				Client::isAuthenticated() const { return _authenticated; }
 bool				Client::isRegistered() const { return _registered; }
 bool				Client::hasPassSent() const { return _passSent; }
 bool				Client::hasNick() const { return _nickSet; }
@@ -52,7 +49,6 @@ void	Client::setNickname(const std::string &nickname) { _nickname = nickname; }
 void	Client::setUsername(const std::string &username) { _username = username; }
 void	Client::setRealname(const std::string &realname) { _realname = realname; }
 void	Client::setPassword(const std::string &password) { _password = password; }
-void	Client::setAuthenticated(bool auth) { _authenticated = auth; }
 void	Client::setRegistered(bool reg) { _registered = reg; }
 void	Client::setPassSent(bool sent) { _passSent = sent; }
 void	Client::setNickSet(bool set) { _nickSet = set; }
@@ -107,9 +103,23 @@ std::vector<std::string> Client::extractMessages()
 	return messages;
 }
 
+/* RFC 2812 §2.3 caps a line at 512 bytes *including* CRLF, and the cap is
+** enforced here because this is the one choke point every reply and every
+** relay funnels through. It cannot be enforced at the sender's edge: the
+** input LineBuffer already limits what a client may send to 512, but the
+** server re-frames that payload with a prefix (":nick!user@host PRIVMSG
+** #chan :") before forwarding it, so a perfectly legal inbound line becomes
+** an illegal outbound one. Replies that enumerate (353, 319) grow the same
+** way. Truncating at the queue is what keeps all of them legal without
+** auditing 100+ call sites -- callers that would rather split than lose
+** bytes (RPL_NAMREPLY does) must chunk before they get here. */
 void Client::queueMessage(const std::string &msg)
 {
-	_io.queue(msg);
+	const size_t maxPayload = static_cast<size_t>(MAX_MSGLEN) - 2;
+	if (msg.size() > maxPayload)
+		_io.queue(msg.substr(0, maxPayload));
+	else
+		_io.queue(msg);
 }
 
 const std::string &Client::getSendBuffer() const

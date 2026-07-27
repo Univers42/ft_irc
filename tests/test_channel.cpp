@@ -107,9 +107,12 @@ TEST_F(ChannelTest, FindMemberByNickname)
 
 TEST_F(ChannelTest, IsMemberByNickname)
 {
+	/* The isMember(nickname) overload was deleted as dead product code --
+	 * nothing in src/ ever called it. findMember() is what it delegated to
+	 * and what the server actually uses, so assert against that instead. */
 	Channel chan("#test", creator);
-	EXPECT_TRUE(chan.isMember("creator"));
-	EXPECT_FALSE(chan.isMember("nobody"));
+	EXPECT_NE(chan.findMember("creator"), nullptr);
+	EXPECT_EQ(chan.findMember("nobody"), nullptr);
 }
 
 TEST_F(ChannelTest, NamesListFormat)
@@ -119,12 +122,68 @@ TEST_F(ChannelTest, NamesListFormat)
 	user1.setNickname("bob");
 	chan.addMember(&user1);
 
-	std::string names = chan.getNamesList();
+	/* A budget that comfortably holds both members: one chunk. */
+	std::vector<std::string> chunks = chan.getNamesChunks(400);
+	ASSERT_EQ(chunks.size(), 1u);
+	const std::string &names = chunks[0];
 	/* creator is operator → @creator, bob is regular */
 	EXPECT_NE(names.find("@creator"), std::string::npos);
 	EXPECT_NE(names.find("bob"), std::string::npos);
 	/* bob should NOT have @ prefix */
 	EXPECT_EQ(names.find("@bob"), std::string::npos);
+}
+
+TEST_F(ChannelTest, NamesChunksRespectBudgetAndKeepEveryMember)
+{
+	/* The 512-byte line limit reaches Channel as a per-chunk byte budget.
+	 * Chunking must stay inside it without dropping or duplicating anyone. */
+	Channel chan("#test", creator);
+	std::vector<Client *> members;
+	for (int i = 0; i < 40; ++i)
+	{
+		char nick[16];
+		std::snprintf(nick, sizeof(nick), "chunk%03d", i);
+		Client *c = new Client(200 + i, "127.0.0.1");
+		c->setNickname(nick);
+		chan.addMember(c);
+		members.push_back(c);
+	}
+
+	const size_t budget = 60;
+	std::vector<std::string> chunks = chan.getNamesChunks(budget);
+	ASSERT_GT(chunks.size(), 1u) << "40 members must not fit one 60-byte chunk";
+
+	size_t total = 0;
+	for (size_t i = 0; i < chunks.size(); ++i)
+	{
+		EXPECT_LE(chunks[i].size(), budget) << "chunk " << i << " over budget";
+		total += chunks[i].size();
+	}
+	for (size_t i = 0; i < members.size(); ++i)
+	{
+		size_t seen = 0;
+		for (size_t c = 0; c < chunks.size(); ++c)
+		{
+			if (chunks[c].find(members[i]->getNickname()) != std::string::npos)
+				++seen;
+		}
+		EXPECT_EQ(seen, 1u) << members[i]->getNickname()
+							<< " should appear in exactly one chunk";
+	}
+	EXPECT_GT(total, 0u);
+
+	for (size_t i = 0; i < members.size(); ++i)
+		delete members[i];
+}
+
+TEST_F(ChannelTest, NamesChunksAlwaysYieldAtLeastOne)
+{
+	/* The caller emits one 353 per chunk; a channel must never produce
+	 * zero of them, or a joining client would get no names reply at all. */
+	Channel chan("#test", creator);
+	EXPECT_EQ(chan.getNamesChunks(400).size(), 1u);
+	/* Even an absurdly small budget still yields whole entries. */
+	EXPECT_GE(chan.getNamesChunks(1).size(), 1u);
 }
 
 TEST_F(ChannelTest, GetMembersVector)
@@ -263,11 +322,32 @@ TEST_F(ChannelTest, InviteManagement)
 {
 	Channel chan("#test", creator);
 
-	EXPECT_FALSE(chan.isInvited("bob"));
-	chan.addInvite("bob");
-	EXPECT_TRUE(chan.isInvited("bob"));
-	chan.removeInvite("bob");
-	EXPECT_FALSE(chan.isInvited("bob"));
+	Client bob(31, "127.0.0.1");
+	bob.setNickname("bob");
+
+	EXPECT_FALSE(chan.isInvited(&bob));
+	chan.addInvite(&bob);
+	EXPECT_TRUE(chan.isInvited(&bob));
+	chan.removeInvite(&bob);
+	EXPECT_FALSE(chan.isInvited(&bob));
+}
+
+TEST_F(ChannelTest, InviteIsBoundToTheConnectionNotTheNickname)
+{
+	/* Invites key off the connection, so renaming neither loses the invite
+	 * nor hands it to whoever picks the old nickname up. */
+	Channel chan("#test", creator);
+	Client invited(32, "127.0.0.1");
+	invited.setNickname("guest");
+	chan.addInvite(&invited);
+
+	invited.setNickname("guest_renamed");
+	EXPECT_TRUE(chan.isInvited(&invited)) << "invite must follow a NICK change";
+
+	Client impostor(33, "127.0.0.1");
+	impostor.setNickname("guest");
+	EXPECT_FALSE(chan.isInvited(&impostor))
+		<< "taking the invitee's old nickname must not confer its invite";
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -344,7 +424,7 @@ TEST_F(ChannelTest, NoLeakOnCreateDestroy)
 		chan->addMember(user1);
 		chan->setTopic("test topic", "creator");
 		chan->setKey("secret");
-		chan->addInvite("invitee");
+		chan->addInvite(user1);
 		before = g_allocations;
 
 		delete chan;

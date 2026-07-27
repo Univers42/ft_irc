@@ -122,11 +122,6 @@ bool PlatformBus::start()
 	return true;
 }
 
-int PlatformBus::listenFd() const
-{
-	return _listenFd;
-}
-
 bool PlatformBus::owns(int fd) const
 {
 	return _conns.find(fd) != _conns.end();

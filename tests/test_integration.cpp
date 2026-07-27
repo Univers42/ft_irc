@@ -863,10 +863,24 @@ struct DeadlineRefillProbe : public IServerExtension
 
 	const char *name() const override { return "deadline-refill-probe"; }
 
+	/* Build `bytes` of backlog out of maximum-length *legal* lines.
+	** Queueing it as one huge line does not work: Client::queueMessage caps
+	** every line at the RFC 2812 limit of 512 bytes incl. CRLF, so a single
+	** 50 KB "line" would arrive as 512 bytes and drain instantly -- which
+	** would make this test pass or fail on drain timing rather than on the
+	** deadline it exists to pin down. 502 payload bytes + sendToClient's
+	** ":ft_irc " prefix (8) = 510, +CRLF = exactly the 512-byte limit, so
+	** nothing is truncated and each call adds a predictable 512 bytes. */
+	static void queueBacklog(Server &server, Client *client, size_t bytes)
+	{
+		for (size_t queued = 0; queued < bytes; queued += 512)
+			server.sendToClient(client, std::string(502, 'A'));
+	}
+
 	void onClientRegistered(Server &server, Client &client) override
 	{
 		targetFd = client.getFd();
-		server.sendToClient(&client, std::string(50000, 'A'));
+		queueBacklog(server, &client, 50000);
 		server.disconnectClient(targetFd, "deadline test");
 	}
 
@@ -885,8 +899,11 @@ struct DeadlineRefillProbe : public IServerExtension
 			targetFd = -1;
 			return;
 		}
+		/* Top back up, staying clear of MAX_SENDQ (64 KiB): the ceiling
+		** here is 50000 + 10240 ~= 60 KB, so the refill never trips
+		** isSendQExceeded() and turns this into a SendQ close instead. */
 		if (client->getSendBuffer().size() < 50000)
-			server.sendToClient(client, std::string(10000, 'B'));
+			queueBacklog(server, client, 10000);
 	}
 };
 

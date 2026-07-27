@@ -28,7 +28,10 @@ public:
 	size_t				getMemberCount() const;
 	std::string			getModeString() const;
 	std::string			getModeParams() const;
-	std::string			getNamesList() const;
+	/* The member list as one or more space-separated chunks, each at most
+	** `budget` bytes, so RPL_NAMREPLY can stay inside the 512-byte line
+	** limit on a channel of any size. Always returns at least one chunk. */
+	std::vector<std::string>	getNamesChunks(size_t budget) const;
 
 	/* ─── Setters ─── */
 	void	setTopic(const std::string &topic, const std::string &setter);
@@ -43,7 +46,6 @@ public:
 	void	addMember(Client *client);
 	void	removeMember(Client *client);
 	bool	isMember(Client *client) const;
-	bool	isMember(const std::string &nickname) const;
 	bool	isEmpty() const;
 
 	/* ─── Operator management ─── */
@@ -51,9 +53,12 @@ public:
 	void	setOperator(Client *client, bool op);
 
 	/* ─── Invite management ─── */
-	void	addInvite(const std::string &nickname);
-	bool	isInvited(const std::string &nickname) const;
-	void	removeInvite(const std::string &nickname);
+	/* Keyed by the invited *connection*, never by its nickname: a name can
+	** be released (NICK) or freed (QUIT) and picked up by someone else,
+	** which would hand them a +i channel they were never invited to. */
+	void	addInvite(Client *client);
+	bool	isInvited(Client *client) const;
+	void	removeInvite(Client *client);
 
 	/* ─── Messaging ─── */
 	void	broadcastMessage(const std::string &msg, Client *exclude);
@@ -79,7 +84,7 @@ private:
 
 	std::map<int, Client *>	_members;
 	std::set<int>			_operators;
-	std::set<std::string>	_inviteList;
+	std::set<int>			_inviteList;
 };
 
 #endif

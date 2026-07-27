@@ -2,14 +2,18 @@
 
 #include "Server.hpp"
 
-#include <sstream>
-
 /* ─── WHO ─── */
 
 void Server::cmdWho(Client *client, const Message &msg)
 {
-	if (msg.params.empty())
+	/* No mask (or an empty one) to enumerate, but a client that blocks until
+	** the terminator arrives would hang if we answered with silence -- and
+	** echoing the empty mask back would malform the reply. */
+	if (msg.params.empty() || msg.params[0].empty())
+	{
+		sendReply(client, RPL_ENDOFWHO, "* :End of WHO list");
 		return;
+	}
 
 	const std::string &target = msg.params[0];
 
@@ -63,7 +67,10 @@ void Server::cmdWho(Client *client, const Message &msg)
 
 void Server::cmdWhois(Client *client, const Message &msg)
 {
-	if (msg.params.empty())
+	/* WHOIS [<server>] <nick>: the nick is the second parameter when one is
+	** given. An empty one is no nick at all. */
+	if (msg.params.empty()
+		|| msg.params[msg.params.size() > 1 ? 1 : 0].empty())
 	{
 		sendReply(client, ERR_NONICKNAMEGIVEN,
 				  ":No nickname given");
@@ -89,7 +96,13 @@ void Server::cmdWhois(Client *client, const Message &msg)
 	sendReply(client, RPL_WHOISSERVER,
 			  dest->getNickname() + " " + _serverName + " :ft_irc server");
 
-	// 319 RPL_WHOISCHANNELS — list channels the user is on
+	/* 319 RPL_WHOISCHANNELS — list channels the user is on.
+	** ponytail: single un-chunked line, truncated by Client::queueMessage at
+	** 512 bytes if the user is on enough channels (~40+). RPL_NAMREPLY got
+	** real chunking because channel membership grows with normal use; this
+	** one grows only with how many channels one user joined, which nothing
+	** in the subject exercises. Upgrade path if it ever matters: emit one
+	** 319 per chunk, the same way cmdJoin does with getNamesChunks(). */
 	std::string chanList;
 	for (std::map<std::string, Channel *>::const_iterator it = _channels.begin();
 		 it != _channels.end(); ++it)
@@ -100,7 +113,10 @@ void Server::cmdWhois(Client *client, const Message &msg)
 				chanList += " ";
 			if (it->second->isOperator(dest))
 				chanList += "@";
-			chanList += it->first;
+			/* getName(), not it->first: the map key is casemapped, so
+			** the key reports "#case" for a channel the client joined
+			** and sees everywhere else as "#Case". */
+			chanList += it->second->getName();
 		}
 	}
 	if (!chanList.empty())

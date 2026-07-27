@@ -25,7 +25,6 @@ public:
 						  const std::string &target, const std::string &text);
 	bool		reservesNick(const std::string &nick) const;
 
-	const std::string	&getNickname() const;
 	void				handleMessage(Client *sender, const std::string &text);
 
 private:
@@ -42,6 +41,8 @@ private:
 
 	Server		*_server;
 	std::string	_nickname;
+	/* Rotating cursor into _jokes -- see Bot::cmdJoke. */
+	int			_nextJoke;
 
 	static const char *_jokes[];
 	static const int _jokeCount;

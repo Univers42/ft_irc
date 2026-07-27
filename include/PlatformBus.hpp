@@ -45,7 +45,6 @@ public:
 	void		onFdEvent(Server &server, int fd, uint32_t events);
 
 	bool	start();                       /* bind+listen on 127.0.0.1:port */
-	int		listenFd() const;
 	bool	owns(int fd) const;            /* is fd a bus connection? */
 	void	acceptConnection();
 	void	handleInput(int fd);

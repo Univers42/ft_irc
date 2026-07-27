@@ -56,7 +56,14 @@ static bool isBase64Chunk(const std::string &chunk)
 	return true;
 }
 
-/* Decoded byte count of one base64 chunk (upper bound, padding-aware). */
+/* Decoded byte count of one base64 chunk (upper bound, padding-aware).
+** The subtraction is clamped: these are unsigned longs, and a chunk of pure
+** padding ("=") gives (1*3)/4 - 1, which wrapped to ULONG_MAX and made the
+** declared-size guard in cmdData() overflow and pass -- turning the size cap
+** off entirely. Returns 0 for anything carrying no payload; cmdData()
+** rejects such a chunk rather than relaying it, which is what guarantees
+** every accepted chunk advances relayedBytes and so keeps declaredSize a
+** real bound on the total relayed volume. */
 static unsigned long decodedBytes(const std::string &chunk)
 {
 	unsigned long pad = 0;
@@ -64,7 +71,8 @@ static unsigned long decodedBytes(const std::string &chunk)
 		++pad;
 	if (chunk.size() > 1 && chunk[chunk.size() - 2] == '=')
 		++pad;
-	return (static_cast<unsigned long>(chunk.size()) * 3UL) / 4UL - pad;
+	unsigned long raw = (static_cast<unsigned long>(chunk.size()) * 3UL) / 4UL;
+	return raw > pad ? raw - pad : 0;
 }
 
 static bool parseId(const std::string &s, long &id)
@@ -326,6 +334,16 @@ void FileTransferExt::cmdData(Server &server, Client &client,
 
 	const std::string &chunk = msg.params[2];
 	if (!isBase64Chunk(chunk))
+	{
+		abortTransfer(server, id, "malformed chunk");
+		return;
+	}
+	/* A chunk that decodes to nothing ("=", "A=") carries no file data, so
+	** it would relay a line while advancing relayedBytes by zero -- an
+	** unbounded relay against any declared size. Payload-free chunks are
+	** malformed by definition here; rejecting them is what keeps
+	** declaredSize an actual ceiling on how much this session can move. */
+	if (decodedBytes(chunk) == 0)
 	{
 		abortTransfer(server, id, "malformed chunk");
 		return;

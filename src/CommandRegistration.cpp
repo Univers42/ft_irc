@@ -68,9 +68,11 @@ void Server::cmdNick(Client *client, const Message &msg)
 		return;
 	}
 
-	// Check if nickname is taken (CASEMAPPING=ascii: "Bob" collides "bob")
-	Client *existing = findClientByNick(nick);
-	if (existing && existing != client)
+	/* Check if the nickname is taken (CASEMAPPING=ascii: "Bob" collides
+	** "bob"). Uses isNickInUse(), not findClientByNick(): a connection that
+	** has sent NICK but not yet PASS/USER still owns the name, and must
+	** block it, even though it is not addressable. */
+	if (isNickInUse(nick, client))
 	{
 		sendReply(client, ERR_NICKNAMEINUSE,
 				  nick + " :Nickname is already in use");
@@ -129,8 +131,21 @@ void Server::cmdUser(Client *client, const Message &msg)
 		return;
 	}
 
-	client->setUsername(msg.params[0]);
+	/* Bound the username: it is echoed in the prefix of every line this
+	** client's traffic is relayed under, so an oversized one would push the
+	** actual payload past the 512-byte line cap. Truncate rather than
+	** reject -- that is what ircds do, and rejecting would fail
+	** registration over a cosmetic field. */
+	std::string username = msg.params[0];
+	if (username.size() > MAX_USERLEN)
+		username.erase(MAX_USERLEN);
+	client->setUsername(username);
 	// params[1] = mode (ignored), params[2] = unused
+	/* ponytail: realname is left unbounded. Unlike the username it never
+	** enters a message prefix -- it appears only in the 311/352 query
+	** replies, where an overlong value costs a truncated reply and nothing
+	** else. Upgrade path if that ever shows: truncate here like the
+	** username above. */
 	client->setRealname(msg.params[3]);
 	client->setUserSet(true);
 
@@ -152,7 +167,6 @@ void Server::completeRegistration(Client *client)
 		return;
 	}
 
-	client->setAuthenticated(true);
 	client->setRegistered(true);
 
 	std::string nick = client->getNickname();

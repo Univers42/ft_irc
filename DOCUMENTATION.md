@@ -280,7 +280,7 @@ Represents a single connected IRC client.
   - Partial data (waits for terminator)
   - Multiple messages in one recv
   - Buffer overflow protection (force-flush at 512 bytes)
-- **`queueMessage(msg)`**: Appends `msg + "\r\n"` to send buffer
+- **`queueMessage(msg)`**: Appends `msg + "\r\n"` to send buffer, truncating to 510 bytes of payload first. This is the single choke point where RFC 2812 §2.3's 512-byte line limit (CRLF included) is enforced: the limit cannot be applied at the sender's edge, because the server re-frames an inbound line with a prefix (`:nick!user@host PRIVMSG #chan :`) before relaying it, so a legal inbound line becomes an illegal outbound one. Replies that enumerate grow the same way — a caller that would rather split than lose bytes must chunk *before* queueing (`RPL_NAMREPLY` does, via `Channel::getNamesChunks()`)
 - **`clearSendBuffer(n)`**: Erases first n bytes (after successful `send()`)
 
 #### Prefix
@@ -310,7 +310,7 @@ Represents an IRC channel with members, modes, and operators.
 | `_topicRestricted` | `bool` | Ops-only topic (mode +t) |
 | `_members` | `std::map<int, Client*>` | fd → Client mapping |
 | `_operators` | `std::set<int>` | Set of operator fds |
-| `_inviteList` | `std::set<std::string>` | Invited nicknames |
+| `_inviteList` | `std::set<int>` | fds of invited connections — **not** nicknames: a nick can be dropped (NICK) or freed (QUIT) and reclaimed by someone else, who would then inherit the invite into a `+i` channel. Keyed this way an invite follows its holder across renames and is retired with the connection by `Server::teardownClientState()` |
 
 #### Channel Creation
 
@@ -335,7 +335,13 @@ Parses raw IRC protocol messages per RFC 2812 format:
 #### `Message::parse(raw)`
 
 1. Skip leading whitespace
-2. Extract optional prefix (starts with `:`)
+2. **Skip and discard** an optional prefix (starts with `:`). `Message` has no
+   `prefix` field on purpose: RFC 2812 §2.3 says clients SHOULD NOT send one,
+   there is no server-to-server link here that would make one meaningful, and
+   nothing in `src/` ever read it — so storing it was one wasted
+   `std::string` per inbound line. It must still be *stepped over*, or it
+   would be parsed as the command; a line that is nothing but a prefix
+   therefore parses to an empty message.
 3. Extract command (uppercase it)
 4. Extract parameters:
    - Regular params separated by spaces
@@ -386,7 +392,7 @@ Result:
 
 1. Broadcast `JOIN` to all channel members
 2. Send topic: `RPL_TOPIC` (332) + `RPL_TOPICWHOTIME` (333), or `RPL_NOTOPIC` (331)
-3. Send names: `RPL_NAMREPLY` (353) + `RPL_ENDOFNAMES` (366)
+3. Send names: one `RPL_NAMREPLY` (353) **per chunk** + a single `RPL_ENDOFNAMES` (366). `Channel::getNamesChunks(budget)` packs members into as many chunks as the 512-byte line limit requires (`budget` = what remains of a legal line after the 353 framing and the `= <channel> :` head), so a large channel's member list is split rather than truncated
 
 ### Messaging Commands
 

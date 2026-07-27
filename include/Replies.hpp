@@ -16,33 +16,14 @@
 // User mode
 # define RPL_UMODEIS			"221"
 
-// Lusers (optional, but HexChat likes them)
-# define RPL_LUSERCLIENT		"251"
-# define RPL_LUSEROP			"252"
-# define RPL_LUSERUNKNOWN		"253"
-# define RPL_LUSERCHANNELS		"254"
-# define RPL_LUSERME			"255"
-
-// Away
-# define RPL_AWAY				"301"
-# define RPL_UNAWAY			"305"
-# define RPL_NOWAWAY			"306"
-
 // USERHOST
 # define RPL_USERHOST			"302"
 
 // WHOIS
 # define RPL_WHOISUSER			"311"
 # define RPL_WHOISSERVER		"312"
-# define RPL_WHOISOPERATOR		"313"
-# define RPL_WHOISIDLE			"317"
 # define RPL_ENDOFWHOIS		"318"
 # define RPL_WHOISCHANNELS		"319"
-
-// LIST
-# define RPL_LISTSTART			"321"
-# define RPL_LIST				"322"
-# define RPL_LISTEND			"323"
 
 // Channel mode
 # define RPL_CHANNELMODEIS		"324"
@@ -64,25 +45,11 @@
 # define RPL_NAMREPLY			"353"
 # define RPL_ENDOFNAMES		"366"
 
-// MOTD
-# define RPL_MOTDSTART			"375"
-# define RPL_MOTD				"372"
-# define RPL_ENDOFMOTD			"376"
-
-// INFO
-# define RPL_INFO				"371"
-# define RPL_ENDOFINFO			"374"
-
-// You're operator
-# define RPL_YOUREOPER			"381"
-
 /* ─── Error numerics ─── */
 
 # define ERR_NOSUCHNICK		"401"
-# define ERR_NOSUCHSERVER		"402"
 # define ERR_NOSUCHCHANNEL		"403"
 # define ERR_CANNOTSENDTOCHAN	"404"
-# define ERR_TOOMANYCHANNELS	"405"
 # define ERR_NORECIPIENT		"411"
 # define ERR_NOTEXTTOSEND		"412"
 # define ERR_UNKNOWNCOMMAND	"421"
@@ -97,18 +64,18 @@
 # define ERR_NEEDMOREPARAMS	"461"
 # define ERR_ALREADYREGISTRED	"462"
 # define ERR_PASSWDMISMATCH	"464"
-# define ERR_YOUREBANNEDCREEP	"465"
 # define ERR_CHANNELISFULL		"471"
 # define ERR_UNKNOWNMODE		"472"
 # define ERR_INVITEONLYCHAN	"473"
-# define ERR_BANNEDFROMCHAN	"474"
 # define ERR_BADCHANNELKEY		"475"
 # define ERR_BADCHANMASK		"476"
-# define ERR_NOPRIVILEGES		"481"
 # define ERR_CHANOPRIVSNEEDED	"482"
 # define ERR_INVALIDKEY		"525"
-# define ERR_UMODEUNKNOWNFLAG	"501"
 # define ERR_USERSDONTMATCH	"502"
+/* Generic "that mode parameter is unusable" (modern ircd numeric). Used for
+** +l, which has no dedicated numeric the way +k has ERR_INVALIDKEY.
+** Format: <client> <target> <mode char> <parameter> :<reason> */
+# define ERR_INVALIDMODEPARAM	"696"
 
 /* ─── Server configuration constants ─── */
 
@@ -117,10 +84,13 @@
 # define SERVER_CREATED	"2025-01-01"
 
 # define MAX_NICKLEN		9
+/* USER's username lands in every relayed line's prefix (nick!user@host), so
+** an unbounded one eats into the 512-byte payload budget -- silently, since
+** Client::queueMessage truncates. 10 is the classic ircd USERLEN. */
+# define MAX_USERLEN		10
 # define MAX_CHANNELLEN	50
 # define MAX_TOPICLEN		390
 # define MAX_MSGLEN		512
-# define MAX_TARGETS		4
 # define MAX_KEYLEN		23
 # define MAX_USERLIMIT		65535
 # define MAX_SENDQ			(64 * 1024)

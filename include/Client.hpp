@@ -20,7 +20,6 @@ public:
 	const std::string	&getRealname() const;
 	const std::string	&getHostname() const;
 	const std::string	&getPassword() const;
-	bool				isAuthenticated() const;
 	bool				isRegistered() const;
 	bool				hasPassSent() const;
 	bool				hasNick() const;
@@ -39,7 +38,6 @@ public:
 	void	setUsername(const std::string &username);
 	void	setRealname(const std::string &realname);
 	void	setPassword(const std::string &password);
-	void	setAuthenticated(bool auth);
 	void	setRegistered(bool reg);
 	void	setPassSent(bool sent);
 	void	setNickSet(bool set);
@@ -74,7 +72,6 @@ private:
 	std::string	_hostname;
 	std::string	_password;
 
-	bool		_authenticated;
 	bool		_registered;
 	bool		_passSent;
 	bool		_nickSet;

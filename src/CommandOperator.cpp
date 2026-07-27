@@ -1,11 +1,11 @@
 /* ─── Operator commands: KICK, INVITE, TOPIC, MODE ─── */
 
 #include "Server.hpp"
+#include "IrcCase.hpp"
 #include "libcpp/str/format.hpp"
 
 #include <cerrno>
 #include <cstdlib>
-#include <iostream>
 
 /* A channel key must be short and contain no space, comma or control
 ** character — it travels as a single middle parameter of JOIN/MODE. */
@@ -26,7 +26,7 @@ static bool isValidChannelKey(const std::string &key)
 
 void Server::cmdKick(Client *client, const Message &msg)
 {
-	if (msg.params.size() < 2)
+	if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
 	{
 		sendReply(client, ERR_NEEDMOREPARAMS,
 				  "KICK :Not enough parameters");
@@ -69,8 +69,12 @@ void Server::cmdKick(Client *client, const Message &msg)
 		return;
 	}
 
+	/* Echo the canonical channel and nick, not the spelling the kicker
+	** happened to type: a client matching its channel/user lists by string
+	** desyncs when told "KICK #CHAN NICK" for its "#chan"/"nick". */
 	std::string kickMsg = ":" + client->getPrefix() + " KICK "
-						  + chanName + " " + target + " :" + reason;
+						  + chan->getName() + " "
+						  + targetClient->getNickname() + " :" + reason;
 	chan->broadcastMessage(kickMsg, NULL);
 	chan->removeMember(targetClient);
 
@@ -82,7 +86,7 @@ void Server::cmdKick(Client *client, const Message &msg)
 
 void Server::cmdInvite(Client *client, const Message &msg)
 {
-	if (msg.params.size() < 2)
+	if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
 	{
 		sendReply(client, ERR_NEEDMOREPARAMS,
 				  "INVITE :Not enough parameters");
@@ -130,7 +134,7 @@ void Server::cmdInvite(Client *client, const Message &msg)
 	}
 
 	// Add to invite list (so they can bypass +i)
-	chan->addInvite(target);
+	chan->addInvite(targetClient);
 
 	// Confirm to sender
 	sendReply(client, RPL_INVITING, target + " " + chanName);
@@ -144,7 +148,7 @@ void Server::cmdInvite(Client *client, const Message &msg)
 
 void Server::cmdTopic(Client *client, const Message &msg)
 {
-	if (msg.params.empty())
+	if (msg.params.empty() || msg.params[0].empty())
 	{
 		sendReply(client, ERR_NEEDMOREPARAMS,
 				  "TOPIC :Not enough parameters");
@@ -202,14 +206,17 @@ void Server::cmdTopic(Client *client, const Message &msg)
 	chan->setTopic(newTopic, client->getNickname());
 
 	chan->broadcastMessage(":" + client->getPrefix() + " TOPIC "
-						  + chanName + " :" + newTopic, NULL);
+						  + chan->getName() + " :" + newTopic, NULL);
 }
 
 /* ─── MODE ─── */
 
 void Server::cmdMode(Client *client, const Message &msg)
 {
-	if (msg.params.empty())
+	/* Guarding the empty case also makes target[0] below a plain in-range
+	** read rather than leaning on C++98's const operator[] returning
+	** charT() at pos == size(). */
+	if (msg.params.empty() || msg.params[0].empty())
 	{
 		sendReply(client, ERR_NEEDMOREPARAMS,
 				  "MODE :Not enough parameters");
@@ -230,7 +237,17 @@ void Server::cmdMode(Client *client, const Message &msg)
 		}
 		if (msg.params.size() == 1)
 		{
-			// Mode query
+			/* Mode query. Membership is required here for the same reason
+			** every mode *change* requires it: RPL_CHANNELMODEIS carries
+			** the +k key as a parameter, so an unguarded read path hands
+			** the channel password to any stranger who asks and defeats
+			** +k entirely. */
+			if (!chan->isMember(client))
+			{
+				sendReply(client, ERR_NOTONCHANNEL,
+						  target + " :You're not on that channel");
+				return;
+			}
 			std::string modes = chan->getModeString();
 			std::string params = chan->getModeParams();
 			std::string reply = target + " " + modes;
@@ -257,8 +274,9 @@ void Server::handleUserMode(Client *client, const Message &msg)
 {
 	const std::string &target = msg.params[0];
 
-	// Can only query/change your own modes
-	if (target != client->getNickname())
+	// Can only query/change your own modes (CASEMAPPING=ascii, so the
+	// client may name itself in any case -- never a raw string compare)
+	if (!ircEquals(target, client->getNickname()))
 	{
 		sendReply(client, ERR_USERSDONTMATCH,
 				  ":Can't change mode for other users");
@@ -272,11 +290,9 @@ void Server::handleUserMode(Client *client, const Message &msg)
 		return;
 	}
 
-	// We don't support user modes — silently ignore or echo
-	// HexChat sends MODE nick +i; we just acknowledge it
-	const std::string &modeStr = msg.params[1];
-	(void)modeStr;
-	// Silently accept — don't error out
+	/* No user modes are supported. HexChat sends "MODE <nick> +i" right
+	** after registering and treats silence as success, so accept it without
+	** erroring rather than rejecting a mode we simply don't track. */
 }
 
 /* ─── Channel Mode Handler ─── */
@@ -414,7 +430,8 @@ void Server::handleChannelMode(Client *client, Channel *channel,
 				appliedModes += "o";
 				if (!appliedParams.empty())
 					appliedParams += " ";
-				appliedParams += nick;
+				/* Canonical nick, not the operator's spelling. */
+				appliedParams += target->getNickname();
 				break;
 			}
 			case 'l':
@@ -435,7 +452,17 @@ void Server::handleChannelMode(Client *client, Channel *channel,
 					long limit = std::strtol(limitStr.c_str(), &end, 10);
 					if (errno == ERANGE || end == limitStr.c_str() || *end != '\0'
 						|| limit <= 0 || limit > MAX_USERLIMIT)
+					{
+						/* Say so instead of dropping it: silence is
+						** indistinguishable from success to the operator
+						** who sent it. +k has a dedicated numeric
+						** (ERR_INVALIDKEY); +l has none, so use the
+						** generic mode-parameter one. */
+						sendReply(client, ERR_INVALIDMODEPARAM,
+								  channel->getName() + " l " + limitStr
+								  + " :Invalid channel limit");
 						continue;
+					}
 					channel->setUserLimit(static_cast<size_t>(limit));
 					if (adding != currentSign || appliedModes.empty())
 					{

@@ -127,7 +127,6 @@ TEST(ClientState, InitialState)
 	EXPECT_EQ(c.getFd(), 100);
 	EXPECT_EQ(c.getNickname(), "*");
 	EXPECT_EQ(c.getHostname(), "192.168.1.1");
-	EXPECT_FALSE(c.isAuthenticated());
 	EXPECT_FALSE(c.isRegistered());
 	EXPECT_FALSE(c.hasPassSent());
 	EXPECT_FALSE(c.hasNick());
@@ -153,8 +152,6 @@ TEST(ClientState, FlagToggles)
 	EXPECT_TRUE(c.hasNick());
 	c.setUserSet(true);
 	EXPECT_TRUE(c.hasUser());
-	c.setAuthenticated(true);
-	EXPECT_TRUE(c.isAuthenticated());
 	c.setRegistered(true);
 	EXPECT_TRUE(c.isRegistered());
 	c.setPingSent(true);
