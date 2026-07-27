@@ -1,8 +1,8 @@
 #include "Server.hpp"
 #include "Log.hpp"
 #include "ext/RegisterExtensions.hpp"
+#include "libcpp/str/format.hpp"
 
-#include <cctype>
 #include <cstdlib>
 #include <csignal>
 
@@ -13,18 +13,6 @@ static void signalHandler(int signum)
 {
 	(void)signum;
 	Server::isRunning = false;
-}
-
-static bool isNumber(const std::string &str)
-{
-	if (str.empty())
-		return false;
-	for (size_t i = 0; i < str.size(); ++i)
-	{
-		if (!std::isdigit(static_cast<unsigned char>(str[i])))
-			return false;
-	}
-	return true;
 }
 
 int main(int argc, char **argv)
@@ -38,16 +26,13 @@ int main(int argc, char **argv)
 	std::string portStr = argv[1];
 	std::string password = argv[2];
 
-	if (!isNumber(portStr))
+	/* One strict, range-checked parse. The previous digits-check + atoi()
+	** pair let an in-range-looking but overflowing port ("99999999999")
+	** through to atoi, whose result on overflow is undefined. */
+	long port = 0;
+	if (!libcpp::str::parse_long(portStr, 1, 65535, port))
 	{
-		Log::error("port must be a number");
-		return 1;
-	}
-
-	int port = std::atoi(portStr.c_str());
-	if (port < 1 || port > 65535)
-	{
-		Log::error("port must be between 1 and 65535");
+		Log::error("port must be a number between 1 and 65535");
 		return 1;
 	}
 
@@ -64,7 +49,7 @@ int main(int argc, char **argv)
 
 	try
 	{
-		Server server(port, password);
+		Server server(static_cast<int>(port), password);
 		registerExtensions(server); /* which set depends on the build tier */
 		server.run();
 		Log::info("shutting down — server stopped cleanly");

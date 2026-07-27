@@ -4,8 +4,6 @@
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
 
-#include <sstream>
-
 /* ─── JOIN ─── */
 
 void Server::cmdJoin(Client *client, const Message &msg)
@@ -20,24 +18,15 @@ void Server::cmdJoin(Client *client, const Message &msg)
 		return;
 	}
 
-	// Parse channel names and keys
-	std::istringstream chanStream(msg.params[0]);
-	std::string chanName;
-	std::vector<std::string> channels;
-	while (std::getline(chanStream, chanName, ','))
-	{
-		if (!chanName.empty())
-			channels.push_back(chanName);
-	}
+	/* Channel names: blanks dropped ("#a,,#b" is two channels). Keys:
+	** blanks KEPT, because they are positional -- "k1,,k3" means the second
+	** channel has no key, not that there are two keys. */
+	std::vector<std::string> channels =
+		libcpp::str::split_nonempty(msg.params[0], ',');
 
 	std::vector<std::string> keys;
 	if (msg.params.size() > 1)
-	{
-		std::istringstream keyStream(msg.params[1]);
-		std::string key;
-		while (std::getline(keyStream, key, ','))
-			keys.push_back(key);
-	}
+		keys = libcpp::str::split(msg.params[1], ',');
 
 	for (size_t i = 0; i < channels.size(); ++i)
 	{
@@ -166,14 +155,12 @@ void Server::cmdPart(Client *client, const Message &msg)
 	if (msg.params.size() > 1)
 		reason = msg.params[1];
 
-	std::istringstream chanStream(msg.params[0]);
-	std::string chanName;
+	std::vector<std::string> targets =
+		libcpp::str::split_nonempty(msg.params[0], ',');
 
-	while (std::getline(chanStream, chanName, ','))
+	for (size_t t = 0; t < targets.size(); ++t)
 	{
-		if (chanName.empty())
-			continue;
-
+		const std::string &chanName = targets[t];
 		Channel *chan = findChannel(chanName);
 		if (!chan)
 		{

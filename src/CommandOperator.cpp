@@ -4,8 +4,6 @@
 #include "IrcCase.hpp"
 #include "libcpp/str/format.hpp"
 
-#include <cerrno>
-#include <cstdlib>
 
 /* A channel key must be short and contain no space, comma or control
 ** character — it travels as a single middle parameter of JOIN/MODE. */
@@ -445,13 +443,13 @@ void Server::handleChannelMode(Client *client, Channel *channel,
 						continue;
 					}
 					std::string limitStr = msg.params[paramIdx++];
-					/* Full-string strtol parse with bounds: rejects "12abc",
-					** negatives, and values that overflow size_t when cast. */
-					errno = 0;
-					char *end = NULL;
-					long limit = std::strtol(limitStr.c_str(), &end, 10);
-					if (errno == ERANGE || end == limitStr.c_str() || *end != '\0'
-						|| limit <= 0 || limit > MAX_USERLIMIT)
+					/* Full-string, range-checked: rejects "12abc", " 12",
+					** "+12", negatives and anything that overflows -- and
+					** leaves errno untouched, which the raw strtol idiom
+					** here did not. */
+					long limit = 0;
+					if (!libcpp::str::parse_long(limitStr, 1, MAX_USERLIMIT,
+												 limit))
 					{
 						/* Say so instead of dropping it: silence is
 						** indistinguishable from success to the operator

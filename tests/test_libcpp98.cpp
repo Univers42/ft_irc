@@ -63,6 +63,55 @@ TEST(LineBuffer98, NoCapMeansUnbounded)
 	EXPECT_EQ(lb.size(), 10000u);
 }
 
+TEST(LineBuffer98, NeverReturnsMoreThanTheCap)
+{
+	/* A terminator arriving *beyond* the cap took the "found a newline"
+	 * branch, which returned the whole over-long line -- so maxLine was
+	 * only enforced while no terminator existed, making it advisory rather
+	 * than an invariant. Reachable in ft_irc: recv() reads at most 512
+	 * bytes per call, so a 600-byte line simply spans two reads. */
+	libcpp98::LineBuffer lb(8);
+	std::string out;
+	lb.append("ABCDEFGHIJKL\n");
+	ASSERT_TRUE(lb.next(out));
+	EXPECT_LE(out.size(), 8u) << "the cap must bound every returned line";
+}
+
+TEST(LineBuffer98, OverlongRemainderIsNotDeliveredAsAFreshLine)
+{
+	/* After force-extracting at the cap, the REST of that same over-long
+	 * line must be discarded up to its terminator. Delivering it as a new
+	 * line hands the tail of a flood to the protocol parser as a command --
+	 * for ft_irc that means a client can smuggle a command past the line
+	 * limit by prefixing it with 512 bytes of padding. */
+	libcpp98::LineBuffer lb(8);
+	std::string out;
+	lb.append("ABCDEFGHIJKL");          /* over-long, terminator not yet in */
+	ASSERT_TRUE(lb.next(out));
+	EXPECT_EQ(out, "ABCDEFGH");
+	EXPECT_FALSE(lb.next(out));
+
+	lb.append("MNOP\nGOOD\n");          /* "MNOP" is still the old line's tail */
+	ASSERT_TRUE(lb.next(out));
+	EXPECT_EQ(out, "GOOD")
+		<< "the tail of the over-long line leaked through as its own line";
+	EXPECT_FALSE(lb.next(out));
+}
+
+TEST(LineBuffer98, OverlongLineDoesNotSwallowTheNextRealLine)
+{
+	/* The whole over-long line arrives at once, terminator included, with a
+	 * legitimate line right behind it. The good line must survive. */
+	libcpp98::LineBuffer lb(8);
+	std::string out;
+	lb.append("ABCDEFGHIJKL\nGOOD\n");
+	ASSERT_TRUE(lb.next(out));
+	EXPECT_LE(out.size(), 8u);
+	ASSERT_TRUE(lb.next(out));
+	EXPECT_EQ(out, "GOOD") << "the following line was lost with the truncation";
+	EXPECT_FALSE(lb.next(out));
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * BufferedSocket
  * ════════════════════════════════════════════════════════════════════ */

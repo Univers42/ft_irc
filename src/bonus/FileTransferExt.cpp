@@ -9,6 +9,7 @@
 #include "libcpp/str/format.hpp"
 
 #include <cerrno>
+#include <climits>
 #include <cstdlib>
 
 FileTransferExt::FileTransferExt()
@@ -77,13 +78,7 @@ static unsigned long decodedBytes(const std::string &chunk)
 
 static bool parseId(const std::string &s, long &id)
 {
-	errno = 0;
-	char *end = NULL;
-	long v = std::strtol(s.c_str(), &end, 10);
-	if (errno == ERANGE || end == s.c_str() || *end != '\0' || v <= 0)
-		return false;
-	id = v;
-	return true;
+	return libcpp::str::parse_long(s, 1, LONG_MAX, id);
 }
 
 /* ─── plumbing ─── */
@@ -230,11 +225,10 @@ void FileTransferExt::cmdSend(Server &server, Client &client,
 		return;
 	}
 
-	errno = 0;
-	char *end = NULL;
-	unsigned long size = std::strtoul(msg.params[3].c_str(), &end, 10);
-	if (errno == ERANGE || end == msg.params[3].c_str() || *end != '\0'
-		|| size == 0 || size > MAX_FILE_SIZE)
+	/* parse_ulong rejects a leading '-' outright; bare strtoul would have
+	** accepted "-1" and wrapped it to ULONG_MAX. */
+	unsigned long size = 0;
+	if (!libcpp::str::parse_ulong(msg.params[3], 1, MAX_FILE_SIZE, size))
 	{
 		notice(server, client, "FILE: invalid size (1.."
 			   + libcpp::str::to_string(MAX_FILE_SIZE) + ")");

@@ -206,6 +206,40 @@ TEST_F(ConformanceTest, LongUsernameCannotEatTheRelayPayload)
 	rx.sendCmd("QUIT");
 }
 
+TEST_F(ConformanceTest, OverlongLineCannotSmuggleACommand)
+{
+	/* One continuous line, longer than the 512-byte limit, whose tail is a
+	 * real command. Split across two writes so the server's 512-byte recv
+	 * makes the line guard fire before the command bytes arrive.
+	 *
+	 * The guard used to cut the line at 512 and drop only what was buffered
+	 * at that instant -- so the bytes arriving afterwards were framed as a
+	 * fresh line and executed, letting a peer push any command past the
+	 * limit behind enough padding. The remainder of an over-long line is
+	 * now discarded up to its terminator. */
+	TestClient tc;
+	ASSERT_TRUE(tc.connect(serverPort));
+	tc.registerClient("testpass", "smuggler", "smuggler");
+	tc.recvAll(200);
+
+	tc.sendRaw(std::string(600, 'x'));          /* no terminator yet */
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	tc.sendRaw("JOIN #smuggled\r\n");           /* same line, still */
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+	std::string got = tc.recvAll(300);
+	EXPECT_EQ(got.find("JOIN #smuggled"), std::string::npos)
+		<< "a command rode in on the tail of an over-long line";
+
+	/* And the connection must still be usable for a genuine command. */
+	tc.sendCmd("JOIN #legit");
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+	EXPECT_NE(tc.recvAll(300).find("JOIN #legit"), std::string::npos)
+		<< "the discard swallowed a subsequent legitimate line";
+
+	tc.sendCmd("QUIT");
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * Suite: InviteLifetime — an invite belongs to a connection, not to a name
  * ════════════════════════════════════════════════════════════════════ */

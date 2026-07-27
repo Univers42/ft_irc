@@ -3,8 +3,7 @@
 #include "Server.hpp"
 #include "IrcCase.hpp"
 #include "ext/IServerExtension.hpp"
-
-#include <sstream>
+#include "libcpp/str/format.hpp"
 
 /* ─── PRIVMSG ─── */
 
@@ -29,16 +28,13 @@ void Server::cmdPrivmsg(Client *client, const Message &msg)
 		return;
 	}
 
-	std::string targets = msg.params[0];
 	const std::string &text = msg.params[1];
 
-	// Split comma-separated targets
-	std::istringstream iss(targets);
-	std::string target;
-	while (std::getline(iss, target, ','))
+	std::vector<std::string> targets =
+		libcpp::str::split_nonempty(msg.params[0], ',');
+	for (size_t t = 0; t < targets.size(); ++t)
 	{
-		if (target.empty())
-			continue;
+		const std::string &target = targets[t];
 
 		if (target[0] == '#')
 		{
@@ -92,15 +88,13 @@ void Server::cmdNotice(Client *client, const Message &msg)
 	if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
 		return;
 
-	std::string targets = msg.params[0];
 	const std::string &text = msg.params[1];
 
-	std::istringstream iss(targets);
-	std::string target;
-	while (std::getline(iss, target, ','))
+	std::vector<std::string> targets =
+		libcpp::str::split_nonempty(msg.params[0], ',');
+	for (size_t t = 0; t < targets.size(); ++t)
 	{
-		if (target.empty())
-			continue;
+		const std::string &target = targets[t];
 
 		if (target[0] == '#')
 		{
