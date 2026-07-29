@@ -68,6 +68,17 @@ void Server::cmdNick(Client *client, const Message &msg)
 		return;
 	}
 
+	/* Truncate rather than reject past NICKLEN, like real ircds -- HexChat's
+	** own retry suffixes only make an over-long nick longer, so rejecting it
+	** leaves the client unable to connect at all. Character validation above
+	** already ran on the untruncated string, so a nick that's only invalid
+	** past position 9 still gets 432. This must happen before the collision
+	** check below: two different over-long nicks can truncate to the same
+	** name, and isNickInUse must compare the truncated form so the second
+	** one gets 433 instead of silently colliding. */
+	if (nick.size() > MAX_NICKLEN)
+		nick.erase(MAX_NICKLEN);
+
 	/* Check if the nickname is taken (CASEMAPPING=ascii: "Bob" collides
 	** "bob"). Uses isNickInUse(), not findClientByNick(): a connection that
 	** has sent NICK but not yet PASS/USER still owns the name, and must
