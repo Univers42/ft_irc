@@ -67,8 +67,15 @@ each write:
 
 **Two traps worth knowing before you start:**
 
-1. `nc` stays connected after its stdin ends. A session's lifetime is *not* the sum of its
-   sleeps. When timing matters, print a timestamp per line:
+1. **`nc` only exits when its stdin is at EOF *and* the socket is closed.** This is the
+   single most misleading thing about using `nc` as a test client. If a `sleep` holds stdin
+   open, the server can close the connection and `nc` will keep running, waiting for input —
+   so the moment you observe the process end is the end of your `sleep`, not the server's
+   decision. This produced a false bug report that survived several rounds of review.
+
+   When the *timing* of a disconnect matters, do not use `nc`. Use a client that detects
+   `recv() == 0` and timestamps it (see 7.3). When timing does not matter, stamp each line
+   anyway:
    ```bash
    ... | nc 127.0.0.1 6667 | while IFS= read -r l; do echo "$(date +%T) $l"; done
    ```
@@ -132,25 +139,25 @@ Expect `451 :You have not registered` (or equivalent) rather than a successful j
 
 ## 2. Nickname handling
 
-### 2.1 Long nickname ⚠️ known bug
+### 2.1 Long nickname
 
-*Checks what happens when a nickname exceeds `NICKLEN`.*
+*Confirms a nickname exceeding `NICKLEN` truncates instead of being rejected.*
 
 ```bash
 { printf 'PASS test123\r\nNICK abcdefghij\r\nUSER x 0 * :X\r\n'; sleep 3; } | nc 127.0.0.1 6667
 ```
 
-**Current behaviour:** `432 Erroneous nickname`. **A real server truncates instead.**
+Expect a normal registration burst (`001`-`005`), with the nick truncated to
+`abcdefghi` (9 chars) -- silently, no notice or numeric about the truncation.
 
-This matters more than it looks. HexChat's fallback appends suffixes (`_a`, `_1`) which make
-the nickname *longer*, so all three retries fail and the connection dies. Any evaluator whose
-default nickname is 10+ characters cannot use the server at all.
-
-Workaround until fixed: set a nickname of 9 characters or fewer.
+This was previously a known bug: HexChat's own collision-retry suffixes (`_`, `_1`, ...) only
+make an over-long nick *longer*, so when the server rejected it with `432` instead of
+truncating, all three retries failed and the connection died. Fixed in T1 (truncate to
+NICKLEN, matching real ircds' behaviour).
 
 ### 2.2 Underscore in nickname
 
-*Confirms the rejection above is about length, not character set.*
+*Confirms the length truncation above is about length, not character set.*
 
 ```bash
 { printf 'PASS test123\r\nNICK bo_b\r\nUSER x 0 * :X\r\n'; sleep 3; } | nc 127.0.0.1 6667
@@ -467,31 +474,40 @@ every 30 seconds, so anything in the 120–150 s range is correct).
 The server's `PING` should arrive ~120 s after the **client's last line**, not 120 s after
 registration. The server must also answer the client's `PING` with `PONG ... :keep`.
 
-### 7.3 Timeout disconnect ⚠️ known bug
+### 7.3 Timeout disconnect
 
-*Compare two clients that differ in exactly one thing: whether stdin stays open.*
+*Checks that a registered client which stops responding is eventually dropped.*
+
+**Do not test this with `nc`** — see the warning in the setup section. `nc` will not exit
+when the server closes the connection if its stdin is still open, so you will measure your
+own `sleep` instead of the server. Use a client that reports `recv() == 0` with a timestamp:
 
 ```bash
-# A: stdin held open — client's socket is fully open
-{ printf 'PASS test123\r\nNICK w1\r\nUSER w1 0 * :W\r\n'; sleep 600; } \
-  | nc 127.0.0.1 6667 \
-  | { while IFS= read -r l; do echo "$(date +%T) $l"; done; \
-      echo "$(date +%T) --- socket closed ---"; }
-
-# B: stdin ends immediately — client half-closes its socket
-printf 'PASS test123\r\nNICK w2\r\nUSER w2 0 * :W\r\n' \
-  | nc 127.0.0.1 6667 \
-  | { while IFS= read -r l; do echo "$(date +%T) $l"; done; \
-      echo "$(date +%T) --- socket closed ---"; }
+python3 mute_client.py 127.0.0.1 6667 test123 mute1 400
 ```
 
-**Correct behaviour:** both are dropped ~240 s after their last activity.
+`mute_client.py` performs exactly one `sendall` (the registration) and never writes again.
+The socket stays fully open — no `shutdown`, no `close` — so this is a genuinely silent
+client rather than one that has signalled it is going away.
 
-**Current behaviour:** only B is dropped. A receives the `PING`, never answers, and stays
-connected indefinitely — leaking a file descriptor. Both receive their `PING` in the same
-second, so detection works; the teardown is what does not complete.
+Expected output:
 
----
+```
+t+  0.0s  registration sent
+t+144.1s  :ft_irc PING :ft_irc
+t+264.3s  *** SERVER CLOSED THE CONNECTION ***
+```
+
+Correct behaviour: a `PING` around 120 s after the last activity (130-150 s is fine, the
+idle sweep runs every 30 s), then a close 120 s after that `PING`.
+
+If you want to confirm the client really is silent, run it under `strace`:
+
+```bash
+strace -f -e trace=sendto,write,sendmsg,shutdown -tt -o /tmp/mute.trace \
+  python3 mute_client.py
+grep -c 'sendto\|sendmsg' /tmp/mute.trace
+```
 
 ## 8. Limits
 
@@ -597,12 +613,13 @@ swallows or rewrites input, and a reply to a command you did not send proves not
 
 | # | Issue | Severity | Test |
 |---|---|---|---|
-| 1 | Nicknames over 9 characters are rejected instead of truncated; HexChat cannot connect | **High** | 2.1 |
-| 2 | Idle timeout never drops a client whose socket is fully open | Medium | 7.3 |
-| 3 | `324`/`329` sent twice on join (HexChat de-duplicates them on screen) | Low | 3.1 |
-| 4 | `CHANMODES` puts `l` in the wrong group; should be `,k,l,it` | Cosmetic | 1.1 |
-| 5 | Channel name capitalisation differs between the `JOIN` echo and the numerics | Cosmetic | 3.2 |
-| 6 | Default `KICK` reason uses the kicker's nick; real servers use the kicked user's | Cosmetic | 3.5 |
-| 7 | No `~` prefix on the username when there is no ident response | Cosmetic | 1.1 |
+| 1 | ~~Nicknames over 9 characters are rejected instead of truncated; HexChat cannot connect~~ — fixed: now truncated to NICKLEN (T1) | Fixed | 2.1 |
+| 2 | `324`/`329` sent twice on join (HexChat de-duplicates them on screen) | Low | 3.1 |
+| 3 | `CHANMODES` puts `l` in the wrong group; should be `,k,l,it` | Cosmetic | 1.1 |
+| 4 | Channel name capitalisation differs between the `JOIN` echo and the numerics | Cosmetic | 3.2 |
+| 5 | Default `KICK` reason uses the kicker's nick; real servers use the kicked user's | Cosmetic | 3.5 |
+| 6 | No `~` prefix on the username when there is no ident response | Cosmetic | 1.1 |
 
-Everything else in this document has been verified as behaving correctly.
+Everything else in this document has been verified as behaving correctly — including the
+idle timeout, which was reported as broken for a while and turned out to be a measurement
+artifact of using `nc` as the test client.
