@@ -740,7 +740,7 @@ const std::string &Server::getServerName() const { return _serverName; }
 
 bool Server::isValidNickname(const std::string &nick) const
 {
-	if (nick.empty() || nick.size() > MAX_NICKLEN)
+	if (nick.empty())
 		return false;
 
 	// First char must be letter or special

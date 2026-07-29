@@ -11,6 +11,12 @@
  *   - UserModeCase.*       : MODE <nick> compared the target with operator!=
  *                            instead of ircEquals, the one place in the tree
  *                            that bypassed CASEMAPPING=ascii.
+ *   - NickTruncation.*     : isValidNickname() rejected any nick over
+ *                            MAX_NICKLEN with 432 instead of truncating,
+ *                            and (if fixed naively, truncating after the
+ *                            isNickInUse check) two different over-long
+ *                            nicks could truncate to the same name and
+ *                            both register.
  */
 
 #include <gtest/gtest.h>
@@ -489,6 +495,86 @@ TEST_F(ConformanceTest, UnregisteredConnectionStillReservesItsNick)
 	std::this_thread::sleep_for(std::chrono::milliseconds(250));
 	EXPECT_NE(rival.recvAll(300).find(ERR_NICKNAMEINUSE), std::string::npos)
 		<< "a nick claimed by an unregistered connection was handed out twice";
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Suite: NickTruncation — over-long nicks truncate to NICKLEN, not reject
+ * ════════════════════════════════════════════════════════════════════ */
+
+TEST_F(ConformanceTest, OverlongNickTruncatesInsteadOfRejecting)
+{
+	/* HexChat's own collision retries (_ , _1, ...) only make an over-long
+	 * nick longer, so rejecting it with 432 leaves the client unable to
+	 * connect at all. A real ircd truncates to NICKLEN silently. */
+	TestClient tc;
+	ASSERT_TRUE(tc.connect(serverPort));
+
+	tc.registerClient("testpass", "abcdefghij", "tuser");
+	std::string reply = tc.recvAll(300);
+
+	EXPECT_TRUE(tc.hasNumeric(reply, "001"))
+		<< "a 10-char valid nick must register, truncated, not be rejected";
+	EXPECT_EQ(reply.find("abcdefghij"), std::string::npos)
+		<< "the untruncated 10-char nick must never appear in a reply";
+	EXPECT_NE(reply.find("abcdefghi!"), std::string::npos)
+		<< "the welcome prefix must carry the nick truncated to 9 chars";
+}
+
+TEST_F(ConformanceTest, InvalidCharacterPastNicklenStillRejects)
+{
+	/* Character validation must run on the full, untruncated nick: if
+	 * truncation happened first, an invalid char past position 9 would
+	 * never be seen and the nick would wrongly register. */
+	TestClient tc;
+	ASSERT_TRUE(tc.connect(serverPort));
+
+	tc.registerClient("testpass", "abcdefghi#junk", "tuser");
+	std::string reply = tc.recvAll(300);
+
+	EXPECT_TRUE(tc.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
+		<< "an invalid char at position 10 must still be rejected, not "
+		   "silently dropped by truncation";
+	EXPECT_FALSE(tc.hasNumeric(reply, "001"))
+		<< "a nick invalid past NICKLEN must not register";
+}
+
+TEST_F(ConformanceTest, TwoNicksTruncatingToTheSameNameCollide)
+{
+	/* The core risk from the audit: if truncation happened after the
+	 * collision check, two different over-long nicks that truncate to the
+	 * same 9-char name would both register, breaking nick uniqueness. */
+	TestClient first, second;
+	ASSERT_TRUE(first.connect(serverPort));
+	ASSERT_TRUE(second.connect(serverPort));
+
+	first.registerClient("testpass", "abcdefghiONE", "u1");
+	EXPECT_TRUE(first.hasNumeric(first.recvAll(300), "001"));
+
+	second.registerClient("testpass", "abcdefghiTWO", "u2");
+	std::string reply = second.recvAll(300);
+
+	EXPECT_TRUE(second.hasNumeric(reply, ERR_NICKNAMEINUSE))
+		<< "two nicks truncating to the same 9-char name must collide, "
+		   "not silently both register";
+	EXPECT_FALSE(second.hasNumeric(reply, "001"));
+}
+
+TEST_F(ConformanceTest, TruncatedNickNeverExceedsAdvertisedNicklen)
+{
+	/* Cross-check against the 005 NICKLEN token the server itself
+	 * advertises -- the truncated nick must actually honour it. */
+	TestClient tc;
+	ASSERT_TRUE(tc.connect(serverPort));
+
+	tc.registerClient("testpass", "abcdefghijklmno", "tuser");
+	std::string reply = tc.recvAll(300);
+
+	ASSERT_NE(reply.find("NICKLEN=9"), std::string::npos)
+		<< "005 must still advertise NICKLEN=9";
+	EXPECT_NE(reply.find("abcdefghi!"), std::string::npos)
+		<< "the registered nick must be truncated to exactly NICKLEN chars";
+	EXPECT_EQ(reply.find("abcdefghij"), std::string::npos)
+		<< "no more than NICKLEN characters of the requested nick may survive";
 }
 
 /* ════════════════════════════════════════════════════════════════════════
