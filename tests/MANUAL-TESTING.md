@@ -141,19 +141,48 @@ Expect `451 :You have not registered` (or equivalent) rather than a successful j
 
 ### 2.1 Long nickname
 
-*Confirms a nickname exceeding `NICKLEN` truncates instead of being rejected.*
+*Checks that a nickname longer than `NICKLEN` is truncated rather than rejected.*
 
 ```bash
-{ printf 'PASS test123\r\nNICK abcdefghij\r\nUSER x 0 * :X\r\n'; sleep 3; } | nc 127.0.0.1 6667
+{ printf 'PASS test123\r\nNICK abcdefghijklmno\r\nUSER x 0 * :X\r\n'; sleep 3; } | nc 127.0.0.1 6667
 ```
 
-Expect a normal registration burst (`001`-`005`), with the nick truncated to
-`abcdefghi` (9 chars) -- silently, no notice or numeric about the truncation.
+Expect a full `001`-`005` burst under the truncated nickname (`abcdefghi`), **not** a `432`.
 
-This was previously a known bug: HexChat's own collision-retry suffixes (`_`, `_1`, ...) only
-make an over-long nick *longer*, so when the server rejected it with `432` instead of
-truncating, all three retries failed and the connection died. Fixed in T1 (truncate to
-NICKLEN, matching real ircds' behaviour).
+This matters more than it looks. HexChat's fallback appends suffixes (`_a`, `_1`) which make
+the nickname *longer*, so if the server rejects long nicknames instead of truncating them,
+every retry fails for the same reason and the connection dies — an evaluator whose default
+nickname is 10+ characters cannot connect at all. This was a real bug; it is now fixed, and
+this test is the regression check.
+
+### 2.1b Collision after truncation
+
+*The risk introduced by truncation: two different long nicknames can truncate to the same
+short one.*
+
+With the client from 2.1 still connected as `abcdefghi`:
+
+```bash
+{ printf 'PASS test123\r\nNICK abcdefghiZZZZZ\r\nUSER y 0 * :Y\r\n'; sleep 3; } | nc 127.0.0.1 6667
+```
+
+Expect `433 * abcdefghi :Nickname is already in use`, and registration must **not** complete.
+Two clients sharing a nickname would be worse than the original bug.
+
+Note the `433` names the *truncated* nickname, so the client can see what it actually
+collided with.
+
+### 2.1c Truncation after registration
+
+*The same rule must apply to nickname changes, not just registration.*
+
+```bash
+{ printf 'PASS test123\r\nNICK short\r\nUSER z 0 * :Z\r\n'; sleep 1; \
+  printf 'NICK qwertyuiopasd\r\n'; sleep 2; } | nc 127.0.0.1 6667
+```
+
+Expect `:short!z@127.0.0.1 NICK :qwertyuio`. If the target truncates onto a nickname already
+in use, expect `433` and the client keeps its current nickname.
 
 ### 2.2 Underscore in nickname
 
