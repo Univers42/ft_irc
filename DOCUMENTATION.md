@@ -369,14 +369,15 @@ Result:
 |---------|--------|-------------|
 | `CAP` | `CAP LS` / `CAP END` | Capability negotiation (empty list — no caps supported) |
 | `PASS` | `PASS <password>` | Set connection password (must match server password) |
-| `NICK` | `NICK <nickname>` | Set or change nickname. Validated: first char alpha/special, rest alnum/special/dash, max 9 chars |
+| `NICK` | `NICK <nickname>` | Set or change nickname. Validated: first char alpha/special, rest alnum/special/dash. Over-length nicks are truncated to `MAX_NICKLEN` (9), not rejected (T1) — invalid *characters* still get 432, but excess *length* is silently truncated, matching real ircds. Collision is checked on the truncated form (433) |
 | `USER` | `USER <user> <mode> <unused> :<realname>` | Set username and real name |
 
 #### Registration Flow
 
 1. Client sends PASS, NICK, USER (in any order, but PASS must come before registration completes)
 2. When both NICK and USER are set, `completeRegistration()` fires:
-   - Checks password → `ERR_PASSWDMISMATCH` (464) + disconnect on failure
+   - Checks password → `ERR_PASSWDMISMATCH` (464) sent, then deferred disconnect
+    (T4): the 464 is delivered before the socket closes, not a silent drop
    - Sends welcome burst: `RPL_WELCOME` (001), `RPL_YOURHOST` (002), `RPL_CREATED` (003), `RPL_MYINFO` (004), `RPL_ISUPPORT` (005), `ERR_NOMOTD` (422)
 
 ### Channel Commands
@@ -490,7 +491,7 @@ Unknown mode characters return `ERR_UNKNOWNMODE` (472).
 | 412 | `ERR_NOTEXTTOSEND` | PRIVMSG with no text |
 | 421 | `ERR_UNKNOWNCOMMAND` | Unrecognized command |
 | 431 | `ERR_NONICKNAMEGIVEN` | NICK with no parameter |
-| 432 | `ERR_ERRONEUSNICKNAME` | Invalid nickname format |
+| 432 | `ERR_ERRONEUSNICKNAME` | Invalid nickname *characters* (over-length is truncated, not 432 — see T1) |
 | 433 | `ERR_NICKNAMEINUSE` | Nickname already taken |
 | 441 | `ERR_USERNOTINCHANNEL` | Target not in channel |
 | 442 | `ERR_NOTONCHANNEL` | You're not in that channel |
@@ -498,7 +499,7 @@ Unknown mode characters return `ERR_UNKNOWNMODE` (472).
 | 451 | `ERR_NOTREGISTERED` | Command requires registration |
 | 461 | `ERR_NEEDMOREPARAMS` | Missing parameters |
 | 462 | `ERR_ALREADYREGISTRED` | Already registered |
-| 464 | `ERR_PASSWDMISMATCH` | Wrong password → disconnect |
+| 464 | `ERR_PASSWDMISMATCH` | Wrong password → 464 sent, then deferred close (T4) |
 | 471 | `ERR_CHANNELISFULL` | Channel at user limit (+l) |
 | 472 | `ERR_UNKNOWNMODE` | Unknown mode character |
 | 473 | `ERR_INVITEONLYCHAN` | Channel is invite-only (+i) |
@@ -675,13 +676,37 @@ All `new` allocations are wrapped in `try/catch (std::bad_alloc)`:
 
 ### Client Disconnect Safety
 
-After processing each message, the code checks `_clients.find(fd) != _clients.end()` before continuing, because a command handler (e.g., wrong password → `disconnectClient()`) may have removed the client mid-iteration.
+Two mechanisms guard the disconnect path:
+
+1. **Existence check after each handler.** After a command handler runs, the
+   loop verifies the client still exists (`_clients.find(fd)`) before continuing,
+   because a handler may have torn it down mid-iteration.
+
+2. **Deferred close (T4).** `disconnectClient()` does not close the socket
+   immediately when there is queued output. It marks the client pending-close,
+   lets `_out` drain through the existing EPOLLOUT path, and closes only once the
+   buffer empties or a `PENDING_CLOSE_TIMEOUT` deadline elapses. This is what
+   delivers `464 ERR_PASSWDMISMATCH` to a client before closing (a wrong-password
+   client is told why, then dropped). Cases that must not defer — SendQ exceeded,
+   socket errors — use `disconnectClientNow()` for an immediate close instead.
+
+   Reentrancy is guarded by `isTearingDown()`: a teardown triggered from inside
+   another teardown (e.g. an extension's `onClientDisconnect` calling back into
+   `disconnectClient`) is a no-op, preventing the double-free that path could
+   otherwise cause. `finalizeDisconnect()` is the single point that frees the
+   client.
 
 ### Timeout Management
-
-- Every 30 seconds, idle clients are checked
-- After `PING_INTERVAL` (120s) of inactivity → server sends `PING`
-- After `PING_INTERVAL + PING_TIMEOUT` (240s) with no response → disconnect
+- `checkTimeouts()` runs on a 30-second gate, scanning all registered clients.
+- After `PING_INTERVAL` (120s) of inactivity → server sends `PING`.
+- After `PING_INTERVAL + PING_TIMEOUT` (240s total) with no response → disconnect
+  with reason `Ping timeout`. Applies to any registered client regardless of
+  socket state — a client that goes silent with its socket fully open is dropped
+  at ~240s, same as one that half-closes (verified against the built binary; an
+  earlier report that fully-open sockets were never evicted turned out to be an
+  `nc` harness artifact, not server behaviour).
+- Pending-close clients (deferred disconnect) are skipped here; their lifetime is
+  governed by `checkPendingCloseTimeouts()`, not this scan.
 
 ---
 
