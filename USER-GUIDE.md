@@ -101,14 +101,33 @@ NICK alice
 
 **Over-long nicks are truncated, not rejected.** If you send a nick longer
 than 9 characters, the server shortens it to 9 rather than refusing it —
-exactly as real ircds do:
+exactly as real ircds do.
+
+During registration the truncation is silent: you're registered under the
+shortened nick and the welcome burst reflects it. There's no `NICK` line,
+because you had no previous nick to change from:
 
 ```
-NICK abcdefghijklmnop
+NICK abcdefghijklmno
+USER x 0 * :X
 ```
 ```
-:abcdefghi!alice@127.0.0.1 NICK :abcdefghi
+:ft_irc 001 abcdefghi :Welcome to the ft_irc Network abcdefghi!x@127.0.0.1
 ```
+
+After registration, changing to an over-long nick echoes a `NICK` line carrying
+the truncated result. Note the prefix holds your **old** nick — that's how other
+clients know who changed:
+
+```
+NICK qwertyuiopasd
+```
+```
+:short!z@127.0.0.1 NICK :qwertyuio
+```
+
+If the truncated result is already taken, you get `433` instead and keep your
+current nick.
 
 > **Why truncate instead of reject?** RFC 2812 defines 9 as the maximum nick
 > length, but it asks *clients* to tolerate longer strings and doesn't tell the
@@ -125,7 +144,7 @@ length):
 NICK ab#cd
 ```
 ```
-:ft_irc 432 * ab#cd :Erroneous nickname
+:ft_irc 432 bob ab#cd :Erroneous nickname
 ```
 
 A nick that's already taken — including one that collides only after
@@ -168,9 +187,13 @@ the channel modes:
 :ft_irc 331 alice #general :No topic is set
 :ft_irc 353 alice = #general :@alice
 :ft_irc 366 alice #general :End of /NAMES list
+:ft_irc 324 alice #general +
+:ft_irc 329 alice #general 1785598392
 ```
 
-The `@` before your nick in the `353` list means you're a channel operator.
+The `@` before your nick in the `353` list means you're a channel operator. The
+`324` line lists the channel's current modes and `329` is its creation
+timestamp.
 
 In HexChat, `/join #general` does the same and opens a channel tab.
 
@@ -222,6 +245,13 @@ MODE #general +o bob        # make bob an operator
 MODE #general -o bob        # remove it
 ```
 
+Every accepted `MODE` change is echoed back to you (and to the rest of the
+channel) as a line prefixed with the setter:
+
+```
+:alice!alice@127.0.0.1 MODE #general +k secret
+```
+
 The mandatory channel modes are `+i`, `+t`, `+k`, `+o`, `+l`:
 
 | Mode | Effect | Example |
@@ -248,7 +278,7 @@ Now an uninvited user is refused:
 JOIN #general
 ```
 ```
-:ft_irc 473 #general :Cannot join channel (+i)
+:ft_irc 473 bob #general :Cannot join channel (+i)
 ```
 
 An operator invites them, and then they can join:
@@ -272,7 +302,7 @@ Now joining requires the key:
 JOIN #general
 ```
 ```
-:ft_irc 475 #general :Cannot join channel (+k)
+:ft_irc 475 bob #general :Cannot join channel (+k)
 ```
 ```
 JOIN #general secret
