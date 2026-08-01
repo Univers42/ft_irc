@@ -577,6 +577,114 @@ TEST_F(ConformanceTest, TruncatedNickNeverExceedsAdvertisedNicklen)
 		<< "no more than NICKLEN characters of the requested nick may survive";
 }
 
+TEST_F(ConformanceTest, PostRegistrationNickChangeStillTruncates)
+{
+	/* The four tests above only drive the pre-registration NICK, in the
+	 * initial PASS/NICK/USER burst. cmdNick is one shared function --
+	 * the isRegistered() branch only decides whether to broadcast a
+	 * nick-change message, not whether truncation/validation run -- so a
+	 * NICK sent on an already-registered connection must truncate exactly
+	 * like the pre-registration path, on both the sender's own echo and a
+	 * channel peer's broadcast. */
+	TestClient subject, observer;
+	ASSERT_TRUE(subject.connect(serverPort));
+	ASSERT_TRUE(observer.connect(serverPort));
+
+	subject.registerClient("testpass", "short1", "subject");
+	observer.registerClient("testpass", "observer", "observer");
+	subject.recvAll(200);
+	observer.recvAll(200);
+
+	subject.sendCmd("JOIN #posttrunc");
+	std::this_thread::sleep_for(std::chrono::milliseconds(150));
+	subject.recvAll(200);
+
+	observer.sendCmd("JOIN #posttrunc");
+	std::this_thread::sleep_for(std::chrono::milliseconds(150));
+	subject.recvAll(200);
+	observer.recvAll(200);
+
+	subject.sendCmd("NICK abcdefghijklmno");
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+	std::string selfEcho = subject.recvAll(300);
+	EXPECT_NE(selfEcho.find("NICK :abcdefghi"), std::string::npos)
+		<< "the sender's own echo must carry the nick truncated to 9 chars";
+	EXPECT_EQ(selfEcho.find("abcdefghijklmno"), std::string::npos)
+		<< "the untruncated 15-char nick must never appear in the self-echo";
+
+	std::string peerBroadcast = observer.recvAll(300);
+	EXPECT_NE(peerBroadcast.find("NICK :abcdefghi"), std::string::npos)
+		<< "a channel peer's broadcast must carry the nick truncated to 9 chars";
+	EXPECT_EQ(peerBroadcast.find("abcdefghijklmno"), std::string::npos)
+		<< "the untruncated 15-char nick must never appear in a peer's broadcast";
+
+	subject.sendCmd("QUIT");
+	observer.sendCmd("QUIT");
+}
+
+TEST_F(ConformanceTest, BareNickGivesNoNicknameGivenNotEmptyTruncation)
+{
+	/* Two more input shapes sitting next to the truncation insertion point
+	 * in cmdNick, live-verified correct but with zero automated coverage.
+	 * A bare NICK (no params) must draw exactly 431, never fall through to
+	 * truncation/validation with an empty string.
+	 *
+	 * Recorded red state: reordering truncation itself around this check is
+	 * not constructible without undefined behaviour (nick doesn't exist
+	 * until after msg.params.empty() is checked). The plausible mistake is
+	 * different -- folding the empty check into isValidNickname (which
+	 * already returns false on nick.empty()) and dropping the dedicated
+	 * early return, reasoning "isValidNickname already rejects it". That
+	 * compiles and doesn't crash, it just silently changes the numeric from
+	 * 431 to 432. Verified live: replacing cmdNick's early
+	 * `msg.params.empty()` return with
+	 * `nick = msg.params.empty() ? "" : msg.params[0]` ahead of the
+	 * isValidNickname call flips this test's exact-431 assertion to FAIL
+	 * (server sends 432 instead); reverted immediately after confirming. */
+	TestClient tc;
+	ASSERT_TRUE(tc.connect(serverPort));
+
+	tc.sendCmd("PASS testpass");
+	tc.sendCmd("NICK");
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+	std::string reply = tc.recvAll(300);
+	EXPECT_TRUE(tc.hasNumeric(reply, ERR_NONICKNAMEGIVEN))
+		<< "a bare NICK must draw exactly 431, not fall through to "
+		   "validation/truncation of an empty string";
+	EXPECT_FALSE(tc.hasNumeric(reply, "001"))
+		<< "a bare NICK must never complete registration";
+}
+
+TEST_F(ConformanceTest, DigitFirstNickIsRejected)
+{
+	/* A nick starting with a digit is invalid per RFC 2812 regardless of
+	 * length, live-verified correct but with zero automated coverage.
+	 *
+	 * Unlike the two tests above, this one has no red state tied to
+	 * reordering truncation relative to validation: truncation
+	 * (nick.erase(MAX_NICKLEN)) only ever removes trailing characters, and
+	 * the defect here is at position 0, so no truncate/validate ordering
+	 * can make this nick pass -- it fails isValidNickname's first-character
+	 * check either way. That's a structural difference from
+	 * InvalidCharacterPastNicklenStillRejects, where the invalid character
+	 * sits past position 9 and truncating first would genuinely hide it.
+	 * The red state actually recorded here is a direct mutation of
+	 * isValidNickname (temporarily allowing a leading digit), which flips
+	 * this test to FAIL as expected; reverted immediately after confirming. */
+	TestClient tc;
+	ASSERT_TRUE(tc.connect(serverPort));
+
+	tc.registerClient("testpass", "1abc", "tuser");
+	std::string reply = tc.recvAll(300);
+
+	EXPECT_TRUE(tc.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
+		<< "a nick starting with a digit must be rejected";
+	EXPECT_FALSE(tc.hasNumeric(reply, "001"))
+		<< "a nick starting with a digit must never register";
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * Suite: ReplyWellFormedness — required numerics and canonical names
  * ════════════════════════════════════════════════════════════════════ */
