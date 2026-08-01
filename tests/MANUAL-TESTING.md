@@ -623,3 +623,203 @@ swallows or rewrites input, and a reply to a command you did not send proves not
 Everything else in this document has been verified as behaving correctly — including the
 idle timeout, which was reported as broken for a while and turned out to be a measurement
 artifact of using `nc` as the test client.
+
+---
+
+## 10. Bonus features
+
+These require the bonus build. Everything below was verified against it.
+
+```bash
+make fclean && make bonus
+./ircserv 6667 test123
+```
+
+### A note on syntax when using `nc`
+
+HexChat builds protocol lines for you: `/msg ircbot !help` becomes
+`PRIVMSG ircbot :!help`. From `nc` you type the whole line yourself, and **the space before
+the colon is mandatory** — it separates the target from the message text.
+
+Two ways to get it wrong, both of which the server rejects correctly:
+
+```
+PRIVMSG #ircbot :!help    -> 403 :No such channel      (the # makes it a channel name)
+PRIVMSG ircbot:!help      -> 412 :No text to send      (no space, so no text parameter)
+```
+
+### 10.1 Is the bonus build actually running?
+
+*Do this first — everything else in this section depends on it.*
+
+```
+/msg ircbot !help
+```
+
+A reply means the bonus tier is linked. `401 ircbot :No such nick/channel` means you are
+running the mandatory binary.
+
+`ircbot` is **not** a separate process and **not** a connected client. It is a virtual user
+inside the server that only claims private messages addressed to its nickname. Typing
+`!help` into a channel does nothing — it is just channel text.
+
+### 10.2 Bot commands
+
+```
+/msg ircbot !time
+/msg ircbot !info
+/msg ircbot !info #test
+/msg ircbot !joke
+```
+
+`!info #test` should report the member count and modes of that channel. Run `!joke` several
+times to confirm it rotates rather than repeating one hardcoded string.
+
+### 10.3 The bot's nickname is reserved
+
+```
+/quote NICK ircbot
+```
+
+Expect `433 :Nickname is already in use`. If a client can take this nickname, it can
+impersonate the bot.
+
+### 10.4 Unknown bot command
+
+```
+/msg ircbot !nonsense
+```
+
+Expect a reply, not silence:
+`:ircbot PRIVMSG you :Unknown command. Type !help for available commands.`
+
+### 10.5 FILE transfer — happy path
+
+This is the server-mediated `FILE` protocol (base64 relay). The server never decodes the
+payload and never touches disk.
+
+Two terminals running `nc -C 127.0.0.1 6667`. Use a tiny file so it fits in one chunk —
+`hello world!` is 12 bytes and its base64 is `aGVsbG8gd29ybGQh`.
+
+**Receiver (bob)** — register first:
+```
+PASS test123
+NICK bob
+USER bob 0 * :Bob
+```
+
+**Sender (alice)**:
+```
+PASS test123
+NICK alice
+USER alice 0 * :Alice
+FILE SEND bob hello.txt 12
+```
+
+Expected exchange:
+```
+alice -> FILE SEND bob hello.txt 12
+alice <- :ft_irc NOTICE alice :FILE 1 offered to bob
+  bob <- :alice!alice@127.0.0.1 FILE OFFER 1 hello.txt 12
+  bob -> FILE ACCEPT 1
+alice <- :bob!bob@127.0.0.1 FILE OK 1
+alice -> FILE DATA 1 aGVsbG8gd29ybGQh
+  bob <- :alice!alice@127.0.0.1 FILE DATA 1 aGVsbG8gd29ybGQh
+alice -> FILE END 1
+  bob <- :alice!alice@127.0.0.1 FILE END 1 12
+```
+
+**The proof is that the payload bob receives is character-for-character identical to what
+alice sent.** To see it in plain text, decode it — but in a *separate shell*, not inside
+`nc`. Anything typed into `nc` is sent to the server as an IRC line, which is why shell
+commands come back as `421 ECHO :Unknown command`.
+
+```bash
+echo 'aGVsbG8gd29ybGQh' | base64 -d      # -> hello world!
+```
+
+Note the transfer id (`1` here) increments per offer; use the id the server actually gave
+you.
+
+### 10.6 FILE transfer — rejection
+
+```
+alice -> FILE SEND bob otro.txt 12
+  bob <- :alice!alice@127.0.0.1 FILE OFFER 2 otro.txt 12
+  bob -> FILE REJECT 2
+alice <- :bob!bob@127.0.0.1 FILE NO 2
+```
+
+The sender must be told, not left waiting.
+
+### 10.7 Sending data after a rejection
+
+*The one case with real potential to bite: if data still flows after a refusal, `REJECT`
+means nothing.*
+
+From alice, after the rejection above:
+```
+FILE DATA 2 aGVsbG8gd29ybGQh
+```
+
+Expect `:ft_irc NOTICE alice :FILE: no transfer with id 2`, and **check the receiver's
+terminal**: bob must receive nothing at all.
+
+### 10.8 FILE transfer to a non-existent user
+
+```
+FILE SEND nadie x.txt 12
+```
+
+Expect `:ft_irc NOTICE you :FILE: no such nick nadie` — an explicit error, not silence.
+
+`FILE` errors are reported as server `NOTICE`s rather than numerics. That is deliberate:
+`FILE` is not an RFC command, so no standard numeric applies to it.
+
+### 10.9 DCC relay (CTCP passthrough)
+
+Separate from 10.5–10.8. The server implements no DCC logic at all; it just relays the
+`\x01`-wrapped CTCP payload untouched, which is all HexChat needs to show its file transfer
+dialog.
+
+This one cannot be typed by hand — you need the literal `\x01` bytes. Two scripted
+terminals.
+
+**Receiver** (`cat -v` makes the control bytes visible):
+```bash
+{ printf 'PASS test123\r\nNICK dan\r\nUSER dan 0 * :D\r\n'; sleep 20; } \
+  | nc 127.0.0.1 6667 | cat -v
+```
+
+**Sender**, once `dan` is registered:
+```bash
+{ printf 'PASS test123\r\nNICK eve\r\nUSER eve 0 * :E\r\n'; sleep 2; \
+  printf 'PRIVMSG dan :\001DCC SEND test.txt 2130706433 12345 100\001\r\n'; sleep 3; } \
+  | nc 127.0.0.1 6667
+```
+
+Expected on the receiver:
+```
+:eve!eve@127.0.0.1 PRIVMSG dan :^ADCC SEND test.txt 2130706433 12345 100^A^M
+```
+
+The `^A` markers are the `\x01` bytes arriving intact. The trailing `^M` is the CR of the
+line ending, which is normal. If the server stripped the `\x01` bytes, HexChat would never
+show a transfer dialog and DCC would be dead.
+
+---
+
+## Known issues at time of writing
+
+| # | Issue | Severity | Test |
+|---|---|---|---|
+| 1 | `324`/`329` sent twice on join (HexChat de-duplicates them on screen) | Low | 3.1 |
+| 2 | `CHANMODES` puts `l` in the wrong group; should be `,k,l,it` | Cosmetic | 1.1 |
+| 3 | Channel name capitalisation differs between the `JOIN` echo and the numerics | Cosmetic | 3.2 |
+| 4 | Default `KICK` reason uses the kicker's nick; real servers use the kicked user's | Cosmetic | 3.5 |
+| 5 | No `~` prefix on the username when there is no ident response | Cosmetic | 1.1 |
+| 6 | The bot uses a bare-nick prefix (`:ircbot PRIVMSG …`) where real services use `nick!user@host` | Cosmetic | 10.2 |
+
+Everything else in this document has been verified as behaving correctly — including the
+idle timeout, which was reported as broken for a while and turned out to be a measurement
+artifact of using `nc` as the test client.
