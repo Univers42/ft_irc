@@ -1,9 +1,9 @@
 #ifndef ISERVEREXTENSION_HPP
-# define ISERVEREXTENSION_HPP
+#define ISERVEREXTENSION_HPP
 
-# include <string>
-# include <ctime>
-# include <stdint.h>
+#include <stdint.h>
+#include <ctime>
+#include <string>
 
 class Server;
 class Client;
@@ -26,54 +26,86 @@ struct Message;
 **   - onPrivmsg fires per resolved non-channel target, before the nick
 **     lookup, so a virtual participant can claim the message.
 */
-class IServerExtension
-{
-public:
-	virtual ~IServerExtension() {}
+class IServerExtension {
+ public:
+  virtual ~IServerExtension() {}
 
-	virtual const char	*name() const = 0;
+  virtual const char* name() const = 0;
 
-	/* ─── lifecycle ─── */
-	virtual void	onServerStart(Server &server) { (void)server; }
-	virtual void	onTick(Server &server, time_t now)
-	{ (void)server; (void)now; }
+  /* ─── lifecycle ─── */
+  virtual void onServerStart(Server& server) { (void)server; }
+  virtual void onTick(Server& server, time_t now) {
+    (void)server;
+    (void)now;
+  }
 
-	/* ─── client lifecycle ─── */
-	virtual void	onClientRegistered(Server &server, Client &client)
-	{ (void)server; (void)client; }
-	/* Fired mid-teardown (QUIT already broadcast, channels already left).
-	** Safe to queue messages to other clients here; do NOT synchronously
-	** call disconnectClient()/disconnectClientNow() on `client`'s own fd --
-	** the kernel guards against the resulting reentrancy (it becomes a
-	** no-op), but relying on that guard is fragile and unintended. */
-	virtual void	onClientDisconnect(Server &server, Client &client,
-									   const std::string &reason)
-	{ (void)server; (void)client; (void)reason; }
+  /* ─── client lifecycle ─── */
+  virtual void onClientRegistered(Server& server, Client& client) {
+    (void)server;
+    (void)client;
+  }
+  /* Fired mid-teardown (QUIT already broadcast, channels already left).
+  ** Safe to queue messages to other clients here; do NOT synchronously
+  ** call disconnectClient()/disconnectClientNow() on `client`'s own fd --
+  ** the kernel guards against the resulting reentrancy (it becomes a
+  ** no-op), but relying on that guard is fragile and unintended. */
+  virtual void onClientDisconnect(Server& server, Client& client,
+                                  const std::string& reason) {
+    (void)server;
+    (void)client;
+    (void)reason;
+  }
 
-	/* ─── channel events ─── */
-	virtual void	onJoin(Server &server, Client &client, Channel &channel)
-	{ (void)server; (void)client; (void)channel; }
-	virtual void	onPart(Server &server, Client &client, Channel &channel)
-	{ (void)server; (void)client; (void)channel; }
+  /* ─── channel events ─── */
+  virtual void onJoin(Server& server, Client& client, Channel& channel) {
+    (void)server;
+    (void)client;
+    (void)channel;
+  }
+  virtual void onPart(Server& server, Client& client, Channel& channel) {
+    (void)server;
+    (void)client;
+    (void)channel;
+  }
 
-	/* ─── interception (true = handled) ─── */
-	virtual bool	onCommand(Server &server, Client &client, const Message &msg)
-	{ (void)server; (void)client; (void)msg; return false; }
-	virtual bool	onPrivmsg(Server &server, Client &sender,
-							  const std::string &target, const std::string &text)
-	{ (void)server; (void)sender; (void)target; (void)text; return false; }
-	virtual bool	reservesNick(const std::string &nick) const
-	{ (void)nick; return false; }
+  /* ─── interception (true = handled) ─── */
+  virtual bool onCommand(Server& server, Client& client, const Message& msg) {
+    (void)server;
+    (void)client;
+    (void)msg;
+    return false;
+  }
+  virtual bool onPrivmsg(Server& server, Client& sender,
+                         const std::string& target, const std::string& text) {
+    (void)server;
+    (void)sender;
+    (void)target;
+    (void)text;
+    return false;
+  }
+  virtual bool reservesNick(const std::string& nick) const {
+    (void)nick;
+    return false;
+  }
 
-	/* ─── foreign-fd plumbing (extensions with their own sockets) ─── */
-	virtual bool	ownsFd(int fd) const { (void)fd; return false; }
-	virtual void	onFdEvent(Server &server, int fd, uint32_t events)
-	{ (void)server; (void)fd; (void)events; }
+  /* ─── foreign-fd plumbing (extensions with their own sockets) ─── */
+  virtual bool ownsFd(int fd) const {
+    (void)fd;
+    return false;
+  }
+  virtual void onFdEvent(Server& server, int fd, uint32_t events) {
+    (void)server;
+    (void)fd;
+    (void)events;
+  }
 
-	/* ─── audit fan-out ─── */
-	virtual void	onAudit(const std::string &event, const std::string &actor,
-							const std::string &detail)
-	{ (void)event; (void)actor; (void)detail; }
+  /* ─── audit fan-out ─── */
+  virtual void onAudit(const std::string& event, const std::string& actor,
+                       const std::string& detail) {
+    (void)event;
+    (void)actor;
+    (void)detail;
+  }
 };
 
 #endif /* ISERVEREXTENSION_HPP */

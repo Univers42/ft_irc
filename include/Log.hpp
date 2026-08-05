@@ -1,7 +1,7 @@
 #ifndef LOG_HPP
-# define LOG_HPP
+#define LOG_HPP
 
-# include <string>
+#include <string>
 
 /*
 ** Log — server-side console logging.
@@ -19,25 +19,23 @@
 **
 ** info / success / banner go to stdout; warn / error go to stderr.
 */
-namespace Log
-{
-	/* One log line: kind is 'b'anner, 'i'nfo, 's'uccess, 'w'arn, 'e'rror. */
-	class ILogSink
-	{
-	public:
-		virtual ~ILogSink() {}
-		virtual void write(char kind, const std::string &msg) = 0;
-	};
+namespace Log {
+/* One log line: kind is 'b'anner, 'i'nfo, 's'uccess, 'w'arn, 'e'rror. */
+class ILogSink {
+ public:
+  virtual ~ILogSink() {}
+  virtual void write(char kind, const std::string& msg) = 0;
+};
 
-	/* Install a renderer (Log takes ownership; pass NULL to restore the
-	** plain fallback). */
-	void	setSink(ILogSink *sink);
+/* Install a renderer (Log takes ownership; pass NULL to restore the
+** plain fallback). */
+void setSink(ILogSink* sink);
 
-	void	banner(const std::string &title);
-	void	info(const std::string &msg);
-	void	success(const std::string &msg);
-	void	warn(const std::string &msg);
-	void	error(const std::string &msg);
-}
+void banner(const std::string& title);
+void info(const std::string& msg);
+void success(const std::string& msg);
+void warn(const std::string& msg);
+void error(const std::string& msg);
+}  // namespace Log
 
 #endif /* LOG_HPP */
