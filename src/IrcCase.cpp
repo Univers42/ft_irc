@@ -13,12 +13,10 @@
 ** distinct names. Collapsing them would let one user answer to another's
 ** nick. */
 
-std::string ircToLower(const std::string &s)
-{
-	return libcpp::str::ascii_to_lower(s);
+std::string ircToLower(const std::string& s) {
+  return libcpp::str::ascii_to_lower(s);
 }
 
-bool ircEquals(const std::string &a, const std::string &b)
-{
-	return libcpp::str::eq_ascii_nocase(a, b);
+bool ircEquals(const std::string& a, const std::string& b) {
+  return libcpp::str::eq_ascii_nocase(a, b);
 }

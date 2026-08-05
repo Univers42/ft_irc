@@ -6,7 +6,4 @@
 
 #include "ext/RegisterExtensions.hpp"
 
-void registerExtensions(Server &server)
-{
-	(void)server;
-}
+void registerExtensions(Server& server) { (void)server; }

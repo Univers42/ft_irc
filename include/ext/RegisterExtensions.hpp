@@ -1,5 +1,5 @@
 #ifndef REGISTEREXTENSIONS_HPP
-# define REGISTEREXTENSIONS_HPP
+#define REGISTEREXTENSIONS_HPP
 
 class Server;
 
@@ -11,6 +11,6 @@ class Server;
 **
 ** main() calls this between constructing the Server and run().
 */
-void	registerExtensions(Server &server);
+void registerExtensions(Server& server);
 
 #endif /* REGISTEREXTENSIONS_HPP */

@@ -1,11 +1,11 @@
 #ifndef PLATFORMBUS_HPP
-# define PLATFORMBUS_HPP
+#define PLATFORMBUS_HPP
 
-# include <string>
-# include <map>
+#include <map>
+#include <string>
 
-# include "ext/IServerExtension.hpp"
-# include "libcpp98/line_buffer.hpp"
+#include "ext/IServerExtension.hpp"
+#include "libcpp98/line_buffer.hpp"
 
 class Server;
 
@@ -31,49 +31,47 @@ class Server;
 **   PUB <#channel> <type> :<message>  inject an event into a channel
 **   PING                              liveness check -> "PONG"
 */
-class PlatformBus : public IServerExtension
-{
-public:
-	PlatformBus(Server *server, int port, const std::string &secret,
-				const std::string &serviceNick);
-	~PlatformBus();
+class PlatformBus : public IServerExtension {
+ public:
+  PlatformBus(Server* server, int port, const std::string& secret,
+              const std::string& serviceNick);
+  ~PlatformBus();
 
-	/* ─── IServerExtension ─── */
-	const char	*name() const;
-	void		onServerStart(Server &server);   /* binds + listens */
-	bool		ownsFd(int fd) const;            /* listen fd + connections */
-	void		onFdEvent(Server &server, int fd, uint32_t events);
+  /* ─── IServerExtension ─── */
+  const char* name() const;
+  void onServerStart(Server& server); /* binds + listens */
+  bool ownsFd(int fd) const;          /* listen fd + connections */
+  void onFdEvent(Server& server, int fd, uint32_t events);
 
-	bool	start();                       /* bind+listen on 127.0.0.1:port */
-	bool	owns(int fd) const;            /* is fd a bus connection? */
-	void	acceptConnection();
-	void	handleInput(int fd);
-	void	closeConnection(int fd);
+  bool start();            /* bind+listen on 127.0.0.1:port */
+  bool owns(int fd) const; /* is fd a bus connection? */
+  void acceptConnection();
+  void handleInput(int fd);
+  void closeConnection(int fd);
 
-private:
-	PlatformBus();
-	PlatformBus(const PlatformBus &other);
-	PlatformBus &operator=(const PlatformBus &other);
+ private:
+  PlatformBus();
+  PlatformBus(const PlatformBus& other);
+  PlatformBus& operator=(const PlatformBus& other);
 
-	struct Conn
-	{
-		bool				authed;
-		libcpp98::LineBuffer	buffer;
+  struct Conn {
+    bool authed;
+    libcpp98::LineBuffer buffer;
 
-		Conn() : authed(false), buffer() {}
-	};
+    Conn() : authed(false), buffer() {}
+  };
 
-	void	handleLine(int fd, const std::string &line);
-	void	send(int fd, const std::string &text);
-	void	publish(const std::string &channel, const std::string &type,
-					const std::string &message);
+  void handleLine(int fd, const std::string& line);
+  void send(int fd, const std::string& text);
+  void publish(const std::string& channel, const std::string& type,
+               const std::string& message);
 
-	Server				*_server;
-	int					_port;
-	std::string			_secret;
-	std::string			_serviceNick;
-	int					_listenFd;
-	std::map<int, Conn>	_conns;
+  Server* _server;
+  int _port;
+  std::string _secret;
+  std::string _serviceNick;
+  int _listenFd;
+  std::map<int, Conn> _conns;
 };
 
 #endif /* PLATFORMBUS_HPP */

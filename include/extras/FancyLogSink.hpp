@@ -1,7 +1,7 @@
 #ifndef FANCYLOGSINK_HPP
-# define FANCYLOGSINK_HPP
+#define FANCYLOGSINK_HPP
 
-# include "Log.hpp"
+#include "Log.hpp"
 
 /*
 ** FancyLogSink — console renderer for the full tier, drawing through
@@ -10,13 +10,12 @@
 ** Log::setSink(new FancyLogSink). The mandatory/bonus tiers never link
 ** this file (nor libcpp/term).
 */
-class FancyLogSink : public Log::ILogSink
-{
-public:
-	FancyLogSink();
-	~FancyLogSink();
+class FancyLogSink : public Log::ILogSink {
+ public:
+  FancyLogSink();
+  ~FancyLogSink();
 
-	void	write(char kind, const std::string &msg);
+  void write(char kind, const std::string& msg);
 };
 
 #endif /* FANCYLOGSINK_HPP */

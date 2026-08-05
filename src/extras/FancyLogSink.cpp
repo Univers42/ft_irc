@@ -1,7 +1,7 @@
 #include "extras/FancyLogSink.hpp"
 
-#include "libcpp/term/writer.hpp"
 #include "libcpp/term/style.hpp"
+#include "libcpp/term/writer.hpp"
 
 #include <iostream>
 
@@ -16,19 +16,27 @@ FancyLogSink::FancyLogSink() {}
 
 FancyLogSink::~FancyLogSink() {}
 
-void FancyLogSink::write(char kind, const std::string &msg)
-{
-	std::ostream		&os = (kind == 'w' || kind == 'e') ? std::cerr : std::cout;
-	libcpp::TermStyle	ts;
-	libcpp::TermWriter	w(ts, os);
+void FancyLogSink::write(char kind, const std::string& msg) {
+  std::ostream& os = (kind == 'w' || kind == 'e') ? std::cerr : std::cout;
+  libcpp::TermStyle ts;
+  libcpp::TermWriter w(ts, os);
 
-	switch (kind)
-	{
-		case 'b': w.h1(msg); break;
-		case 'i': w.info(msg); break;
-		case 's': w.success(msg); break;
-		case 'w': w.warn(msg); break;
-		case 'e': w.error(msg); break;
-	}
-	w.flush();
+  switch (kind) {
+    case 'b':
+      w.h1(msg);
+      break;
+    case 'i':
+      w.info(msg);
+      break;
+    case 's':
+      w.success(msg);
+      break;
+    case 'w':
+      w.warn(msg);
+      break;
+    case 'e':
+      w.error(msg);
+      break;
+  }
+  w.flush();
 }

@@ -1,10 +1,10 @@
 #ifndef FILETRANSFEREXT_HPP
-# define FILETRANSFEREXT_HPP
+#define FILETRANSFEREXT_HPP
 
-# include <map>
-# include <string>
+#include <map>
+#include <string>
 
-# include "ext/IServerExtension.hpp"
+#include "ext/IServerExtension.hpp"
 
 /*
 ** FileTransferExt — bonus: server-mediated file transfer.
@@ -31,55 +31,53 @@
 ** Transfers idle for 60 s are aborted (onTick); a disconnect aborts every
 ** transfer involving that client and notifies the peer.
 */
-class FileTransferExt : public IServerExtension
-{
-public:
-	FileTransferExt();
-	~FileTransferExt();
+class FileTransferExt : public IServerExtension {
+ public:
+  FileTransferExt();
+  ~FileTransferExt();
 
-	/* ─── IServerExtension ─── */
-	const char	*name() const;
-	bool		onCommand(Server &server, Client &client, const Message &msg);
-	void		onClientDisconnect(Server &server, Client &client,
-								   const std::string &reason);
-	void		onTick(Server &server, time_t now);
+  /* ─── IServerExtension ─── */
+  const char* name() const;
+  bool onCommand(Server& server, Client& client, const Message& msg);
+  void onClientDisconnect(Server& server, Client& client,
+                          const std::string& reason);
+  void onTick(Server& server, time_t now);
 
-	/* protocol limits */
-	static const unsigned long	MAX_FILE_SIZE = 50UL * 1024UL * 1024UL;
-	static const size_t			MAX_CHUNK_B64 = 400;
-	static const size_t			MAX_FILENAME = 64;
-	static const time_t			IDLE_TIMEOUT = 60;
+  /* protocol limits */
+  static const unsigned long MAX_FILE_SIZE = 50UL * 1024UL * 1024UL;
+  static const size_t MAX_CHUNK_B64 = 400;
+  static const size_t MAX_FILENAME = 64;
+  static const time_t IDLE_TIMEOUT = 60;
 
-private:
-	FileTransferExt(const FileTransferExt &);
-	FileTransferExt &operator=(const FileTransferExt &);
+ private:
+  FileTransferExt(const FileTransferExt&);
+  FileTransferExt& operator=(const FileTransferExt&);
 
-	struct Transfer
-	{
-		int				senderFd;
-		int				recipientFd;
-		std::string		filename;
-		unsigned long	declaredSize;
-		unsigned long	relayedBytes;
-		bool			accepted;
-		time_t			lastActivity;
-	};
+  struct Transfer {
+    int senderFd;
+    int recipientFd;
+    std::string filename;
+    unsigned long declaredSize;
+    unsigned long relayedBytes;
+    bool accepted;
+    time_t lastActivity;
+  };
 
-	void	cmdSend(Server &server, Client &client, const Message &msg);
-	void	cmdAnswer(Server &server, Client &client, const Message &msg,
-					  bool accept);
-	void	cmdData(Server &server, Client &client, const Message &msg);
-	void	cmdEnd(Server &server, Client &client, const Message &msg);
-	void	cmdAbort(Server &server, Client &client, const Message &msg);
+  void cmdSend(Server& server, Client& client, const Message& msg);
+  void cmdAnswer(Server& server, Client& client, const Message& msg,
+                 bool accept);
+  void cmdData(Server& server, Client& client, const Message& msg);
+  void cmdEnd(Server& server, Client& client, const Message& msg);
+  void cmdAbort(Server& server, Client& client, const Message& msg);
 
-	/* helpers */
-	void	notice(Server &server, Client &client, const std::string &text);
-	void	abortTransfer(Server &server, long id, const std::string &why);
-	Transfer	*findById(long id);
-	long	findActive(int senderFd, int recipientFd) const;
+  /* helpers */
+  void notice(Server& server, Client& client, const std::string& text);
+  void abortTransfer(Server& server, long id, const std::string& why);
+  Transfer* findById(long id);
+  long findActive(int senderFd, int recipientFd) const;
 
-	std::map<long, Transfer>	_transfers;
-	long						_nextId;
+  std::map<long, Transfer> _transfers;
+  long _nextId;
 };
 
 #endif /* FILETRANSFEREXT_HPP */

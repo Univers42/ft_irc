@@ -1,10 +1,10 @@
 #ifndef AUDITLOG_HPP
-# define AUDITLOG_HPP
+#define AUDITLOG_HPP
 
-# include <string>
+#include <string>
 
-# include "ext/IServerExtension.hpp"
-# include "libcpp98/csv_writer.hpp"
+#include "ext/IServerExtension.hpp"
+#include "libcpp98/csv_writer.hpp"
 
 /*
 ** AuditLog — append-only CSV trail of server activity (connections, joins,
@@ -17,29 +17,28 @@
 **
 ** Columns: timestamp,event,actor,detail  (RFC-3339-ish local time)
 */
-class AuditLog : public IServerExtension
-{
-public:
-	explicit AuditLog(const std::string &path);
-	~AuditLog();
+class AuditLog : public IServerExtension {
+ public:
+  explicit AuditLog(const std::string& path);
+  ~AuditLog();
 
-	/* ─── IServerExtension ─── */
-	const char	*name() const;
-	void		onAudit(const std::string &event, const std::string &actor,
-						const std::string &detail);
+  /* ─── IServerExtension ─── */
+  const char* name() const;
+  void onAudit(const std::string& event, const std::string& actor,
+               const std::string& detail);
 
-	bool	ok() const;
-	void	log(const std::string &event, const std::string &actor,
-				const std::string &detail);
+  bool ok() const;
+  void log(const std::string& event, const std::string& actor,
+           const std::string& detail);
 
-private:
-	AuditLog();
-	AuditLog(const AuditLog &other);
-	AuditLog &operator=(const AuditLog &other);
+ private:
+  AuditLog();
+  AuditLog(const AuditLog& other);
+  AuditLog& operator=(const AuditLog& other);
 
-	static std::string	timestamp();
+  static std::string timestamp();
 
-	libcpp98::CsvWriter	_csv;
+  libcpp98::CsvWriter _csv;
 };
 
 #endif /* AUDITLOG_HPP */
