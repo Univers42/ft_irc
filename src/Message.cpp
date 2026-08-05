@@ -1,73 +1,58 @@
 #include "Message.hpp"
 #include "libcpp/str/case.hpp"
 
-Message Message::parse(const std::string &raw)
-{
-	Message msg;
-	std::string line = raw;
-	std::string::size_type pos = 0;
+Message Message::parse(const std::string& raw) {
+  Message msg;
+  std::string line = raw;
+  std::string::size_type pos = 0;
 
-	// Skip leading whitespace
-	while (pos < line.size() && line[pos] == ' ')
-		++pos;
+  // Skip leading whitespace
+  while (pos < line.size() && line[pos] == ' ') ++pos;
 
-	/* Skip an optional prefix (starts with ':'). It is discarded rather than
-	** stored -- see Message.hpp -- but it must still be stepped over, or it
-	** would be parsed as the command. A line that is nothing but a prefix
-	** carries no command and parses to an empty message. */
-	if (pos < line.size() && line[pos] == ':')
-	{
-		std::string::size_type end = line.find(' ', pos);
-		if (end == std::string::npos)
-			return msg;
-		pos = end;
-		while (pos < line.size() && line[pos] == ' ')
-			++pos;
-	}
+  /* Skip an optional prefix (starts with ':'). It is discarded rather than
+  ** stored -- see Message.hpp -- but it must still be stepped over, or it
+  ** would be parsed as the command. A line that is nothing but a prefix
+  ** carries no command and parses to an empty message. */
+  if (pos < line.size() && line[pos] == ':') {
+    std::string::size_type end = line.find(' ', pos);
+    if (end == std::string::npos) return msg;
+    pos = end;
+    while (pos < line.size() && line[pos] == ' ') ++pos;
+  }
 
-	// Parse command (uppercase it)
-	if (pos < line.size())
-	{
-		std::string::size_type end = line.find(' ', pos);
-		if (end == std::string::npos)
-		{
-			msg.command = line.substr(pos);
-		}
-		else
-		{
-			msg.command = line.substr(pos, end - pos);
-			pos = end;
-		}
-		// Uppercase the command
-		msg.command = libcpp::str::to_upper(msg.command);
+  // Parse command (uppercase it)
+  if (pos < line.size()) {
+    std::string::size_type end = line.find(' ', pos);
+    if (end == std::string::npos) {
+      msg.command = line.substr(pos);
+    } else {
+      msg.command = line.substr(pos, end - pos);
+      pos = end;
+    }
+    // Uppercase the command
+    msg.command = libcpp::str::to_upper(msg.command);
 
-		if (end == std::string::npos)
-			return msg;
+    if (end == std::string::npos) return msg;
 
-		while (pos < line.size() && line[pos] == ' ')
-			++pos;
-	}
+    while (pos < line.size() && line[pos] == ' ') ++pos;
+  }
 
-	// Parse parameters
-	while (pos < line.size())
-	{
-		if (line[pos] == ':')
-		{
-			// Trailing parameter: everything after ':'
-			msg.params.push_back(line.substr(pos + 1));
-			break;
-		}
-		std::string::size_type end = line.find(' ', pos);
-		if (end == std::string::npos)
-		{
-			msg.params.push_back(line.substr(pos));
-			break;
-		}
-		msg.params.push_back(line.substr(pos, end - pos));
-		pos = end;
-		while (pos < line.size() && line[pos] == ' ')
-			++pos;
-	}
+  // Parse parameters
+  while (pos < line.size()) {
+    if (line[pos] == ':') {
+      // Trailing parameter: everything after ':'
+      msg.params.push_back(line.substr(pos + 1));
+      break;
+    }
+    std::string::size_type end = line.find(' ', pos);
+    if (end == std::string::npos) {
+      msg.params.push_back(line.substr(pos));
+      break;
+    }
+    msg.params.push_back(line.substr(pos, end - pos));
+    pos = end;
+    while (pos < line.size() && line[pos] == ' ') ++pos;
+  }
 
-	return msg;
+  return msg;
 }
