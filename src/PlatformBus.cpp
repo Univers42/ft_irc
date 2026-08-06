@@ -187,8 +187,9 @@ void PlatformBus::handleLine(int fd, const std::string& line) {
         libcpp::str::eq_consttime(libcpp::str::trim(rest), _secret)) {
       conn.authed = true;
       send(fd, "OK authenticated");
-    } else
+    } else {
       send(fd, "ERR bad secret");
+    }
     return;
   }
   if (!conn.authed) {

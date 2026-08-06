@@ -140,8 +140,9 @@ void FileTransferExt::onClientDisconnect(Server& server, Client& client,
       ++it;
       /* the leaver's copy of the notice is discarded with its queue */
       abortTransfer(server, id, "peer disconnected");
-    } else
+    } else {
       ++it;
+    }
   }
 }
 
@@ -152,8 +153,9 @@ void FileTransferExt::onTick(Server& server, time_t now) {
       long id = it->first;
       ++it;
       abortTransfer(server, id, "timeout");
-    } else
+    } else {
       ++it;
+    }
   }
 }
 

@@ -15,7 +15,7 @@ struct Message;
 ** nick against clients (reservesNick). */
 class Bot : public IServerExtension {
  public:
-  Bot(Server* server);
+  explicit Bot(Server* server);
   ~Bot();
 
   /* ─── IServerExtension ─── */
