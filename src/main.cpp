@@ -1,10 +1,10 @@
+#include <csignal>
+#include <cstdlib>
+
 #include "Log.hpp"
 #include "Server.hpp"
 #include "ext/RegisterExtensions.hpp"
 #include "libcpp/str/format.hpp"
-
-#include <csignal>
-#include <cstdlib>
 
 // Async-signal-safe: only flip the flag. The run() loop notices it and
 // returns; the (non-signal-safe, pretty) shutdown line is printed from

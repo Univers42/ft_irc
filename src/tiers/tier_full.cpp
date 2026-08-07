@@ -14,6 +14,8 @@
 **   enabled = true
 **   path    = ./ircserv-audit.csv
 */
+#include <cstdlib>
+#include <new>
 
 #include "AuditLog.hpp"
 #include "Bot.hpp"
@@ -24,9 +26,6 @@
 #include "ext/RegisterExtensions.hpp"
 #include "extras/FancyLogSink.hpp"
 #include "libcpp/util/config.hpp"
-
-#include <cstdlib>
-#include <new>
 
 static void registerPlatformFeatures(Server& server) {
   const char* cfgPath = std::getenv("FT_IRC_CONFIG");

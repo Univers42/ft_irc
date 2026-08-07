@@ -1,6 +1,7 @@
 #ifndef FANCYLOGSINK_HPP
 #define FANCYLOGSINK_HPP
 
+#include <string>
 #include "Log.hpp"
 
 /*
