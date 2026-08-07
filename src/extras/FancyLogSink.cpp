@@ -1,9 +1,9 @@
 #include "extras/FancyLogSink.hpp"
 
+#include <iostream>
+
 #include "libcpp/term/style.hpp"
 #include "libcpp/term/writer.hpp"
-
-#include <iostream>
 
 /*
 ** Each call spins up a fresh TermWriter bound to the target stream, emits a

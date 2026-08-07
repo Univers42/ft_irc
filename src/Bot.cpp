@@ -1,12 +1,13 @@
 /* ─── Bot: internal IRC bot (bonus) ─── */
 
 #include "Bot.hpp"
+
+#include <ctime>
+
 #include "Client.hpp"
 #include "IrcCase.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
-
-#include <ctime>
 
 const char* Bot::_jokes[] = {
     "Why do programmers prefer dark mode? Because light attracts bugs.",

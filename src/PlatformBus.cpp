@@ -1,4 +1,14 @@
 #include "PlatformBus.hpp"
+
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
+
 #include "Channel.hpp"
 #include "Log.hpp"
 #include "Server.hpp"
@@ -9,14 +19,6 @@
 /* A protocol line on the bus is short ("PUB <#chan> <type> :<msg>"); anything
 ** beyond this without a newline is garbage or a flood. */
 #define MAX_BUS_LINE 8192
-
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <cerrno>
-#include <cstring>
 
 PlatformBus::PlatformBus(Server* server, int port, const std::string& secret,
                          const std::string& serviceNick)

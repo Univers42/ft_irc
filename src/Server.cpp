@@ -1,12 +1,4 @@
 #include "Server.hpp"
-#include "IrcCase.hpp"
-#include "Log.hpp"
-#include "ext/IServerExtension.hpp"
-#include "libcpp/str/format.hpp"
-
-#include <cerrno>
-#include <cstring>
-#include <new>
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -15,6 +7,15 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
+#include <new>
+
+#include "IrcCase.hpp"
+#include "Log.hpp"
+#include "ext/IServerExtension.hpp"
+#include "libcpp/str/format.hpp"
 
 bool Server::isRunning = true;
 
