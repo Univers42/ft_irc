@@ -1,5 +1,8 @@
 /* ─── Channel commands: JOIN, PART ─── */
 
+#include <string>
+#include <vector>
+
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"

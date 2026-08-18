@@ -10,7 +10,11 @@
 
 #include <cerrno>
 #include <cstring>
+#include <map>
 #include <new>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "IrcCase.hpp"
 #include "Log.hpp"

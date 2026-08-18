@@ -1,5 +1,7 @@
 /* ─── Registration commands: CAP, PASS, NICK, USER ─── */
 
+#include <string>
+
 #include "IrcCase.hpp"
 #include "Log.hpp"
 #include "Server.hpp"

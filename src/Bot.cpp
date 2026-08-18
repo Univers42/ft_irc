@@ -3,6 +3,7 @@
 #include "Bot.hpp"
 
 #include <ctime>
+#include <string>
 
 #include "Client.hpp"
 #include "IrcCase.hpp"

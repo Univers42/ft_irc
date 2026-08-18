@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by dlesieur.*
+*This project has been created as part of the 42 curriculum by dlesieur, rlobun, <user vadim>.*
 
 # ft_irc
 

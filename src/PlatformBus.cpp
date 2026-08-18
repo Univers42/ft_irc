@@ -8,6 +8,8 @@
 
 #include <cerrno>
 #include <cstring>
+#include <map>
+#include <string>
 
 #include "Channel.hpp"
 #include "Log.hpp"

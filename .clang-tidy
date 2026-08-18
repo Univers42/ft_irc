@@ -1,0 +1,17 @@
+# clang-tidy's role here is bug-finding, not style: clang-format owns layout
+# and cpplint owns naming/structure (see .clang-format and CPPLINT.cfg).
+#
+# Only the static analyzer is enabled. It is path-sensitive and reasons about
+# the translation unit's own code, so it stays silent on the C++98 standard
+# library — unlike the modernize-*/readability-* families, which fire inside
+# <string> and <map> and would drown the signal in output no source change
+# here could ever clear. Everything it does report is a real defect: a null
+# dereference, a leak, an uninitialised read, a dead store.
+Checks: 'clang-analyzer-*'
+
+# Report defects in the project's own headers too, not just the .cpp under
+# test — system and vendored-third-party headers stay excluded.
+HeaderFilterRegex: '(include|src|vendor/libcpp/(src|include|c98))/'
+
+WarningsAsErrors: ''
+FormatStyle: file

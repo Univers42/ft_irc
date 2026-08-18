@@ -1,5 +1,7 @@
 /* ─── Operator commands: KICK, INVITE, TOPIC, MODE ─── */
 
+#include <string>
+
 #include "IrcCase.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"

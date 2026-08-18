@@ -1,5 +1,8 @@
 /* ─── Messaging commands: PRIVMSG, NOTICE, PING, PONG, QUIT ─── */
 
+#include <string>
+#include <vector>
+
 #include "IrcCase.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
