@@ -67,7 +67,7 @@ calls in the allowed `fcntl(fd, F_SETFL, O_NONBLOCK)` form.
 
 Running the same suite under a second shell turns the tests into a differential
 oracle: identical scripts, identical server, so any divergence is the shell.
-Doing this against `hellish` 2.3.2 surfaced five defects, all filed with
+Doing this against `hellish` 2.3.2 surfaced eight defects, all filed with
 reproducers:
 
 | # | Defect | Severity |
@@ -77,6 +77,9 @@ reproducers:
 | [13](https://github.com/Univers42/hellish/issues/13) | `$!` is a wrapper pid, so `kill "$!"` orphans the real process and `kill -STOP "$!"` silently does nothing | high |
 | [14](https://github.com/Univers42/hellish/issues/14) | `$0` empty for `-c` with no operand | low |
 | [15](https://github.com/Univers42/hellish/issues/15) | `${var:?}` prints an empty diagnostic | low |
+| [16](https://github.com/Univers42/hellish/issues/16) | `/dev/tcp` and `/dev/udp` redirection targets not implemented | enhancement |
+| [17](https://github.com/Univers42/hellish/issues/17) | No diagnostic when a background job is killed by a signal | enhancement |
+| [18](https://github.com/Univers42/hellish/issues/18) | Job numbers are never reused — `[1] [2] [3]` where bash reuses `[1]` | low |
 
 Two of these were only findable by running real work through the shell rather
 than probing it in isolation — #13 showed up as three *server* assertions

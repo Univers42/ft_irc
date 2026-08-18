@@ -111,8 +111,15 @@ both from shell defects rather than server defects:
 | `04_disconnect.sh` | `$!` returns an intermediate wrapper pid, so `kill -9 "$!"` orphans the real `nc` and the client never disconnects. | [hellish#13](https://github.com/Univers42/hellish/issues/13) |
 
 Also filed, and worked around in this suite:
-[#12](https://github.com/Univers42/hellish/issues/12) `export A B C` corrupts
-variables (hence one `export` per line in `config.sh`),
-[#14](https://github.com/Univers42/hellish/issues/14) `$0` empty under `-c`,
-[#15](https://github.com/Univers42/hellish/issues/15) `${var:?}` prints an
-empty diagnostic.
+
+- [#12](https://github.com/Univers42/hellish/issues/12) — `export A B C`
+  corrupts variables, hence one `export` per line in `config.sh`.
+- [#14](https://github.com/Univers42/hellish/issues/14) — `$0` empty under `-c`.
+- [#15](https://github.com/Univers42/hellish/issues/15) — `${var:?}` prints an
+  empty diagnostic.
+- [#16](https://github.com/Univers42/hellish/issues/16) — no `/dev/tcp`, hence
+  the `nc` fallback in `irc_server_alive()`.
+- [#17](https://github.com/Univers42/hellish/issues/17) — no diagnostic when a
+  background job is killed by a signal.
+- [#18](https://github.com/Univers42/hellish/issues/18) — job numbers are never
+  reused.
