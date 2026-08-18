@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Abrupt disconnects (kill -9 the nc, no QUIT) must not leave stale state.
-cd "$(dirname "$0")/.." || exit 1
+# Portable POSIX shell: this file must behave identically under bash and
+# under hellish, so no BASH_SOURCE, no arrays, no [[ ]].
+cd "$(dirname "$0")" || exit 1
 . ./config.sh
 . ./lib/irc_lib.sh
 

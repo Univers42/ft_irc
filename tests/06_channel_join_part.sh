@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-cd "$(dirname "$0")/.." || exit 1
+# Portable POSIX shell: this file must behave identically under bash and
+# under hellish, so no BASH_SOURCE, no arrays, no [[ ]].
+cd "$(dirname "$0")" || exit 1
 . ./config.sh
 . ./lib/irc_lib.sh
 

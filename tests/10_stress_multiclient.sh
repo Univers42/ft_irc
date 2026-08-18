@@ -2,7 +2,9 @@
 # 1. server doesn't fall over with many clients doing normal things
 # 2. one client that never reads its socket can't stall everyone else — the
 #    giveaway for a blocking send() hiding in the write path
-cd "$(dirname "$0")/.." || exit 1
+# Portable POSIX shell: this file must behave identically under bash and
+# under hellish, so no BASH_SOURCE, no arrays, no [[ ]].
+cd "$(dirname "$0")" || exit 1
 . ./config.sh
 . ./lib/irc_lib.sh
 
@@ -59,7 +61,7 @@ irc_send flooder "JOIN #slowtest"
 sleep 0.5
 
 irc_connect probe2
-irc_register probe2 probeclient >/dev/null
+irc_register probe2 probecl >/dev/null   # <=9 chars: server NICKLEN=9
 irc_clear probe2
 
 # SIGSTOP the slowpoke's nc: it stops draining the socket, its receive
@@ -73,7 +75,7 @@ while [ "$i" -le 300 ]; do
     irc_send_raw flooder "PRIVMSG #slowtest :$bigmsg\r\n"
     i=$((i + 1))
 done
-irc_send_raw flooder "PRIVMSG probeclient :flood-done-marker\r\n"
+irc_send_raw flooder "PRIVMSG probecl :flood-done-marker\r\n"
 
 if irc_expect probe2 "flood-done-marker" 10.0; then
     t_ok "an unrelated client still received its direct message during the flood"

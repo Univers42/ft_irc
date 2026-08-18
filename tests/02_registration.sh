@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # PASS / NICK / USER handshake, and the ways it should refuse to complete.
-TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Portable POSIX shell: this file must behave identically under bash and
+# under hellish, so no BASH_SOURCE, no arrays, no [[ ]].
+cd "$(dirname "$0")" || exit 1
+. ./config.sh
+. ./lib/irc_lib.sh
 
-source "$TEST_DIR/config.sh"
-source "$TEST_DIR/lib/irc_lib.sh"
-
-report_init "02: registration"
-irc_setup
-trap irc_teardown EXIT
 report_init "02: registration"
 irc_setup
 trap irc_teardown EXIT
@@ -62,7 +60,7 @@ irc_close badnick
 
 # 6. very long nickname doesn't take the server down
 irc_connect longnick
-longnames=$(printf 'A%.0s' $(seq 1 500))
+longnames=$(head -c 500 /dev/zero | tr '\0' 'A')
 irc_send longnick "PASS $IRC_PASSWORD"
 irc_send longnick "NICK $longnames"
 irc_send longnick "USER u 0 * :U"

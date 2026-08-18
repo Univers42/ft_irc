@@ -8,7 +8,12 @@
 # an fd is what lets us send a command in pieces without nc seeing EOF — which
 # is the whole point when you're hunting partial-recv() bugs in ircserv.
 #
-# Dependencies: nc, mkfifo, grep, printf, sleep, awk, wc, tail, kill.
+# Every variable a function assigns is prefixed `_irc_`. POSIX sh has no
+# variable scoping and `local` is not portable, so an unprefixed `i` inside
+# irc_expect() would silently destroy the caller's loop counter — which it
+# used to do, breaking 10_stress_multiclient.sh.
+#
+# Dependencies: nc, mkfifo, grep, printf, sleep, wc, tail, cut, tr, kill.
 # No Python, no bashisms beyond what tests/00_shell_probe.sh explicitly checks.
 # ---------------------------------------------------------------------------
 
@@ -49,12 +54,12 @@ t_assert() {
 }
 
 report_summary() {
-    total=$((T_PASS + T_FAIL))
+    _irc_total=$((T_PASS + T_FAIL))
     if [ "$T_FAIL" -eq 0 ]; then
-        printf -- '--- %s: %d/%d passed [OK] ---\n' "$T_TITLE" "$T_PASS" "$total"
+        printf -- '--- %s: %d/%d passed [OK] ---\n' "$T_TITLE" "$T_PASS" "$_irc_total"
         return 0
     fi
-    printf -- '--- %s: %d/%d passed [FAILURES] ---\n' "$T_TITLE" "$T_PASS" "$total"
+    printf -- '--- %s: %d/%d passed [FAILURES] ---\n' "$T_TITLE" "$T_PASS" "$_irc_total"
     return 1
 }
 
@@ -67,8 +72,8 @@ irc_setup() {
 }
 
 irc_teardown() {
-    for name in $IRC_CLIENTS; do
-        irc_close "$name"
+    for _irc_name in $IRC_CLIENTS; do
+        irc_close "$_irc_name"
     done
     IRC_CLIENTS=""
     rm -rf "$IRC_TMPDIR"
@@ -80,28 +85,28 @@ irc_teardown() {
 # Spawns an nc bound to a FIFO. Registers the client's fd/pid/logfile in
 # dynamically-named variables (IRC_FD_<name>, IRC_PID_<name>, ...).
 irc_connect() {
-    name="$1"
-    fifo="$IRC_TMPDIR/$name.in"
-    out="$IRC_TMPDIR/$name.out"
+    _irc_name="$1"
+    _irc_fifo="$IRC_TMPDIR/$_irc_name.in"
+    _irc_out="$IRC_TMPDIR/$_irc_name.out"
 
-    rm -f "$fifo" "$out"
-    mkfifo "$fifo" || return 1
-    : > "$out"
+    rm -f "$_irc_fifo" "$_irc_out"
+    mkfifo "$_irc_fifo" || return 1
+    : > "$_irc_out"
 
-    nc "$IRC_HOST" "$IRC_PORT" < "$fifo" > "$out" 2>/dev/null &
-    pid=$!
+    nc "$IRC_HOST" "$IRC_PORT" < "$_irc_fifo" > "$_irc_out" 2>/dev/null &
+    _irc_pid=$!
 
-    fd=$IRC_NEXT_FD
+    _irc_fd=$IRC_NEXT_FD
     IRC_NEXT_FD=$((IRC_NEXT_FD + 1))
 
     # Open the write end and keep it open for the life of the client.
-    eval "exec $fd> \"\$fifo\"" || return 1
+    eval "exec $_irc_fd> \"\$_irc_fifo\"" || return 1
 
-    eval "IRC_FD_$name=$fd"
-    eval "IRC_PID_$name=$pid"
-    eval "IRC_OUT_$name=\"\$out\""
-    eval "IRC_MARK_$name=0"
-    IRC_CLIENTS="$IRC_CLIENTS $name"
+    eval "IRC_FD_$_irc_name=$_irc_fd"
+    eval "IRC_PID_$_irc_name=$_irc_pid"
+    eval "IRC_OUT_$_irc_name=\"\$_irc_out\""
+    eval "IRC_MARK_$_irc_name=0"
+    IRC_CLIENTS="$IRC_CLIENTS $_irc_name"
 
     sleep 0.15   # let the TCP connection actually establish
     return 0
@@ -109,25 +114,25 @@ irc_connect() {
 
 # irc_close <name>
 irc_close() {
-    name="$1"
-    eval "fd=\${IRC_FD_$name:-}"
-    eval "pid=\${IRC_PID_$name:-}"
-    [ -n "${fd:-}" ] && eval "exec $fd>&-" 2>/dev/null
-    [ -n "${pid:-}" ] && kill "$pid" 2>/dev/null
-    eval "IRC_FD_$name=''"
-    eval "IRC_PID_$name=''"
+    _irc_name="$1"
+    eval "_irc_fd=\${IRC_FD_$_irc_name:-}"
+    eval "_irc_pid=\${IRC_PID_$_irc_name:-}"
+    [ -n "${_irc_fd:-}" ] && eval "exec $_irc_fd>&-" 2>/dev/null
+    [ -n "${_irc_pid:-}" ] && kill "$_irc_pid" 2>/dev/null
+    eval "IRC_FD_$_irc_name=''"
+    eval "IRC_PID_$_irc_name=''"
     return 0
 }
 
 # irc_kill_hard <name> — abrupt disconnect, no QUIT, socket just dies.
 irc_kill_hard() {
-    name="$1"
-    eval "pid=\${IRC_PID_$name:-}"
-    eval "fd=\${IRC_FD_$name:-}"
-    [ -n "${pid:-}" ] && kill -9 "$pid" 2>/dev/null
-    [ -n "${fd:-}" ] && eval "exec $fd>&-" 2>/dev/null
-    eval "IRC_FD_$name=''"
-    eval "IRC_PID_$name=''"
+    _irc_name="$1"
+    eval "_irc_pid=\${IRC_PID_$_irc_name:-}"
+    eval "_irc_fd=\${IRC_FD_$_irc_name:-}"
+    [ -n "${_irc_pid:-}" ] && kill -9 "$_irc_pid" 2>/dev/null
+    [ -n "${_irc_fd:-}" ] && eval "exec $_irc_fd>&-" 2>/dev/null
+    eval "IRC_FD_$_irc_name=''"
+    eval "IRC_PID_$_irc_name=''"
     sleep 0.3
     return 0
 }
@@ -136,14 +141,14 @@ irc_kill_hard() {
 # SIGSTOP the nc so it stops draining its socket — the shell equivalent of a
 # client that never read()s. Its receive buffer fills and stays full.
 irc_freeze() {
-    eval "pid=\${IRC_PID_$1:-}"
-    [ -n "${pid:-}" ] && kill -STOP "$pid" 2>/dev/null
+    eval "_irc_pid=\${IRC_PID_$1:-}"
+    [ -n "${_irc_pid:-}" ] && kill -STOP "$_irc_pid" 2>/dev/null
     return 0
 }
 
 irc_thaw() {
-    eval "pid=\${IRC_PID_$1:-}"
-    [ -n "${pid:-}" ] && kill -CONT "$pid" 2>/dev/null
+    eval "_irc_pid=\${IRC_PID_$1:-}"
+    [ -n "${_irc_pid:-}" ] && kill -CONT "$_irc_pid" 2>/dev/null
     return 0
 }
 
@@ -151,40 +156,40 @@ irc_thaw() {
 
 # irc_send <name> <command words...>   — one well-formed CRLF-terminated line
 irc_send() {
-    name="$1"
+    _irc_name="$1"
     shift
-    msg="$*"
-    eval "fd=\$IRC_FD_$name"
-    printf '%s\r\n' "$msg" >&"$fd"
+    _irc_msg="$*"
+    eval "_irc_fd=\$IRC_FD_$_irc_name"
+    printf '%s\r\n' "$_irc_msg" >&"$_irc_fd"
 }
 
 # irc_send_raw <name> <exact string>   — no CRLF added, printf escapes honoured
 irc_send_raw() {
-    name="$1"
+    _irc_name="$1"
     shift
-    eval "fd=\$IRC_FD_$name"
-    printf '%b' "$*" >&"$fd"
+    eval "_irc_fd=\$IRC_FD_$_irc_name"
+    printf '%b' "$*" >&"$_irc_fd"
 }
 
 # irc_send_fragmented <name> <line> [delay]
 # Sends the line one character at a time, then the CRLF, so the server is
 # guaranteed to see it across several recv() calls.
 irc_send_fragmented() {
-    name="$1"
-    line="$2"
-    delay="${3:-0.02}"
-    eval "fd=\$IRC_FD_$name"
-    len=${#line}
-    i=1
-    # `cut -c N` rather than ${line:i:1} on purpose: substring expansion is a
+    _irc_name="$1"
+    _irc_line="$2"
+    _irc_delay="${3:-0.02}"
+    eval "_irc_fd=\$IRC_FD_$_irc_name"
+    _irc_len=${#_irc_line}
+    _irc_i=1
+    # `cut -c N` rather than ${_irc_line:_irc_i:1} on purpose: substring expansion is a
     # bashism, and this suite is meant to run under shells that may not have it.
-    while [ "$i" -le "$len" ]; do
-        ch=$(printf '%s' "$line" | cut -c "$i")
-        printf '%s' "$ch" >&"$fd"
-        sleep "$delay"
-        i=$((i + 1))
+    while [ "$_irc_i" -le "$_irc_len" ]; do
+        _irc_ch=$(printf '%s' "$_irc_line" | cut -c "$_irc_i")
+        printf '%s' "$_irc_ch" >&"$_irc_fd"
+        sleep "$_irc_delay"
+        _irc_i=$((_irc_i + 1))
     done
-    printf '\r\n' >&"$fd"
+    printf '\r\n' >&"$_irc_fd"
 }
 
 # --- receiving -------------------------------------------------------------
@@ -192,35 +197,56 @@ irc_send_fragmented() {
 # irc_clear <name> — mark the current end of the log; later greps ignore
 # everything before this point. (We can't truncate a file nc holds open.)
 irc_clear() {
-    name="$1"
-    eval "out=\$IRC_OUT_$name"
-    sz=$(wc -c < "$out" 2>/dev/null || echo 0)
-    sz=$(printf '%s' "$sz" | tr -d ' ')
-    eval "IRC_MARK_$name=$sz"
+    _irc_name="$1"
+    eval "_irc_out=\$IRC_OUT_$_irc_name"
+    _irc_sz=$(wc -c < "$_irc_out" 2>/dev/null || echo 0)
+    _irc_sz=$(printf '%s' "$_irc_sz" | tr -d ' ')
+    eval "IRC_MARK_$_irc_name=$_irc_sz"
 }
 
 # irc_buf <name> — everything received since the last irc_clear
 irc_buf() {
-    name="$1"
-    eval "out=\$IRC_OUT_$name"
-    eval "mark=\${IRC_MARK_$name:-0}"
-    tail -c "+$((mark + 1))" "$out" 2>/dev/null
+    _irc_name="$1"
+    eval "_irc_out=\$IRC_OUT_$_irc_name"
+    eval "_irc_mark=\${IRC_MARK_$_irc_name:-0}"
+    tail -c "+$((_irc_mark + 1))" "$_irc_out" 2>/dev/null
+}
+
+# irc_tenths <seconds> — "2", "2.0", "0.5" -> tenths of a second, as an
+# integer. Pure shell on purpose: the obvious `awk "BEGIN{...}"` spelling is
+# both an extra fork per poll and a brace-list, which some shells mis-expand
+# (see hellish issue: command substitution brace-expanded and run twice).
+irc_tenths() {
+    case "$1" in
+        *.*)
+            _irc_whole="${1%%.*}"
+            _irc_frac="$(printf '%s' "${1#*.}" | cut -c1)"
+            ;;
+        *)
+            _irc_whole="$1"
+            _irc_frac=0
+            ;;
+    esac
+    [ -z "$_irc_whole" ] && _irc_whole=0
+    [ -z "$_irc_frac" ] && _irc_frac=0
+    echo $((_irc_whole * 10 + _irc_frac))
 }
 
 # irc_expect <name> <extended-regex> [timeout-seconds]
 # Polls until the pattern shows up in the post-mark buffer. Returns 0/1.
 irc_expect() {
-    name="$1"
-    pattern="$2"
-    timeout="${3:-2.0}"
-    iters=$(awk "BEGIN{ n = $timeout / 0.1; printf \"%d\", (n < 1 ? 1 : n) }")
-    i=0
-    while [ "$i" -lt "$iters" ]; do
-        if irc_buf "$name" | grep -qE "$pattern" 2>/dev/null; then
+    _irc_name="$1"
+    _irc_pattern="$2"
+    _irc_timeout="${3:-2.0}"
+    _irc_iters=$(irc_tenths "$_irc_timeout")
+    [ "$_irc_iters" -lt 1 ] && _irc_iters=1
+    _irc_i=0
+    while [ "$_irc_i" -lt "$_irc_iters" ]; do
+        if irc_buf "$_irc_name" | grep -qE "$_irc_pattern" 2>/dev/null; then
             return 0
         fi
         sleep 0.1
-        i=$((i + 1))
+        _irc_i=$((_irc_i + 1))
     done
     return 1
 }
@@ -258,27 +284,51 @@ expect_none() {
 
 # --- protocol helpers ------------------------------------------------------
 
+# IRC_NICKLEN — the server truncates nicks longer than this (it advertises
+# NICKLEN in its 005 ISUPPORT line). Registering a longer nick still succeeds,
+# but the client ends up under a *different* name, so every later PRIVMSG /
+# KICK / INVITE aimed at the name you asked for comes back 401. That silent
+# mismatch cost us a "server stalled" false positive in the stress test, so
+# irc_register now refuses to let it happen quietly.
+IRC_NICKLEN="${IRC_NICKLEN:-9}"
+
 # irc_register <name> <nick> [password]
 # Pass the literal string NOPASS as the third arg to skip PASS entirely.
 irc_register() {
-    name="$1"
-    nick="$2"
-    pass="${3-$IRC_PASSWORD}"
-    if [ "$pass" != "NOPASS" ]; then
-        irc_send "$name" "PASS $pass"
+    _irc_name="$1"
+    _irc_nick="$2"
+    _irc_pass="${3-$IRC_PASSWORD}"
+
+    # A nick longer than NICKLEN is truncated by the server, so the client
+    # would silently be reachable under a name no later command uses. Shout
+    # about it rather than producing a mystifying 401 ten assertions later.
+    if [ "${#_irc_nick}" -gt "$IRC_NICKLEN" ]; then
+        printf '  [WARN] nick "%s" is %d chars, server NICKLEN=%s — it will be\n' \
+            "$_irc_nick" "${#_irc_nick}" "$IRC_NICKLEN" >&2
+        printf '         truncated and will not be addressable under that name.\n' >&2
     fi
-    irc_send "$name" "NICK $nick"
-    irc_send "$name" "USER $nick 0 * :Real Name"
-    irc_expect "$name" "(^| )001( |:)|Welcome" 2.0
+
+    if [ "$_irc_pass" != "NOPASS" ]; then
+        irc_send "$_irc_name" "PASS $_irc_pass"
+    fi
+    irc_send "$_irc_name" "NICK $_irc_nick"
+    irc_send "$_irc_name" "USER $_irc_nick 0 * :Real Name"
+    irc_expect "$_irc_name" "(^| )001( |:)|Welcome" 2.0
 }
 
 # irc_server_alive — can we still open a fresh TCP connection at all?
 irc_server_alive() {
+    # The connect attempt runs in a subshell, so fd 3 is opened *and* closed
+    # inside it — there is nothing to clean up out here. Do NOT add an
+    # `exec 3>&- 3<&- 2>/dev/null` line: `exec` with no command applies its
+    # redirections to the current shell permanently, so the `2>/dev/null`
+    # silently sends every later diagnostic on this script's stderr to
+    # /dev/null. It used to do exactly that, which hid the NICKLEN warnings
+    # under bash while hellish (no /dev/tcp) still showed them.
     if (exec 3<>"/dev/tcp/$IRC_HOST/$IRC_PORT") 2>/dev/null; then
-        exec 3>&- 3<&- 2>/dev/null
         return 0
     fi
-    # Fallback for shells without /dev/tcp (hellish may not implement it).
+    # Fallback for shells without /dev/tcp (hellish does not implement it).
     if command -v nc >/dev/null 2>&1; then
         printf '' | timeout 2 nc -z "$IRC_HOST" "$IRC_PORT" >/dev/null 2>&1 && return 0
     fi

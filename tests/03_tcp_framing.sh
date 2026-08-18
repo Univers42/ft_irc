@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # The area most ft_irc implementations quietly get wrong: assuming one
 # recv() == one command. Over real TCP it never is.
-cd "$(dirname "$0")/.." || exit 1
+# Portable POSIX shell: this file must behave identically under bash and
+# under hellish, so no BASH_SOURCE, no arrays, no [[ ]].
+cd "$(dirname "$0")" || exit 1
 . ./config.sh
 . ./lib/irc_lib.sh
 
@@ -58,13 +60,13 @@ irc_close blank
 
 # 6. one absurdly long line
 irc_connect huge
-irc_register huge hugeclient >/dev/null
+irc_register huge hugecli >/dev/null
 irc_clear huge
 bigpayload=$(head -c 20000 /dev/zero | tr '\0' 'X')
-irc_send_raw huge "PRIVMSG hugeclient :$bigpayload\r\n"
+irc_send_raw huge "PRIVMSG hugecli :$bigpayload\r\n"
 sleep 1
 irc_connect probe1
-if irc_register probe1 probeafterhuge; then
+if irc_register probe1 probehuge; then
     t_ok "server still accepts new registrations after a 20KB single line"
 else
     t_fail "server broken after receiving a 20KB single line"
