@@ -37,8 +37,11 @@ std::string AuditLog::timestamp() {
   return std::string(buf);
 }
 
+
 void AuditLog::log(const std::string& event, const std::string& actor,
                    const std::string& detail) {
+  // Those are more detail how this fucntion work
+  // others..
   if (!_csv.ok()) return;
   std::vector<std::string> row;
   row.push_back(timestamp());

@@ -42,14 +42,37 @@ class Channel {
   void setTopicRestricted(bool restricted);
 
   /* ─── Member management ─── */
+  /**
+   * @brief Add a Client (user) to a Channel.
+   * @param client a pointer to a Client instance.
+   * @return void
+   * @note Channel has a vevriable _membres, declared as: std::map<int, Client*>
+   */
   void addMember(Client* client);
   void removeMember(Client* client);
   bool isMember(Client* client) const;
   bool isEmpty() const;
 
+
+
+
+
+
+
+
+
+  
   /* ─── Operator management ─── */
   bool isOperator(Client* client) const;
   void setOperator(Client* client, bool op);
+
+
+
+
+
+
+
+
 
   /* ─── Invite management ─── */
   /* Keyed by the invited *connection*, never by its nickname: a name can
@@ -59,8 +82,26 @@ class Channel {
   bool isInvited(Client* client) const;
   void removeInvite(Client* client);
 
+
+
+
+
+
+
+
+
+
   /* ─── Messaging ─── */
   void broadcastMessage(const std::string& msg, Client* exclude);
+
+
+
+
+
+
+
+
+
 
   /* ─── Utility ─── */
   Client* findMember(const std::string& nickname) const;
