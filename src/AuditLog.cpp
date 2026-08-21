@@ -1,6 +1,7 @@
 #include "AuditLog.hpp"
 
 #include <ctime>
+#include <string>
 #include <vector>
 
 AuditLog::AuditLog(const std::string& path) : _csv() {

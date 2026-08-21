@@ -22,6 +22,10 @@ make bonus      # mandatory + Bot + FILE transfer
 
 ./ircserv <port> <password>
 ./ircserv 6667 test123
+
+## connection ircserv... from one machine to another..
+hostname -i ## it should output the result
+
 ```
 
 - **port** — the TCP port the server listens on.

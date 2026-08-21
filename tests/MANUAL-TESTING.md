@@ -512,10 +512,11 @@ when the server closes the connection if its stdin is still open, so you will me
 own `sleep` instead of the server. Use a client that reports `recv() == 0` with a timestamp:
 
 ```bash
-python3 mute_client.py 127.0.0.1 6667 test123 mute1 400
+./tools/mute_client.sh --silent 127.0.0.1 6667 test123 mute1 400
 ```
 
-`mute_client.py` performs exactly one `sendall` (the registration) and never writes again.
+`mute_client.sh --silent` performs exactly one burst of writes (the registration) and never
+writes again, while continuing to read and timestamp everything that arrives.
 The socket stays fully open — no `shutdown`, no `close` — so this is a genuinely silent
 client rather than one that has signalled it is going away.
 
@@ -534,7 +535,7 @@ If you want to confirm the client really is silent, run it under `strace`:
 
 ```bash
 strace -f -e trace=sendto,write,sendmsg,shutdown -tt -o /tmp/mute.trace \
-  python3 mute_client.py
+  ./tools/mute_client.sh --silent
 grep -c 'sendto\|sendmsg' /tmp/mute.trace
 ```
 

@@ -1,6 +1,7 @@
 #include "extras/FancyLogSink.hpp"
 
 #include <iostream>
+#include <string>
 
 #include "libcpp/term/style.hpp"
 #include "libcpp/term/writer.hpp"

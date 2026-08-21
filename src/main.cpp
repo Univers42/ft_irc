@@ -1,5 +1,6 @@
 #include <csignal>
 #include <cstdlib>
+#include <string>
 
 #include "Log.hpp"
 #include "Server.hpp"

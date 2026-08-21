@@ -1,4 +1,8 @@
 #include "Client.hpp"
+
+#include <string>
+#include <vector>
+
 #include "Replies.hpp"
 
 Client::Client(int fd, const std::string& hostname)

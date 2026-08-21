@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by dlesieur.*
+*This project has been created as part of the 42 curriculum by dlesieur, rlobun, <user vadim>.*
 
 # ft_irc
 
@@ -132,6 +132,7 @@ QUIT :bye
 - [IRCv3 Specifications](https://ircv3.net/irc/)
 - [HexChat documentation](https://hexchat.readthedocs.io/)
 - [epoll(7) man page](https://man7.org/linux/man-pages/man7/epoll.7.html)
+- [RFC 2812 official site](https://www.rfc-editor.org/info/rfc2812/)
 
 ### AI Usage
 

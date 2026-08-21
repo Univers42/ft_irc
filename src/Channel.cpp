@@ -1,4 +1,9 @@
 #include "Channel.hpp"
+
+#include <map>
+#include <string>
+#include <vector>
+
 #include "Client.hpp"
 #include "IrcCase.hpp"
 #include "libcpp/str/format.hpp"

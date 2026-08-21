@@ -16,6 +16,7 @@
 */
 #include <cstdlib>
 #include <new>
+#include <string>
 
 #include "AuditLog.hpp"
 #include "Bot.hpp"

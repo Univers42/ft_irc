@@ -138,7 +138,48 @@ re: fclean all
 test:
 	@$(MAKE) -C tests
 
+# ── norm: style + static-analysis gate ─────────────────────────────────────
+#  vendor/scripts/norminette.sh drives four tools over the sources — see
+#  .clang-format (layout), .clang-tidy (bug-finding), CPPLINT.cfg (style), and
+#  cppcheck. A tool that isn't installed is reported "skipped", not failed, so
+#  the target still runs on a bare machine:
+#      pip install --user cpplint clang-tidy      # clang-format: your distro
+#      cppcheck: distro package, or build from github.com/danmar/cppcheck
+#
+#  Scope is exactly what ircserv compiles: src/, include/, and the libcpp
+#  modules linked into the binary. libcpp's demo/, studio/ and lab/ trees are
+#  not part of this build (and carry their own vendored node_modules), so they
+#  are listed out rather than walked.
+NORM_SCRIPT		= vendor/scripts/norminette.sh
+NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
+NORM_FILES		= src include \
+			  $(addprefix $(LIBCPP)/src/,$(addsuffix .cpp,$(NORM_LIBCPP_NAMES))) \
+			  $(addprefix $(LIBCPP)/include/libcpp/,$(addsuffix .hpp,$(NORM_LIBCPP_NAMES))) \
+			  $(addprefix $(LIBCPP)/c98/src/,$(addsuffix .cpp,$(LIBCPP98_NAMES))) \
+			  $(addprefix $(LIBCPP)/c98/include/libcpp98/,$(addsuffix .hpp,$(LIBCPP98_NAMES)))
+
+# Everything after `--` is what clang-tidy parses the sources with, so it has
+# to match the real build. -Werror is deliberately left out: clang's warning
+# set differs from the build compiler's, and a clang-only warning must not be
+# able to fail the lint gate.
+NORM_TIDY_FLAGS	= -std=c++98 $(INCLUDES)
+
+# The script is Python despite the .sh name, and ships non-executable; invoke
+# it through the interpreter rather than relying on its mode bits.
+norm:
+	@PATH="$$HOME/.local/bin:$$PATH" python3 $(NORM_SCRIPT) $(NORM_FILES) \
+		-- $(NORM_TIDY_FLAGS)
+
+# Applies the mechanical half of `norm` in place (layout only — clang-format
+# never changes semantics). cpplint and the analyzer findings stay manual.
+norm-fix:
+	@PATH="$$HOME/.local/bin:$$PATH" clang-format -i \
+		$$(find src include -name '*.cpp' -o -name '*.hpp') \
+		$(filter-out src include,$(NORM_FILES))
+	@echo "clang-format applied; re-run 'make norm' to confirm."
+
 testclean:
 	@$(MAKE) -C tests fclean
 
-.PHONY: all bonus mandatory build clean fclean re test testclean verify-tiers
+.PHONY: all bonus mandatory build clean fclean re test testclean verify-tiers \
+	norm norm-fix

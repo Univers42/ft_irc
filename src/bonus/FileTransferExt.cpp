@@ -5,6 +5,8 @@
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
+#include <map>
+#include <string>
 
 #include "Client.hpp"
 #include "IrcCase.hpp"

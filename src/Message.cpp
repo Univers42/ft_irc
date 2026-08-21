@@ -1,4 +1,7 @@
 #include "Message.hpp"
+
+#include <string>
+
 #include "libcpp/str/case.hpp"
 
 Message Message::parse(const std::string& raw) {

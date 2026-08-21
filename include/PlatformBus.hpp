@@ -10,6 +10,52 @@
 class Server;
 
 /*
+** # WHAT IS A BUS
+**  
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+**
+
 ** PlatformBus — the one original in-binary feature.
 **
 ** A second listening socket bound to 127.0.0.1 (loopback only), multiplexed in

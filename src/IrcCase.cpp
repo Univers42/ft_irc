@@ -1,4 +1,7 @@
 #include "IrcCase.hpp"
+
+#include <string>
+
 #include "libcpp/str/case.hpp"
 
 /* IRC's CASEMAPPING=ascii, delegated to libcpp's ASCII-only case layer.

@@ -1,5 +1,9 @@
 /* ─── Query commands: WHO, WHOIS, USERHOST ─── */
 
+#include <map>
+#include <string>
+#include <vector>
+
 #include "Server.hpp"
 
 /* ─── WHO ─── */

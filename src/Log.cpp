@@ -1,6 +1,7 @@
 #include "Log.hpp"
 
 #include <iostream>
+#include <string>
 
 /*
 ** Plain-iostream renderer — the only logging the kernel needs. The full
