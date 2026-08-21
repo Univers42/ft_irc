@@ -24,13 +24,35 @@ class Channel {
   size_t getUserLimit() const;
   bool isInviteOnly() const;
   bool isTopicRestricted() const;
+  /**
+   * @brief returns a number of Clients(users) in a Channel(chat).
+   * It uses _members.size() std::map method.
+   * _members is a  std::map<int, Client>.
+   */
   size_t getMemberCount() const;
+
+  /** 
+   * @brief Converts Channel mode (state) to the string and returns it in
+   * the following format:
+   * the string always has '+' at the beginnig, followed by a character.
+   * Each character corresponds to a mode.
+   * If a character is present - a mode is on. 
+   * Example: '+i', '+itkl', '+'
+   */
   std::string getModeString() const;
+  /**
+   * @brief returns a string with a key if present, 
+   * followed by a number of users if the number of users is more than zero.
+   * two fields are separeted with a space character ' '.
+   */
   std::string getModeParams() const;
-  /* The member list as one or more space-separated chunks, each at most
-  ** `budget` bytes, so RPL_NAMREPLY can stay inside the 512-byte line
-  ** limit on a channel of any size. Always returns at least one chunk. */
-  std::vector<std::string> getNamesChunks(size_t budget) const;
+
+  /** 
+   * @brief The member list as one or more space-separated chunks, each at most
+   * `budget` bytes, so RPL_NAMREPLY can stay inside the 512-byte line
+   * limit on a channel of any size. Always returns at least one chunk. 
+   */
+  std::vector<std::string> getNamesChunks(size_t budget) const;	
 
   /* ─── Setters ─── */
   void setTopic(const std::string& topic, const std::string& setter);
@@ -47,7 +69,7 @@ class Channel {
    * @param client a pointer to a Client instance. 
    * @note Channel has a map Channel._members, declared as: std::map<int, Client>.
    * The key: is the descriptor of a Client, a value: pointer to a Client instance.
-   */
+   */ 
 
   void addMember(Client* client);
   
@@ -90,28 +112,34 @@ class Channel {
   /* Keyed by the invited *connection*, never by its nickname: a name can
   ** be released (NICK) or freed (QUIT) and picked up by someone else,
   ** which would hand them a +i channel they were never invited to. */
+
+  /**
+ * @brief add a Client to the channel.
+ * This is done by adding a Client fd to Channel._inviteList.
+ * Invite list is"  std::set<int> _inviteList.
+ * 
+ */
   void addInvite(Client* client);
+  /**
+   * @brief add a client to a Channel 
+   */
+
   bool isInvited(Client* client) const;
+
+  /**
+   * @brief Remove a client from a Channel
+   */
   void removeInvite(Client* client);
 
 
 
+/* ─── Messaging ─── */
 
-
-
-
-
-
-
-  /* ─── Messaging ─── */
+/**
+ * @brief broadcast a clients message to all members of a Channel.
+ * Iterates trough a _members map, 
+ */
   void broadcastMessage(const std::string& msg, Client* exclude);
-
-
-
-
-
-
-
 
 
 

@@ -134,6 +134,8 @@ void Channel::setOperator(Client* client, bool op) {
 ** channel. Keyed this way an invite follows its holder across renames and
 ** dies with the connection -- Server::teardownClientState() clears it from
 ** every channel so a recycled fd can never inherit one either. */
+
+
 void Channel::addInvite(Client* client) { _inviteList.insert(client->getFd()); }
 
 bool Channel::isInvited(Client* client) const {
