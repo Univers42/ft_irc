@@ -40,39 +40,51 @@ class Channel {
   void removeUserLimit();
   void setInviteOnly(bool inviteOnly);
   void setTopicRestricted(bool restricted);
-
   /* ─── Member management ─── */
+  
   /**
    * @brief Add a Client (user) to a Channel.
-   * @param client a pointer to a Client instance.
-   * @return void
-   * @note Channel has a vevriable _membres, declared as: std::map<int, Client*>
+   * @param client a pointer to a Client instance. 
+   * @note Channel has a map Channel._members, declared as: std::map<int, Client>.
+   * The key: is the descriptor of a Client, a value: pointer to a Client instance.
    */
+
   void addMember(Client* client);
+  
+  /**
+   * @brief remove member from a channel 
+   * @param client - a pointer to a Client instance.
+   * @note removes a Client from two sets Channel._operators and Channel._members using client.getFd() as input parameter.
+   */
   void removeMember(Client* client);
+
+  /** 
+	@brief checks if a Client is a member of a channel.
+	@return true if a Channel._members tiene mas de un elemento con id Client.getFd();
+  */
   bool isMember(Client* client) const;
+
+  /**
+   * @brief checks if a channek has no members.
+   */
   bool isEmpty() const;
-
-
-
-
-
-
-
-
-
   
   /* ─── Operator management ─── */
+
+  /**
+   * @brief if a Client is Operator of a channel.
+   */
   bool isOperator(Client* client) const;
+
+  /**
+   * @brief makes or disables a client an operator of the channel.
+   * @param client - Client instance.
+   * @param op - if true, set a Client as operator of the channel.
+   *           - if false, disable a Client as operator of the channel.
+   * Add]s a client to a set Channel._operators ( std::set<int> _operators;) 
+   *
+   */
   void setOperator(Client* client, bool op);
-
-
-
-
-
-
-
-
 
   /* ─── Invite management ─── */
   /* Keyed by the invited *connection*, never by its nickname: a name can
