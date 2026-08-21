@@ -1,0 +1,1 @@
+To test the channel operator we have to try that the different operator create a channel.. people try to join a channel..

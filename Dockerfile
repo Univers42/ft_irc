@@ -24,7 +24,6 @@ RUN make re
 FROM build AS test
 RUN make test
 
-# ---- runtime --------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libstdc++6 \
