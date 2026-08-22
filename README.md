@@ -2,142 +2,193 @@
 
 # ft_irc
 
-## Description
+An **IRC server in C++98** (RFC 2812), built for the 42 curriculum with
+**HexChat** as the reference client. Single-threaded, non-blocking, everything
+multiplexed through **one `epoll()` loop** — no thread and no process per
+client.
 
-ft_irc is an IRC (Internet Relay Chat) server implemented in C++98. It follows the IRC protocol (RFC 2812) and is designed to work with HexChat as the reference client. The server handles multiple simultaneous clients using non-blocking I/O with `epoll()`, supports authentication, channel management, private messaging, and operator commands.
+**📖 [Full wiki →](wiki/README.md)** · scenarios, command reference,
+architecture, attack playbook.
 
-### Features
+---
 
-- **Authentication**: Password-protected server with PASS/NICK/USER registration
-- **Channels**: Create, join, and manage IRC channels with `#` prefix
-- **Private messaging**: PRIVMSG and NOTICE between users
-- **Channel operators**: KICK, INVITE, TOPIC, and MODE commands
-- **Channel modes**: `+i` (invite-only), `+t` (topic restricted), `+k` (key/password), `+o` (operator), `+l` (user limit)
-- **Bonus: Bot** — Built-in `ircbot` that responds to `!help`, `!time`, `!info`, `!joke`
-- **Bonus: File transfer** — DCC handshake relay *and* an original server-mediated
-  `FILE` protocol (base64 relay with validation, flow control and timeouts)
-- **Partial message reassembly**: Handles fragmented TCP data correctly
-- **Ping/Pong keepalive**: Automatic timeout detection
-- **Hardened**: ascii casemapping, CR/LF/NUL line-injection sanitizer, SENDQ +
-  connection caps, bounded MODE/TOPIC/KEY parameters, timing-safe password check
-
-## Instructions
-
-### Compilation — build tiers
+## Quick start
 
 ```bash
-make mandatory  # strictly the subject's mandatory part (pure RFC kernel)
-make bonus      # mandatory + subject bonus (bot, FILE transfer)
-make            # full (default): bonus + optional platform extras
-make clean      # Remove object files
-make fclean     # Remove object files and binary
-make re         # Full rebuild (full tier)
-make test       # Build & run the test suite (Google Test, 138 assertions)
+git submodule update --init --recursive   # fresh clone only
+make
+./ircserv 6667 mypass
 ```
-
-All three tiers produce the same `ircserv` binary name from the same kernel
-sources; they differ only in which extensions are linked (per-tier object
-dirs, one `registerExtensions()` translation unit each — see
-`src/tiers/`). **Evaluation note:** the default `make` includes the extras,
-but they are dead code without the `FT_IRC_CONFIG` environment variable — a
-scripted session transcript is byte-identical across all three binaries.
-Use `make mandatory` to demonstrate the strict subject build.
-
-### Running
-
-```bash
-./ircserv <port> <password>
-```
-
-- `port`: The TCP port to listen on (e.g., 6667)
-- `password`: Connection password required by clients
-
-### Running with Docker
-
-The whole stack — the C++ server plus the Claude-backed AI companion — runs
-with one command. Docker and Compose v2 required.
-
-```bash
-cp .env.example .env          # then set ANTHROPIC_API_KEY (and a password)
-docker compose up --build
-```
-
-This starts `ircserv` (published on `${IRC_PORT:-6667}`) and the
-`ai-assistant` companion, which connects to the server over the compose
-network, joins `$IRC_CHANNELS`, and answers when addressed (`!ai …`,
-`assistant: …`, or a direct message). Secrets live only in the gitignored
-`.env`.
-
-Server only, no companion:
-
-```bash
-docker build -t ircserv .
-docker run --rm -p 6667:6667 ircserv 6667 mypassword
-```
-
-Run the test suite in a clean container:
-
-```bash
-docker build --target test -t ircserv-test .
-```
-
-> The `ai-assistant` is a separate process (see `companions/ai-assistant/`),
-> not part of the C++98 server or its 42 build — the server stays
-> subject-clean and is unaware the companion is AI. See that directory's
-> README for how it works.
-
-#### Optional real-time / web tier
-
-```bash
-docker compose --profile platform up --build
-```
-
-Adds two more services: **realtime-agnostic** (a Rust WebSocket pub/sub
-fan-out engine with database change-capture, pinned to an immutable digest and
-published on the host at `${REALTIME_PORT:-4455}` → container `4000`) and
-**realtime-bridge** — a companion that mirrors IRC and realtime in *both*
-directions. IRC channel messages are published to realtime (so browser /
-WebSocket clients and DB-CDC consumers see live IRC), and realtime chat events
-(browser publishes under `irc-in/<channel>`) are injected back into IRC, each
-web user appearing under **its own IRC nick** via a short-lived puppet
-connection; `pg/**` / `mongo/**` CDC events inject via the `rtbridge` service.
-Both directions are verified end-to-end. The default `docker compose up` is
-unchanged; this tier is purely additive and outside the 42 build. See
-`companions/realtime-bridge/`.
-
-### Connecting with HexChat
-
-1. Open HexChat → Add a new network
-2. Set server address to `127.0.0.1/6667`
-3. Set the server password to the password you used when starting `ircserv`
-4. Connect — you should see the welcome message
-
-### Testing with netcat
 
 ```bash
 nc -C 127.0.0.1 6667
-PASS mypassword
-NICK mynick
-USER myuser 0 * :My Real Name
-JOIN #test
-PRIVMSG #test :Hello!
-QUIT :bye
 ```
+```
+PASS mypass
+NICK alice
+USER alice 0 * :Alice Liddell
+JOIN #general
+PRIVMSG #general :hello
+```
+
+`:ft_irc 001 alice :Welcome to the ft_irc Network …` means you are registered.
+
+**HexChat:** Network List (`Ctrl+S`) → **Add** → **Edit** → server
+`127.0.0.1/6667`, server password in **Password** (not "Nickserv password"),
+nick **≤ 9 characters**, SSL off → **Connect**. Watch the wire underneath with
+**Window → Raw Log**.
+
+---
+
+## Build
+
+```bash
+make mandatory   # strictly the subject's mandatory part — defend on this one
+make bonus       # + Bot, FILE transfer
+make             # full (default): + platform extras, runtime-gated
+make re          # rebuild · make clean / fclean
+make verify-tiers   # build all three in strict sequence
+```
+
+All three tiers produce the same `ircserv` from the same kernel sources and
+differ **only at link time** — one `registerExtensions()` translation unit per
+tier, zero `#ifdef`. The full tier's extras are additionally gated behind the
+`FT_IRC_CONFIG` environment variable, so without it the default binary behaves
+byte-for-byte like the bonus tier.
+
+```bash
+./ircserv <port> <password>     # port 1–65535, password non-empty
+```
+
+### Watching the protocol
+
+```bash
+FT_IRC_LOG=trace ./ircserv 6667 mypass
+```
+
+Prints every line crossing the socket, both directions, in RFC 2812 syntax
+with the numerics named — passwords and channel keys redacted. Levels:
+`quiet` `error` `warn` `info` (default) `debug` `trace`. See
+[wiki/LOGGING.md](wiki/LOGGING.md).
+
+---
+
+## Features
+
+**Core** — PASS/NICK/USER registration with a timing-safe password check ·
+channels with `#` · PRIVMSG / NOTICE · KICK, INVITE, TOPIC, MODE ·
+WHO / WHOIS / USERHOST · PING/PONG keepalive · partial-message reassembly.
+
+**Channel modes** — `+i` invite-only · `+t` topic locked to operators ·
+`+k` key · `+o` operator · `+l` member limit.
+
+**Bonus** — `ircbot` (`!help` `!time` `!info` `!joke`, private messages only) ·
+`FILE` transfer, a server-mediated base64 relay that never decodes and never
+touches disk · DCC passthrough.
+
+**Hardened** — ASCII casemapping · CR/LF/NUL line-injection sanitizer ·
+bounded send queues and connection caps · invites keyed by connection rather
+than by nickname · every reply echoing the server's canonical stored form.
+
+**Limits** — nick 9 (truncated, not rejected) · channel 50 · key 23 ·
+topic 390 · line 512 incl. CRLF · sendq 64 KiB/client · 1024 clients ·
+ping 120 s + 120 s.
+
+---
+
+## Scenarios — one page per context of use
+
+Each has a HexChat path, a **real captured** `netcat` transcript, and what to
+check.
+
+| # | Page | Context |
+| --- | --- | --- |
+| 01 | [First connection](wiki/scenarios/01-first-connection.md) | Launch, register, wrong password, nick rules |
+| 02 | [Channels](wiki/scenarios/02-channels.md) | Create, join, topic, names, part |
+| 03 | [Messaging & queries](wiki/scenarios/03-messaging.md) | Channel talk, private messages, NOTICE, WHO/WHOIS |
+| 04 | [Operators & modes](wiki/scenarios/04-operators-and-modes.md) | `+o +t +i +k +l`, KICK, INVITE |
+| 05 | [Multiple users](wiki/scenarios/05-multiple-users.md) | Collisions, casemapping, concurrency |
+| 06 | [The bot](wiki/scenarios/06-bot.md) | `ircbot` — bonus |
+| 07 | [File transfer](wiki/scenarios/07-file-transfer.md) | `FILE` relay, DCC — bonus |
+| 08 | [Failure & resilience](wiki/scenarios/08-resilience.md) | Split packets, kills, timeouts, floods, leaks |
+| 09 | [Platform extras](wiki/scenarios/09-platform-extras.md) | Audit log, platform bus, Docker, AI companion |
+
+Plus the flat [**command reference**](wiki/scenarios/commands.md) — every
+command, its raw syntax, its HexChat equivalent, and the numerics it answers
+with.
+
+---
+
+## Testing
+
+```bash
+make test                             # Google Test suite, in-process
+cd tests && bash ./run_all.sh         # black-box shell suite vs a live server
+cd tests && ./run_dual.sh             # same suite under bash + hellish, diffed
+bash scripts/audit.hellish            # subject-compliance audit
+bash scripts/memcheck.hellish --auto  # Valgrind gate: 0 clean / 97 leak / 90 unverified
+make norm                             # style gate
+```
+
+Two suites proving different things: Google Test exercises the classes in
+process, the shell suite drives a live `./ircserv` over TCP and can do things
+an in-process test cannot — split a command across packets, `kill -9` a client
+mid-sentence, freeze a reader with `Ctrl+Z`.
+See [`tests/README.md`](tests/README.md).
+
+---
+
+## Docker
+
+```bash
+cp .env.example .env          # set ANTHROPIC_API_KEY and a password
+docker compose up --build     # ircserv + the AI companion
+```
+
+Starts `ircserv` on `${IRC_PORT:-6667}` plus **ai-assistant**, a separate Rust
+process that connects as an ordinary IRC client (nick `assistant`) and answers
+when addressed — `!ai …`, `assistant: …`, or a direct message. The C++ server
+contains no AI code and is unaware of it.
+
+```bash
+docker build -t ircserv . && docker run --rm -p 6667:6667 ircserv 6667 mypassword
+docker build --target test -t ircserv-test .        # test suite in a container
+docker compose --profile platform up --build        # + realtime bridge tier
+```
+
+The `--profile platform` tier adds a WebSocket pub/sub engine and a
+bidirectional IRC↔realtime bridge. Everything under `companions/` is outside
+the 42 build. Secrets live only in the gitignored `.env`.
+
+---
+
+## Documentation
+
+| File | What it covers |
+| --- | --- |
+| [wiki/README.md](wiki/README.md) | Wiki index — start here |
+| [wiki/scenarios/](wiki/scenarios/README.md) | Scenarios and command reference |
+| [wiki/USER-GUIDE.md](wiki/USER-GUIDE.md) | Feature-by-feature prose walkthrough |
+| [wiki/LOGGING.md](wiki/LOGGING.md) | Server-side protocol trace and log levels |
+| [wiki/DOCUMENTATION.md](wiki/DOCUMENTATION.md) | Architecture, extension seam, protocol details |
+| [wiki/ATTACK.md](wiki/ATTACK.md) | Adversarial playbook |
+| [wiki/DEFENSE-MAP.md](wiki/DEFENSE-MAP.md) | Subject obligations → the command that proves each |
+| [tests/TESTING.md](tests/TESTING.md) | QA discipline |
+| `subject.txt` / `en.subject.pdf` | The assignment |
 
 ## Resources
 
-- [RFC 2812 — Internet Relay Chat: Client Protocol](https://datatracker.ietf.org/doc/html/rfc2812)
-- [RFC 1459 — Internet Relay Chat Protocol](https://datatracker.ietf.org/doc/html/rfc1459)
-- [Modern IRC documentation](https://modern.ircdocs.horse/)
-- [IRCv3 Specifications](https://ircv3.net/irc/)
-- [HexChat documentation](https://hexchat.readthedocs.io/)
-- [epoll(7) man page](https://man7.org/linux/man-pages/man7/epoll.7.html)
-- [RFC 2812 official site](https://www.rfc-editor.org/info/rfc2812/)
+[RFC 2812](https://datatracker.ietf.org/doc/html/rfc2812) ·
+[RFC 1459](https://datatracker.ietf.org/doc/html/rfc1459) ·
+[Modern IRC](https://modern.ircdocs.horse/) ·
+[IRCv3](https://ircv3.net/irc/) ·
+[HexChat docs](https://hexchat.readthedocs.io/) ·
+[epoll(7)](https://man7.org/linux/man-pages/man7/epoll.7.html)
 
-### AI Usage
+### AI usage
 
 AI (GitHub Copilot with Claude) was used as a programming assistant for:
-- Planning the project architecture and identifying required IRC numerics for HexChat compatibility
-- Generating boilerplate code for class declarations and socket setup
-- Implementing IRC command handlers based on RFC 2812 specifications
-- Debugging protocol compliance issues during testing
+planning the architecture and identifying the numerics HexChat needs;
+generating boilerplate for class declarations and socket setup; implementing
+command handlers against RFC 2812; and debugging protocol-compliance issues
+during testing.

@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "IrcTrace.hpp"
 #include "Log.hpp"
 #include "Server.hpp"
 #include "ext/RegisterExtensions.hpp"
@@ -16,6 +17,10 @@ static void signalHandler(int signum) {
 }
 
 int main(int argc, char** argv) {
+  /* Before the first log call, so FT_IRC_LOG=quiet silences even the usage
+  ** error, and FT_IRC_LOG=trace covers the whole run. */
+  Log::configureFromEnv();
+
   if (argc != 3) {
     Log::error("usage: ./ircserv <port> <password>");
     return 1;
@@ -47,6 +52,7 @@ int main(int argc, char** argv) {
     Server server(static_cast<int>(port), password);
     registerExtensions(server); /* which set depends on the build tier */
     server.run();
+    Log::info("traffic: " + IrcTrace::summary());
     Log::info("shutting down — server stopped cleanly");
   } catch (const std::exception& e) {
     Log::error(std::string("fatal: ") + e.what());

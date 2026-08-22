@@ -1,5 +1,7 @@
 #include "Server.hpp"
 
+#include "IrcTrace.hpp"
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -238,6 +240,7 @@ void Server::acceptClient() {
   addToEpoll(clientFd, EPOLLIN);
   _epollMask[clientFd] = EPOLLIN;
 
+  IrcTrace::sessionOpen(clientFd, hostname);
   Log::info("new connection from " + hostname + " (fd " +
             libcpp::str::to_string(clientFd) + ")");
 }
@@ -304,6 +307,12 @@ void Server::handleClientOutput(int fd) {
 }
 
 void Server::handleMessage(Client* client, const std::string& raw) {
+  /* Traced before parsing, and before the registration gate, so the console
+  ** shows exactly what the client sent -- including the malformed lines that
+  ** never become a Message at all, which are precisely the ones worth seeing
+  ** when a client "does nothing". */
+  IrcTrace::inbound(client->getFd(), client->getNickname(), raw);
+
   Message msg = Message::parse(raw);
   if (msg.command.empty()) return;
 
@@ -589,6 +598,7 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
   for (size_t i = 0; i < _extensions.size(); ++i)
     _extensions[i]->onClientDisconnect(*this, *client, reason);
 
+  IrcTrace::sessionClose(fd, client->getNickname(), reason);
   Log::info("client disconnected: " + client->getNickname() + " (" + reason +
             ")");
   audit("disconnect", client->getNickname(), reason);

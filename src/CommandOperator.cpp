@@ -1,10 +1,54 @@
 /* ─── Operator commands: KICK, INVITE, TOPIC, MODE ─── */
 
 #include <string>
+#include <vector>
 
 #include "IrcCase.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
+
+/* Answer each distinct complaint about a mode string once.
+**
+** A mode string is a list of letters, and the same letter -- or the same
+** missing-parameter condition -- can occur many times in one command.
+** Replying per occurrence turned a single 512-octet MODE into hundreds of
+** lines: 495 unknown letters measured at 23 KB of replies (47x), and 495
+** parameter-less 'o' at 46 KB (91x), all queued against the sender's own
+** 64 KiB SENDQ. The client learns nothing from the repeats -- "j is unknown"
+** is just as true the first time as the third.
+**
+** Returns true if `what` has been reported already; records it otherwise. */
+static bool alreadyReported(std::vector<std::string>& seen,
+                            const std::string& what) {
+  for (size_t i = 0; i < seen.size(); ++i)
+    if (seen[i] == what) return true;
+  seen.push_back(what);
+  return false;
+}
+
+/* How many parameters the modes from `from` onwards still require.
+**
+** Used to decide whether a bare "-k" may swallow the next parameter. '-k'
+** itself is deliberately not counted: whether its argument is present is
+** exactly the question this answers. */
+static size_t paramsRequiredFrom(const std::string& modeStr, size_t from,
+                                 bool sign) {
+  size_t need = 0;
+  bool adding = sign;
+  for (size_t i = from; i < modeStr.size(); ++i) {
+    char c = modeStr[i];
+    if (c == '+') {
+      adding = true;
+    } else if (c == '-') {
+      adding = false;
+    } else if (c == 'o') {
+      ++need;
+    } else if ((c == 'k' || c == 'l') && adding) {
+      ++need;
+    }
+  }
+  return need;
+}
 
 /* A channel key must be short and contain no space, comma or control
 ** character — it travels as a single middle parameter of JOIN/MODE. */
@@ -265,6 +309,10 @@ void Server::handleChannelMode(Client* client, Channel* channel,
   std::string appliedParams;
   bool currentSign = true;  // true = +
 
+  /* One entry per distinct complaint already answered for this command --
+  ** see alreadyReported(). */
+  std::vector<std::string> reported;
+
   for (size_t i = 0; i < modeStr.size(); ++i) {
     char c = modeStr[i];
 
@@ -299,14 +347,16 @@ void Server::handleChannelMode(Client* client, Channel* channel,
       case 'k': {
         if (adding) {
           if (paramIdx >= msg.params.size()) {
-            sendReply(client, ERR_NEEDMOREPARAMS,
-                      "MODE :Not enough parameters");
+            if (!alreadyReported(reported, "461"))
+              sendReply(client, ERR_NEEDMOREPARAMS,
+                        "MODE :Not enough parameters");
             continue;
           }
           std::string key = msg.params[paramIdx++];
           if (!isValidChannelKey(key)) {
-            sendReply(client, ERR_INVALIDKEY,
-                      channel->getName() + " :Key is not well-formed");
+            if (!alreadyReported(reported, "525:" + key))
+              sendReply(client, ERR_INVALIDKEY,
+                        channel->getName() + " :Key is not well-formed");
             continue;
           }
           channel->setKey(key);
@@ -324,22 +374,43 @@ void Server::handleChannelMode(Client* client, Channel* channel,
             currentSign = false;
           }
           appliedModes += "k";
-          // Some servers expect * as param for -k
-          if (paramIdx < msg.params.size()) paramIdx++;
+          /* RFC 2812 spells -k with the key as an argument and HexChat
+          ** sends one, but a bare "-k" is just as common, so the argument
+          ** is treated as optional. Take it only when it is SURPLUS to
+          ** what the modes after this one still need.
+          **
+          ** Consuming it unconditionally is what "MODE #c -k+o nick" used
+          ** to do: -k swallowed `nick` as a key it then discarded, +o found
+          ** no parameter left and answered 461, and the operator grant
+          ** silently never happened -- while the broadcast said plain "-k",
+          ** showing no sign that a parameter had been eaten. */
+          size_t stillNeeded = paramsRequiredFrom(modeStr, i + 1, adding);
+          if (paramIdx < msg.params.size() &&
+              msg.params.size() - paramIdx > stillNeeded) {
+            /* Echo it back. A consumed parameter that does not appear in
+            ** the broadcast is indistinguishable from one that was never
+            ** sent. */
+            std::string oldKey = msg.params[paramIdx++];
+            if (!appliedParams.empty()) appliedParams += " ";
+            appliedParams += oldKey;
+          }
         }
         break;
       }
       case 'o': {
         if (paramIdx >= msg.params.size()) {
-          sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+          if (!alreadyReported(reported, "461"))
+            sendReply(client, ERR_NEEDMOREPARAMS,
+                      "MODE :Not enough parameters");
           continue;
         }
         std::string nick = msg.params[paramIdx++];
         Client* target = channel->findMember(nick);
         if (!target) {
-          sendReply(client, ERR_USERNOTINCHANNEL,
-                    nick + " " + channel->getName() +
-                        " :They aren't on that channel");
+          if (!alreadyReported(reported, "441:" + ircToLower(nick)))
+            sendReply(client, ERR_USERNOTINCHANNEL,
+                      nick + " " + channel->getName() +
+                          " :They aren't on that channel");
           continue;
         }
         channel->setOperator(target, adding);
@@ -356,8 +427,9 @@ void Server::handleChannelMode(Client* client, Channel* channel,
       case 'l': {
         if (adding) {
           if (paramIdx >= msg.params.size()) {
-            sendReply(client, ERR_NEEDMOREPARAMS,
-                      "MODE :Not enough parameters");
+            if (!alreadyReported(reported, "461"))
+              sendReply(client, ERR_NEEDMOREPARAMS,
+                        "MODE :Not enough parameters");
             continue;
           }
           std::string limitStr = msg.params[paramIdx++];
@@ -372,9 +444,10 @@ void Server::handleChannelMode(Client* client, Channel* channel,
             ** who sent it. +k has a dedicated numeric
             ** (ERR_INVALIDKEY); +l has none, so use the
             ** generic mode-parameter one. */
-            sendReply(client, ERR_INVALIDMODEPARAM,
-                      channel->getName() + " l " + limitStr +
-                          " :Invalid channel limit");
+            if (!alreadyReported(reported, "696:" + limitStr))
+              sendReply(client, ERR_INVALIDMODEPARAM,
+                        channel->getName() + " l " + limitStr +
+                            " :Invalid channel limit");
             continue;
           }
           channel->setUserLimit(static_cast<size_t>(limit));
@@ -398,7 +471,9 @@ void Server::handleChannelMode(Client* client, Channel* channel,
       }
       default: {
         std::string s(1, c);
-        sendReply(client, ERR_UNKNOWNMODE, s + " :is unknown mode char to me");
+        if (!alreadyReported(reported, "472:" + s))
+          sendReply(client, ERR_UNKNOWNMODE,
+                    s + " :is unknown mode char to me");
         break;
       }
     }

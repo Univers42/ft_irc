@@ -645,7 +645,7 @@ swallows or rewrites input, and a reply to a command you did not send proves not
 |---|---|---|---|
 | 1 | ~~Nicknames over 9 characters are rejected instead of truncated; HexChat cannot connect~~ — fixed: now truncated to NICKLEN (T1) | Fixed | 2.1 |
 | 2 | `324`/`329` sent twice on join (HexChat de-duplicates them on screen) | Low | 3.1 |
-| 3 | `CHANMODES` puts `l` in the wrong group; should be `,k,l,it` | Cosmetic | 1.1 |
+| 3 | ~~`CHANMODES` puts `l` in the wrong group~~ — fixed: now `,,kl,it`. Both k and l are group C; `-k`'s argument is optional here, so B was wrong for k too (HexChat mis-rendered `-k+o nick` under B) | Fixed | 1.1 |
 | 4 | Channel name capitalisation differs between the `JOIN` echo and the numerics | Cosmetic | 3.2 |
 | 5 | Default `KICK` reason uses the kicker's nick; real servers use the kicked user's | Cosmetic | 3.5 |
 | 6 | No `~` prefix on the username when there is no ident response | Cosmetic | 1.1 |
@@ -844,7 +844,7 @@ show a transfer dialog and DCC would be dead.
 | # | Issue | Severity | Test |
 |---|---|---|---|
 | 1 | `324`/`329` sent twice on join (HexChat de-duplicates them on screen) | Low | 3.1 |
-| 2 | `CHANMODES` puts `l` in the wrong group; should be `,k,l,it` | Cosmetic | 1.1 |
+| 2 | ~~`CHANMODES` puts `l` in the wrong group~~ — fixed: now `,,kl,it` | Fixed | 1.1 |
 | 3 | Channel name capitalisation differs between the `JOIN` echo and the numerics | Cosmetic | 3.2 |
 | 4 | Default `KICK` reason uses the kicker's nick; real servers use the kicked user's | Cosmetic | 3.5 |
 | 5 | No `~` prefix on the username when there is no ident response | Cosmetic | 1.1 |

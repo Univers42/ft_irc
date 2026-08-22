@@ -1,5 +1,7 @@
 #include "Client.hpp"
 
+#include "IrcTrace.hpp"
+
 #include <string>
 #include <vector>
 
@@ -103,10 +105,13 @@ std::vector<std::string> Client::extractMessages() {
 ** bytes (RPL_NAMREPLY does) must chunk before they get here. */
 void Client::queueMessage(const std::string& msg) {
   const size_t maxPayload = static_cast<size_t>(MAX_MSGLEN) - 2;
-  if (msg.size() > maxPayload)
-    _io.queue(msg.substr(0, maxPayload));
-  else
-    _io.queue(msg);
+  std::string wire = (msg.size() > maxPayload) ? msg.substr(0, maxPayload) : msg;
+  _io.queue(wire);
+  /* Traced here, AFTER truncation, because this is what actually reaches the
+  ** peer -- logging the caller's string would show a line the client never
+  ** sees. This is the one choke point every reply, relay and broadcast
+  ** funnels through, so no outbound line can escape the trace. */
+  IrcTrace::outbound(_fd, _nickname, wire);
 }
 
 const std::string& Client::getSendBuffer() const { return _io.outData(); }
