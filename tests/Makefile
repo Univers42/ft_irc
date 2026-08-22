@@ -48,6 +48,16 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/Client.cpp \
 			  ../src/Channel.cpp \
 			  ../src/Message.cpp \
+			  ../src/grammar/GrammarNode.cpp \
+			  ../src/grammar/Grammar.cpp \
+			  ../src/grammar/AbnfChars.cpp \
+			  ../src/grammar/AbnfLineReader.cpp \
+			  ../src/grammar/AbnfCompiler.cpp \
+			  ../src/grammar/GrammarValidator.cpp \
+			  ../src/grammar/MatchResult.cpp \
+			  ../src/grammar/GrammarMatcher.cpp \
+			  ../src/grammar/EmbeddedGrammarSource.cpp \
+			  ../src/grammar/FileGrammarSource.cpp \
 			  ../src/IrcCase.cpp \
 			  ../src/IrcTrace.cpp \
 			  ../src/CommandRegistration.cpp \
@@ -61,6 +71,8 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 # ── Test sources ──────────────────────────────────────────────
 TEST_SRCS	= test_main.cpp \
 			  test_message.cpp \
+			  test_abnfcompiler.cpp \
+			  test_grammarmatcher.cpp \
 			  test_client.cpp \
 			  test_channel.cpp \
 			  test_bot.cpp \

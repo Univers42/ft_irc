@@ -164,6 +164,16 @@ CORE_NAMES	= main \
 			  Client \
 			  Channel \
 			  Message \
+			  grammar/GrammarNode \
+			  grammar/Grammar \
+			  grammar/AbnfChars \
+			  grammar/AbnfLineReader \
+			  grammar/AbnfCompiler \
+			  grammar/GrammarValidator \
+			  grammar/MatchResult \
+			  grammar/GrammarMatcher \
+			  grammar/EmbeddedGrammarSource \
+			  grammar/FileGrammarSource \
 			  IrcCase \
 			  IrcTrace \
 			  CommandRegistration \
