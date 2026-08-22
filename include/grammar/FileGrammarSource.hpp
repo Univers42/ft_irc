@@ -5,6 +5,7 @@
 
 #include "grammar/IGrammarSource.hpp"
 
+namespace Abnf {
 class FileGrammarSource : public IGrammarSource {
  public:
   explicit FileGrammarSource(const std::string& path);
@@ -16,5 +17,7 @@ class FileGrammarSource : public IGrammarSource {
  private:
   std::string _path;
 };
+
+}  // namespace Abnf
 
 #endif

@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <string>
 
+namespace Abnf {
 namespace AbnfChars {
 bool isAlpha(char c);
 bool isDigit(char c);
@@ -18,5 +19,7 @@ void skipBlanks(const std::string& s, std::size_t& i);
 std::string trimmed(const std::string& s);
 
 }  // namespace AbnfChars
+
+}  // namespace Abnf
 
 #endif

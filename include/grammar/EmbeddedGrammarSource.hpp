@@ -5,6 +5,7 @@
 
 #include "grammar/IGrammarSource.hpp"
 
+namespace Abnf {
 class EmbeddedGrammarSource : public IGrammarSource {
  public:
   EmbeddedGrammarSource();
@@ -13,5 +14,7 @@ class EmbeddedGrammarSource : public IGrammarSource {
   virtual const char* origin() const;
   virtual bool read(std::string& out) const;
 };
+
+}  // namespace Abnf
 
 #endif

@@ -1,9 +1,11 @@
-#include "grammar/GrammarMatcher.hpp"
+#include "grammar/interpreted/TreeMatcher.hpp"
 
 #include <string>
 
-const long GrammarMatcher::kMaxSteps = 200000;
-const int GrammarMatcher::kMaxDepth = 256;
+namespace Abnf {
+namespace Interpreted {
+const long TreeMatcher::kMaxSteps = 200000;
+const int TreeMatcher::kMaxDepth = 256;
 
 namespace {
 char fold(char c) {
@@ -13,14 +15,14 @@ char fold(char c) {
 
 }  // namespace
 
-GrammarMatcher::GrammarMatcher(const Grammar& grammar)
+TreeMatcher::TreeMatcher(const Grammar& grammar)
     : _grammar(grammar), _exhausted(false) {}
 
-bool GrammarMatcher::lastExhausted() const { return _exhausted; }
+bool TreeMatcher::lastExhausted() const { return _exhausted; }
 
-const Grammar& GrammarMatcher::grammar() const { return _grammar; }
+const Grammar& TreeMatcher::grammar() const { return _grammar; }
 
-bool GrammarMatcher::octetMatches(int node, unsigned char c) const {
+bool TreeMatcher::octetMatches(int node, unsigned char c) const {
   const GrammarNode& n = _grammar.node(node);
 
   switch (n.kind) {
@@ -47,7 +49,7 @@ bool GrammarMatcher::octetMatches(int node, unsigned char c) const {
   }
 }
 
-bool GrammarMatcher::isSingleOctet(int node) const {
+bool TreeMatcher::isSingleOctet(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
   if (_singleOctet.size() < index + 1) _singleOctet.resize(index + 1, 0);
 
@@ -90,7 +92,7 @@ bool GrammarMatcher::isSingleOctet(int node) const {
   return yes;
 }
 
-const unsigned char* GrammarMatcher::octetBitmap(int node) const {
+const unsigned char* TreeMatcher::octetBitmap(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
 
   if (_bitmapBuilt.size() < index + 1) {
@@ -108,7 +110,7 @@ const unsigned char* GrammarMatcher::octetBitmap(int node) const {
   return bits;
 }
 
-bool GrammarMatcher::matchContinuation(const Continuation* k, std::size_t pos,
+bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos,
                                        Walk& walk) const {
   if (walk.exhausted) return false;
 
@@ -142,7 +144,7 @@ bool GrammarMatcher::matchContinuation(const Continuation* k, std::size_t pos,
   return false;
 }
 
-bool GrammarMatcher::matchSequence(int node, int childNo, std::size_t pos,
+bool TreeMatcher::matchSequence(int node, int childNo, std::size_t pos,
                                    const Continuation* next, Walk& walk) const {
   const GrammarNode& n = _grammar.node(node);
   if (childNo >= n.count) return matchContinuation(next, pos, walk);
@@ -157,7 +159,7 @@ bool GrammarMatcher::matchSequence(int node, int childNo, std::size_t pos,
   return matchNode(_grammar.child(n.first + childNo), pos, &frame, walk);
 }
 
-bool GrammarMatcher::matchRepetition(int node, int count, std::size_t iterStart,
+bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart,
                                      std::size_t pos, const Continuation* next,
                                      Walk& walk) const {
   if (walk.exhausted) return false;
@@ -218,7 +220,7 @@ bool GrammarMatcher::matchRepetition(int node, int count, std::size_t iterStart,
   return false;
 }
 
-bool GrammarMatcher::matchNode(int node, std::size_t pos,
+bool TreeMatcher::matchNode(int node, std::size_t pos,
                                const Continuation* next, Walk& walk) const {
   if (walk.exhausted) return false;
 
@@ -300,13 +302,11 @@ bool GrammarMatcher::matchNode(int node, std::size_t pos,
   return ok;
 }
 
-bool GrammarMatcher::match(int rule, const std::string& line,
+bool TreeMatcher::match(int rule, const std::string& line,
                            MatchResult& out) const {
   _exhausted = false;
 
-  out._grammar = &_grammar;
-  out._values.assign(_grammar.captureCount(), std::string());
-  out._present.assign(_grammar.captureCount(), 0);
+  out.reset(_grammar);
 
   const int root = _grammar.ruleRoot(rule);
   if (root == Grammar::kNoRule) return false;
@@ -323,8 +323,12 @@ bool GrammarMatcher::match(int rule, const std::string& line,
 
   _exhausted = walk.exhausted;
   if (ok) {
-    out._values.swap(walk.values);
-    out._present.swap(walk.present);
+    out.adopt(walk.values, walk.present);
   }
   return ok;
 }
+
+const char* TreeMatcher::strategy() const { return "interpreted/tree"; }
+
+}  // namespace Interpreted
+}  // namespace Abnf

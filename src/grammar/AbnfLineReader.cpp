@@ -6,6 +6,7 @@
 
 #include "grammar/AbnfChars.hpp"
 
+namespace Abnf {
 AbnfLineReader::AbnfLineReader() : _errorLine(0) {}
 
 const std::string& AbnfLineReader::error() const { return _error; }
@@ -85,3 +86,5 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
   if (!pending.text.empty()) out.push_back(pending);
   return true;
 }
+
+}  // namespace Abnf

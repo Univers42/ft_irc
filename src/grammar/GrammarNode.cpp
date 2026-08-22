@@ -1,5 +1,6 @@
 #include "grammar/GrammarNode.hpp"
 
+namespace Abnf {
 const int GrammarNode::kUnbounded = -1;
 const int GrammarNode::kNoCapture = -1;
 
@@ -11,3 +12,5 @@ GrammarNode::GrammarNode()
       count(0),
       literal(-1),
       capture(kNoCapture) {}
+
+}  // namespace Abnf

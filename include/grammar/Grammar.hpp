@@ -7,6 +7,7 @@
 
 #include "grammar/GrammarNode.hpp"
 
+namespace Abnf {
 class Grammar {
  public:
   Grammar();
@@ -29,7 +30,7 @@ class Grammar {
   void clear();
 
  private:
-  friend class AbnfCompiler;
+  friend class GrammarBuilder;
 
   std::vector<GrammarNode> _nodes;
   std::vector<int> _children;
@@ -38,5 +39,7 @@ class Grammar {
   std::vector<std::string> _ruleNames;
   std::vector<int> _ruleRoots;
 };
+
+}  // namespace Abnf
 
 #endif

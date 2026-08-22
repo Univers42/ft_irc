@@ -52,10 +52,10 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/grammar/Grammar.cpp \
 			  ../src/grammar/AbnfChars.cpp \
 			  ../src/grammar/AbnfLineReader.cpp \
-			  ../src/grammar/AbnfCompiler.cpp \
+			  ../src/grammar/GrammarBuilder.cpp \
 			  ../src/grammar/GrammarValidator.cpp \
 			  ../src/grammar/MatchResult.cpp \
-			  ../src/grammar/GrammarMatcher.cpp \
+			  ../src/grammar/interpreted/TreeMatcher.cpp \
 			  ../src/grammar/EmbeddedGrammarSource.cpp \
 			  ../src/grammar/FileGrammarSource.cpp \
 			  ../src/IrcCase.cpp \
@@ -71,8 +71,8 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 # ── Test sources ──────────────────────────────────────────────
 TEST_SRCS	= test_main.cpp \
 			  test_message.cpp \
-			  test_abnfcompiler.cpp \
-			  test_grammarmatcher.cpp \
+			  test_grammarbuilder.cpp \
+			  test_treematcher.cpp \
 			  test_client.cpp \
 			  test_channel.cpp \
 			  test_bot.cpp \
@@ -90,8 +90,14 @@ TEST_SRCS	= test_main.cpp \
 GTEST_SRC	= ../vendor/googletest/googletest/src/gtest-all.cc
 PM_SRC		= ../vendor/PostMan.cpp
 
-# ── Object directory ──────────────────────────────────────────
-OBJDIR		= obj
+# ── Build tree ────────────────────────────────────────────────
+#  Shared with the server build: everything generated goes under the repo
+#  root's build/, so `make clean` up there wipes these objects too and the
+#  tests/ directory stays source-only.
+BUILDDIR	= ../build
+OBJDIR		= $(BUILDDIR)/obj/tests
+BINDIR		= $(BUILDDIR)/bin
+BIN			= $(BINDIR)/$(NAME)
 
 PROJ_OBJS		= $(patsubst ../src/%.cpp,$(OBJDIR)/proj_%.o,$(PROJ_SRCS))
 LIBCPP_OBJS		= $(patsubst $(LIBCPP)/src/%.cpp,$(OBJDIR)/libcpp/%.o,$(LIBCPP_SRCS))
@@ -106,12 +112,13 @@ ALL_OBJS	= $(PROJ_OBJS) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(TEST_OBJS) $(GTEST_OBJ
 #  Targets
 # ══════════════════════════════════════════════════════════════
 
-all: $(NAME)
+all: $(BIN)
 	@echo "\n══════ Running tests ══════\n"
-	./$(NAME)
+	$(BIN)
 
-$(NAME): $(ALL_OBJS)
-	$(CXX) $(CXXFLAGS) $(ALL_OBJS) -o $(NAME) $(LDFLAGS)
+$(BIN): $(ALL_OBJS)
+	@mkdir -p $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(ALL_OBJS) -o $(BIN) $(LDFLAGS)
 
 # Project sources
 $(OBJDIR)/proj_%.o: ../src/%.cpp
@@ -145,14 +152,14 @@ $(PM_OBJ): $(PM_SRC)
 	@mkdir -p $(OBJDIR)
 	$(CXX) $(CXXFLAGS) $(INC_PM) -c $< -o $@
 
-build: $(NAME)
-	@echo "\n══════ Built $(NAME) (not run) ══════\n"
+build: $(BIN)
+	@echo "\n══════ Built $(BIN) (not run) ══════\n"
 
 clean:
 	rm -rf $(OBJDIR)
 
 fclean: clean
-	rm -f $(NAME)
+	rm -f $(BIN)
 
 re: fclean all
 

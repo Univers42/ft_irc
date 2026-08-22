@@ -2,6 +2,7 @@
 
 #include <string>
 
+namespace Abnf {
 const int Grammar::kNoRule = -1;
 
 namespace {
@@ -77,3 +78,5 @@ void Grammar::clear() {
   _ruleNames.clear();
   _ruleRoots.clear();
 }
+
+}  // namespace Abnf

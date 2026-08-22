@@ -4,8 +4,8 @@
 
 #include "grammar/Grammar.hpp"
 
+namespace Abnf {
 namespace {
-
 const std::string& emptyString() {
   static const std::string kEmpty;
   return kEmpty;
@@ -41,3 +41,17 @@ void MatchResult::clear() {
   _present.clear();
   _grammar = NULL;
 }
+
+void MatchResult::reset(const Grammar& grammar) {
+  _grammar = &grammar;
+  _values.assign(grammar.captureCount(), std::string());
+  _present.assign(grammar.captureCount(), 0);
+}
+
+void MatchResult::adopt(std::vector<std::string>& values,
+                        std::vector<char>& present) {
+  _values.swap(values);
+  _present.swap(present);
+}
+
+}  // namespace Abnf

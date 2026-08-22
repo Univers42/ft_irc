@@ -1,6 +1,7 @@
 #ifndef GRAMMARNODE_HPP
 #define GRAMMARNODE_HPP
 
+namespace Abnf {
 struct GrammarNode {
   enum Kind {
     Reference,
@@ -26,5 +27,7 @@ struct GrammarNode {
 
   static const int kNoCapture;
 };
+
+}  // namespace Abnf
 
 #endif

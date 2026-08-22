@@ -6,6 +6,7 @@
 
 #include "grammar/Grammar.hpp"
 
+namespace Abnf {
 class GrammarValidator {
  public:
   GrammarValidator();
@@ -26,5 +27,7 @@ class GrammarValidator {
   const Grammar* _grammar;
   std::string _error;
 };
+
+}  // namespace Abnf
 
 #endif

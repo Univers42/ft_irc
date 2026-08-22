@@ -1,29 +1,35 @@
-#ifndef GRAMMARMATCHER_HPP
-#define GRAMMARMATCHER_HPP
+#ifndef TREEMATCHER_HPP
+#define TREEMATCHER_HPP
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
 #include "grammar/Grammar.hpp"
+#include "grammar/IMatcher.hpp"
 #include "grammar/MatchResult.hpp"
 
-class GrammarMatcher {
+namespace Abnf {
+namespace Interpreted {
+class TreeMatcher : public IMatcher {
  public:
   static const long kMaxSteps;
   static const int kMaxDepth;
 
-  explicit GrammarMatcher(const Grammar& grammar);
+  explicit TreeMatcher(const Grammar& grammar);
 
-  bool match(int rule, const std::string& line, MatchResult& out) const;
+  virtual bool match(int rule, const std::string& line,
+                     MatchResult& out) const;
 
-  bool lastExhausted() const;
+  virtual const char* strategy() const;
+
+  virtual bool lastExhausted() const;
 
   const Grammar& grammar() const;
 
  private:
-  GrammarMatcher(const GrammarMatcher& other);
-  GrammarMatcher& operator=(const GrammarMatcher& other);
+  TreeMatcher(const TreeMatcher& other);
+  TreeMatcher& operator=(const TreeMatcher& other);
 
   enum ContinuationKind {
     ContNode,
@@ -71,5 +77,8 @@ class GrammarMatcher {
   mutable std::vector<unsigned char> _bitmaps;
   mutable std::vector<char> _bitmapBuilt;
 };
+
+}  // namespace Interpreted
+}  // namespace Abnf
 
 #endif

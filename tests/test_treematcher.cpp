@@ -1,4 +1,4 @@
-/* ─── Unit tests: GrammarMatcher ───
+/* ─── Unit tests: TreeMatcher ───
 **
 ** Compilation is tested in test_abnfcompiler.cpp. This file tests MATCHING:
 * does a
@@ -11,10 +11,10 @@
 
 #include <string>
 
-#include "grammar/AbnfCompiler.hpp"
+#include "grammar/GrammarBuilder.hpp"
 #include "grammar/EmbeddedGrammarSource.hpp"
 #include "grammar/Grammar.hpp"
-#include "grammar/GrammarMatcher.hpp"
+#include "grammar/interpreted/TreeMatcher.hpp"
 #include "grammar/MatchResult.hpp"
 
 namespace {
@@ -47,7 +47,7 @@ const char* kIrc =
     "join-cmd   =  \"JOIN\" SPACE ( \"0\" / $chanlist [ SPACE $keylist ] )\n"
     "privmsg-cmd = \"PRIVMSG\" SPACE $target SPACE \":\" $text\n";
 
-/* Grammar holds, AbnfCompiler builds, GrammarMatcher walks. A fixture wires
+/* Grammar holds, GrammarBuilder builds, TreeMatcher walks. A fixture wires
 ** the three together so a test can just say "does this line match?". */
 class MatcherFixture : public ::testing::Test {
  protected:
@@ -55,13 +55,13 @@ class MatcherFixture : public ::testing::Test {
   ~MatcherFixture() { delete _matcher; }
 
   bool compile(const std::string& text) {
-    AbnfCompiler compiler;
+    Abnf::GrammarBuilder compiler;
     if (!compiler.compile(text, _grammar)) {
       _error = compiler.error();
       return false;
     }
     delete _matcher;
-    _matcher = new GrammarMatcher(_grammar);
+    _matcher = new Abnf::Interpreted::TreeMatcher(_grammar);
     return true;
   }
 
@@ -71,10 +71,10 @@ class MatcherFixture : public ::testing::Test {
 
   bool exhausted() const { return _matcher->lastExhausted(); }
 
-  Grammar _grammar;
-  GrammarMatcher* _matcher;
+  Abnf::Grammar _grammar;
+  Abnf::Interpreted::TreeMatcher* _matcher;
   std::string _error;
-  MatchResult r;
+  Abnf::MatchResult r;
 };
 
 class GrammarTest : public MatcherFixture {
@@ -331,8 +331,8 @@ TEST_F(GrammarTest, ZeroWidthRepetitionTerminates) {
 /* ── Misuse ── */
 
 TEST_F(GrammarTest, UnknownRuleNeverMatches) {
-  EXPECT_EQ(_grammar.ruleIndex("no-such-rule"), Grammar::kNoRule);
-  EXPECT_FALSE(_matcher->match(Grammar::kNoRule, "anything", r));
+  EXPECT_EQ(_grammar.ruleIndex("no-such-rule"), Abnf::Grammar::kNoRule);
+  EXPECT_FALSE(_matcher->match(Abnf::Grammar::kNoRule, "anything", r));
 }
 
 TEST_F(GrammarTest, CaptureLookupOfAnUnknownNameIsEmptyNotACrash) {
@@ -351,7 +351,7 @@ namespace {
 class ShippedGrammar : public MatcherFixture {
  protected:
   void SetUp() {
-    EmbeddedGrammarSource source;
+    Abnf::EmbeddedGrammarSource source;
     std::string text;
     ASSERT_TRUE(source.read(text)) << source.origin();
     ASSERT_TRUE(compile(text)) << _error;

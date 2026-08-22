@@ -2,6 +2,7 @@
 
 #include <string>
 
+namespace Abnf {
 namespace AbnfChars {
 bool isAlpha(char c) {
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
@@ -42,3 +43,5 @@ std::string trimmed(const std::string& s) {
 }
 
 }  // namespace AbnfChars
+
+}  // namespace Abnf

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+namespace Abnf {
 class AbnfLineReader {
  public:
   struct Line {
@@ -25,5 +26,7 @@ class AbnfLineReader {
   std::string _error;
   std::size_t _errorLine;
 };
+
+}  // namespace Abnf
 
 #endif

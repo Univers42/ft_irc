@@ -1,5 +1,5 @@
-#ifndef ABNFCOMPILER_HPP
-#define ABNFCOMPILER_HPP
+#ifndef GRAMMARBUILDER_HPP
+#define GRAMMARBUILDER_HPP
 
 #include <cstddef>
 #include <string>
@@ -7,16 +7,17 @@
 
 #include "grammar/Grammar.hpp"
 
-class AbnfCompiler {
+namespace Abnf {
+class GrammarBuilder {
  public:
-  AbnfCompiler();
+  GrammarBuilder();
 
   bool compile(const std::string& text, Grammar& out);
   const std::string& error() const;
 
  private:
-  AbnfCompiler(const AbnfCompiler& other);
-  AbnfCompiler& operator=(const AbnfCompiler& other);
+  GrammarBuilder(const GrammarBuilder& other);
+  GrammarBuilder& operator=(const GrammarBuilder& other);
 
   int internRule(const std::string& name);
   int internCapture(const std::string& name);
@@ -36,5 +37,7 @@ class AbnfCompiler {
   std::string _error;
   std::size_t _lineNo;
 };
+
+}  // namespace Abnf
 
 #endif

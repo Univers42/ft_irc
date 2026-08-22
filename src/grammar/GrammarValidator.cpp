@@ -5,6 +5,7 @@
 
 #include "grammar/GrammarNode.hpp"
 
+namespace Abnf {
 GrammarValidator::GrammarValidator() : _grammar(NULL) {}
 
 const std::string& GrammarValidator::error() const { return _error; }
@@ -122,3 +123,5 @@ bool GrammarValidator::checkNoLeftRecursion() {
   }
   return true;
 }
+
+}  // namespace Abnf

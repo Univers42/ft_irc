@@ -3,6 +3,7 @@
 
 #include <string>
 
+namespace Abnf {
 class IGrammarSource {
  public:
   virtual ~IGrammarSource() {}
@@ -11,5 +12,7 @@ class IGrammarSource {
 
   virtual bool read(std::string& out) const = 0;
 };
+
+}  // namespace Abnf
 
 #endif

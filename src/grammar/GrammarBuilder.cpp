@@ -1,4 +1,4 @@
-#include "grammar/AbnfCompiler.hpp"
+#include "grammar/GrammarBuilder.hpp"
 
 #include <cstdlib>
 #include <sstream>
@@ -9,6 +9,7 @@
 #include "grammar/AbnfLineReader.hpp"
 #include "grammar/GrammarValidator.hpp"
 
+namespace Abnf {
 using AbnfChars::isAlpha;
 using AbnfChars::isDigit;
 using AbnfChars::isHexDigit;
@@ -16,18 +17,18 @@ using AbnfChars::isRuleChar;
 using AbnfChars::lowered;
 using AbnfChars::skipBlanks;
 
-AbnfCompiler::AbnfCompiler() : _grammar(NULL), _lineNo(0) {}
+GrammarBuilder::GrammarBuilder() : _grammar(NULL), _lineNo(0) {}
 
-const std::string& AbnfCompiler::error() const { return _error; }
+const std::string& GrammarBuilder::error() const { return _error; }
 
-bool AbnfCompiler::fail(const std::string& message) {
+bool GrammarBuilder::fail(const std::string& message) {
   std::ostringstream os;
   os << "grammar: line " << _lineNo << ": " << message;
   _error = os.str();
   return false;
 }
 
-int AbnfCompiler::internRule(const std::string& name) {
+int GrammarBuilder::internRule(const std::string& name) {
   const std::string key = lowered(name);
   for (std::size_t i = 0; i < _grammar->_ruleNames.size(); ++i)
     if (_grammar->_ruleNames[i] == key) return static_cast<int>(i);
@@ -38,7 +39,7 @@ int AbnfCompiler::internRule(const std::string& name) {
   return static_cast<int>(_grammar->_ruleNames.size() - 1);
 }
 
-int AbnfCompiler::internCapture(const std::string& name) {
+int GrammarBuilder::internCapture(const std::string& name) {
   for (std::size_t i = 0; i < _grammar->_captureNames.size(); ++i)
     if (_grammar->_captureNames[i] == name) return static_cast<int>(i);
 
@@ -46,19 +47,19 @@ int AbnfCompiler::internCapture(const std::string& name) {
   return static_cast<int>(_grammar->_captureNames.size() - 1);
 }
 
-int AbnfCompiler::addNode(const GrammarNode& node) {
+int GrammarBuilder::addNode(const GrammarNode& node) {
   _grammar->_nodes.push_back(node);
   return static_cast<int>(_grammar->_nodes.size() - 1);
 }
 
-int AbnfCompiler::addChildren(const std::vector<int>& children) {
+int GrammarBuilder::addChildren(const std::vector<int>& children) {
   const int first = static_cast<int>(_grammar->_children.size());
   for (std::size_t i = 0; i < children.size(); ++i)
     _grammar->_children.push_back(children[i]);
   return first;
 }
 
-bool AbnfCompiler::parseNumericValue(const std::string& s, std::size_t& i,
+bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i,
                                      int& out) {
   if (i >= s.size() || (s[i] != 'x' && s[i] != 'X'))
     return fail("only the %x form of num-val is supported");
@@ -110,7 +111,7 @@ bool AbnfCompiler::parseNumericValue(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool AbnfCompiler::parseElement(const std::string& s, std::size_t& i,
+bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i,
                                 int& out) {
   skipBlanks(s, i);
   if (i >= s.size()) return fail("expected an element, found end of rule");
@@ -191,7 +192,7 @@ bool AbnfCompiler::parseElement(const std::string& s, std::size_t& i,
   return fail(std::string("unexpected character '") + c + "' in rule body");
 }
 
-bool AbnfCompiler::parseRepetition(const std::string& s, std::size_t& i,
+bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i,
                                    int& out) {
   skipBlanks(s, i);
 
@@ -242,7 +243,7 @@ bool AbnfCompiler::parseRepetition(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool AbnfCompiler::parseConcatenation(const std::string& s, std::size_t& i,
+bool GrammarBuilder::parseConcatenation(const std::string& s, std::size_t& i,
                                       int& out) {
   std::vector<int> parts;
 
@@ -271,7 +272,7 @@ bool AbnfCompiler::parseConcatenation(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool AbnfCompiler::parseAlternation(const std::string& s, std::size_t& i,
+bool GrammarBuilder::parseAlternation(const std::string& s, std::size_t& i,
                                     int& out) {
   std::vector<int> branches;
 
@@ -301,7 +302,7 @@ bool AbnfCompiler::parseAlternation(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool AbnfCompiler::parseRule(const std::string& line, std::size_t lineNo) {
+bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
   _lineNo = lineNo;
 
   std::size_t i = 0;
@@ -356,7 +357,7 @@ bool AbnfCompiler::parseRule(const std::string& line, std::size_t lineNo) {
   return true;
 }
 
-bool AbnfCompiler::compile(const std::string& text, Grammar& out) {
+bool GrammarBuilder::compile(const std::string& text, Grammar& out) {
   _error.clear();
   _lineNo = 0;
 
@@ -380,3 +381,5 @@ bool AbnfCompiler::compile(const std::string& text, Grammar& out) {
   }
   return true;
 }
+
+}  // namespace Abnf

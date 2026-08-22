@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+namespace Abnf {
 class Grammar;
 
 class MatchResult {
@@ -17,14 +18,18 @@ class MatchResult {
 
   void clear();
 
- private:
-  friend class GrammarMatcher;
+  void reset(const Grammar& grammar);
 
+  void adopt(std::vector<std::string>& values, std::vector<char>& present);
+
+ private:
   int slotOf(const std::string& name) const;
 
   const Grammar* _grammar;
   std::vector<std::string> _values;
   std::vector<char> _present;
 };
+
+}  // namespace Abnf
 
 #endif

@@ -2,6 +2,7 @@
 
 #include <string>
 
+namespace Abnf {
 namespace {
 const char kGrammar[] =
 
@@ -82,3 +83,5 @@ bool EmbeddedGrammarSource::read(std::string& out) const {
   out.assign(kGrammar);
   return true;
 }
+
+}  // namespace Abnf

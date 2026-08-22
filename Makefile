@@ -118,8 +118,23 @@ HINT = $(C_DIM)   make help  $(S_DOT)  targets, tiers and overridable flags$(C_R
 #
 #  Tiers differ ONLY in which sources are linked (per-tier object dirs, one
 #  registerExtensions() TU each); the kernel sources are identical.
+#  Everything the build generates lives under build/: objects and dependency
+#  files in build/obj/<tier>/ (mirroring the source tree), linked binaries in
+#  build/bin/. The only generated name left in the repo root is the ./ircserv
+#  symlink below, so `rm -rf build ircserv` is a complete clean and the root
+#  listing stays source-only.
 TIER		?= full
-OBJDIR		= obj/$(TIER)
+BUILDDIR	= build
+BINDIR		= $(BUILDDIR)/bin
+OBJROOT		= $(BUILDDIR)/obj
+OBJDIR		= $(OBJROOT)/$(TIER)
+
+#  The subject runs the server as `./ircserv <port> <password>` from the repo
+#  root (subject.txt:191) and every script here does the same, so that name
+#  has to keep working. The link output is build/bin/ircserv; ./ircserv is a
+#  relative symlink onto it, created by the $(NAME) rule and removed by
+#  fclean. Nothing needs to know which of the two it is holding.
+BIN			= $(BINDIR)/$(NAME)
 
 #  Written by the link recipe and consumed by `build`, so the closing banner
 #  can say "built" or "is up to date" without guessing. The wording matters:
@@ -168,10 +183,10 @@ CORE_NAMES	= main \
 			  grammar/Grammar \
 			  grammar/AbnfChars \
 			  grammar/AbnfLineReader \
-			  grammar/AbnfCompiler \
+			  grammar/GrammarBuilder \
 			  grammar/GrammarValidator \
 			  grammar/MatchResult \
-			  grammar/GrammarMatcher \
+			  grammar/interpreted/TreeMatcher \
 			  grammar/EmbeddedGrammarSource \
 			  grammar/FileGrammarSource \
 			  IrcCase \
@@ -258,14 +273,22 @@ build: $(NAME)
 #  Everything on this line is a plain object file — no archive, so link order
 #  carries no meaning and the libcpp objects can stay first, matching the
 #  build order.
-$(NAME): obj/.tier_$(TIER) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(OBJS)
-	$(call tag,$(C_GRN),LINK  ,$(C_BLD)$(NAME)$(C_RST))
-	$(AT)$(CXX) $(CXXFLAGS) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(OBJS) -o $(NAME)
+#  make stats through the symlink, so once ./ircserv points at a freshly
+#  linked build/bin/ircserv the two share an mtime and this rule stays a
+#  no-op -- which is what keeps the audit's "second make is a no-op" check
+#  passing.
+$(NAME): $(BIN)
+	$(AT)ln -sf $(BIN) $(NAME)
+
+$(BIN): $(OBJROOT)/.tier_$(TIER) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(OBJS)
+	$(call tag,$(C_GRN),LINK  ,$(C_BLD)$(BIN)$(C_RST))
+	@mkdir -p $(BINDIR)
+	$(AT)$(CXX) $(CXXFLAGS) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(OBJS) -o $(BIN)
 	@mkdir -p $(OBJDIR) && touch $(LINKSTAMP)
 
-obj/.tier_$(TIER):
-	@mkdir -p obj
-	@rm -f obj/.tier_*
+$(OBJROOT)/.tier_$(TIER):
+	@mkdir -p $(OBJROOT)
+	@rm -f $(OBJROOT)/.tier_*
 	@touch $@
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
@@ -285,13 +308,18 @@ $(OBJDIR)/libcpp98/%.o: $(LIBCPP)/c98/src/%.cpp
 
 -include $(OBJS:.o=.d) $(LIBCPP_OBJS:.o=.d) $(LIBCPP98_OBJS:.o=.d)
 
+#  clean drops every object tree under build/obj -- the three server tiers
+#  and the test suite's, since they all live there now. fclean removes what
+#  is left of build/ (the binaries) plus the ./ircserv symlink, leaving no
+#  generated file anywhere in the tree.
 clean:
-	$(call act,$(C_YEL),CLEAN ,obj/ $(C_DIM)(objects + deps, every tier)$(C_RST))
-	@rm -rf obj
+	$(call act,$(C_YEL),CLEAN ,$(OBJROOT)/ $(C_DIM)(objects + deps, every tier)$(C_RST))
+	@rm -rf $(OBJROOT)
 
 fclean: clean
-	$(call act,$(C_YEL),CLEAN ,$(NAME))
+	$(call act,$(C_YEL),CLEAN ,$(BUILDDIR)/ $(C_DIM)+$(C_RST) ./$(NAME))
 	@rm -f $(NAME)
+	@rm -rf $(BUILDDIR)
 
 re: fclean all
 
@@ -366,6 +394,13 @@ help:
 	'                   -Werror check. Never build tiers concurrently: unbounded' \
 	'                   parallel builds swap-freeze low-headroom machines.' \
 	'' \
+	'  $(C_YEL)BUILD LAYOUT$(C_RST) $(C_DIM)— every generated file lives under build/$(C_RST)' \
+	'    $(C_CYA)build/obj/$$(TIER)/$(C_RST)   .o and .d, mirroring src/ (plus libcpp/, libcpp98/).' \
+	'    $(C_CYA)build/obj/tests/$(C_RST)     the Google Test suite objects.' \
+	'    $(C_CYA)build/bin/$(C_RST)           $(NAME) and test_runner.' \
+	'    $(C_CYA)./$(NAME)$(C_RST)            symlink to build/bin/$(NAME), so the subject'"'"'s' \
+	'                         ./$(NAME) <port> <password> keeps working from the root.' \
+	'' \
 	'  $(C_YEL)RUN$(C_RST)' \
 	'    ./$(NAME) <port> <password>          $(C_DIM)e.g. ./$(NAME) 6667 mypass$(C_RST)' \
 	'    nc -C 127.0.0.1 6667                 $(C_DIM)manual smoke test: PASS / NICK / USER / JOIN$(C_RST)' \
@@ -373,7 +408,7 @@ help:
 	'  $(C_YEL)TESTS$(C_RST)' \
 	'    $(C_GRN)test$(C_RST)           build + run the Google Test suite (C++17, in-process,' \
 	'                   delegates to tests/Makefile). Single case:' \
-	'                   $(C_DIM)make -C tests build && ./tests/test_runner --gtest_filter=Channel*$(C_RST)' \
+	'                   $(C_DIM)make -C tests build && ./build/bin/test_runner --gtest_filter=Channel*$(C_RST)' \
 	'    $(C_GRN)testclean$(C_RST)      remove the test build artifacts.' \
 	'' \
 	'  $(C_YEL)LIBRARY$(C_RST) $(C_DIM)— vendor/libcpp$(C_RST)' \
@@ -399,14 +434,15 @@ help:
 	'                   $(C_DIM)conventions, so a diff does not mean a file is wrong.$(C_RST)' \
 	'' \
 	'  $(C_YEL)HOUSEKEEPING$(C_RST)' \
-	'    $(C_GRN)clean$(C_RST)          remove obj/ (all tiers).      $(C_GRN)fclean$(C_RST)   clean + the binary.' \
+	'    $(C_GRN)clean$(C_RST)          remove build/obj/ (all tiers, tests included).' \
+	'    $(C_GRN)fclean$(C_RST)         clean + build/ + the ./$(NAME) symlink.' \
 	'    $(C_GRN)re$(C_RST)             fclean, then a full build.    $(C_GRN)help$(C_RST)     this screen.' \
 	'' \
 	'  $(C_YEL)OVERRIDABLE VARIABLES$(C_RST) $(C_DIM)— pass on the command line: make <target> VAR=value$(C_RST)' \
 	'    $(C_CYA)TIER$(C_RST)=full|bonus|mandatory' \
 	'                   which source set to link. Prefer the named targets above;' \
-	'                   obj/$$(TIER)/ keeps the three object sets apart, and' \
-	'                   obj/.tier_* forces the relink when you switch tiers.' \
+	'                   build/obj/$$(TIER)/ keeps the three object sets apart, and' \
+	'                   build/obj/.tier_* forces the relink when you switch tiers.' \
 	'                   $(C_DIM)current: $(TIER)$(C_RST)' \
 	'    $(C_CYA)CXX$(C_RST)            the compiler.  $(C_DIM)current: $(CXX)$(C_RST)' \
 	'    $(C_CYA)CXXFLAGS$(C_RST)       $(C_DIM)current: $(CXXFLAGS)$(C_RST)' \

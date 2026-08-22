@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 
+namespace Abnf {
 FileGrammarSource::FileGrammarSource(const std::string& path) : _path(path) {}
 
 FileGrammarSource::~FileGrammarSource() {}
@@ -19,3 +20,5 @@ bool FileGrammarSource::read(std::string& out) const {
   out = buffer.str();
   return true;
 }
+
+}  // namespace Abnf
