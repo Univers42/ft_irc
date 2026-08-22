@@ -22,6 +22,7 @@
 #include "grammar/EmbeddedGrammarSource.hpp"
 #include "grammar/FileGrammarSource.hpp"
 #include "grammar/GrammarBuilder.hpp"
+#include "grammar/compiled/ProgramMatcher.hpp"
 #include "grammar/interpreted/TreeMatcher.hpp"
 #include "IrcTrace.hpp"
 #include "Log.hpp"
@@ -87,7 +88,19 @@ void Server::initGrammar() {
     throw std::runtime_error(std::string("grammar from ") + source.origin() +
                              ": " + builder.error());
 
-  _matcher = new Abnf::Interpreted::TreeMatcher(_grammar);
+  const char* strategy = std::getenv("FT_IRC_MATCHER");
+  if (strategy != NULL && std::string(strategy) == "compiled") {
+    Abnf::Compiled::ProgramMatcher* compiled =
+        new Abnf::Compiled::ProgramMatcher(_grammar);
+    if (!compiled->compileAll()) {
+      const std::string why = compiled->error();
+      delete compiled;
+      throw std::runtime_error("compiled matcher: " + why);
+    }
+    _matcher = compiled;
+  } else {
+    _matcher = new Abnf::Interpreted::TreeMatcher(_grammar);
+  }
   _messageRule = _grammar.ruleIndex("message");
   if (_messageRule == Abnf::Grammar::kNoRule)
     throw std::runtime_error("grammar defines no 'message' rule");

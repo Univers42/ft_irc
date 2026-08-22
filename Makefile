@@ -187,6 +187,9 @@ CORE_NAMES	= main \
 			  grammar/GrammarValidator \
 			  grammar/MatchResult \
 			  grammar/interpreted/TreeMatcher \
+			  grammar/compiled/Program \
+			  grammar/compiled/ProgramCompiler \
+			  grammar/compiled/ProgramMatcher \
 			  grammar/EmbeddedGrammarSource \
 			  grammar/FileGrammarSource \
 			  IrcCase \

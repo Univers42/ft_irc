@@ -56,6 +56,9 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/grammar/GrammarValidator.cpp \
 			  ../src/grammar/MatchResult.cpp \
 			  ../src/grammar/interpreted/TreeMatcher.cpp \
+			  ../src/grammar/compiled/Program.cpp \
+			  ../src/grammar/compiled/ProgramCompiler.cpp \
+			  ../src/grammar/compiled/ProgramMatcher.cpp \
 			  ../src/grammar/EmbeddedGrammarSource.cpp \
 			  ../src/grammar/FileGrammarSource.cpp \
 			  ../src/IrcCase.cpp \
@@ -73,6 +76,7 @@ TEST_SRCS	= test_main.cpp \
 			  test_message.cpp \
 			  test_grammarbuilder.cpp \
 			  test_treematcher.cpp \
+			  test_matcherdifferential.cpp \
 			  test_client.cpp \
 			  test_channel.cpp \
 			  test_bot.cpp \
@@ -84,7 +88,8 @@ TEST_SRCS	= test_main.cpp \
 			  test_libcpp98.cpp \
 			  test_conformance.cpp \
 			  test_libcpp_str.cpp \
-			  test_postman.cpp
+			  test_postman.cpp \
+			  test_modes.cpp
 
 # ── Vendor sources ────────────────────────────────────────────
 GTEST_SRC	= ../vendor/googletest/googletest/src/gtest-all.cc
