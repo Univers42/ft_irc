@@ -9,88 +9,19 @@
 
 class Server;
 
-/*
-** # WHAT IS A BUS
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-**
-
-** PlatformBus — the one original in-binary feature.
-**
-** A second listening socket bound to 127.0.0.1 (loopback only), multiplexed in
-** the SAME epoll as the IRC listener (no extra poll() — subject-legal). It lets
-** a local platform backend push real-time events that get injected into IRC
-** channels as a virtual "service" participant, exactly like the Bot does.
-**
-** It is OPT-IN: created only when a config file enables it (see Server). The
-** plain `./ircserv <port> <password>` invocation never opens it, so the graded
-** RFC behaviour is unchanged.
-**
-** Loopback TCP (not a Unix-domain socket) is deliberate: it uses only the
-** socket calls the subject already allows (socket/bind/listen/accept), with no
-** unlink()/chmod().
-**
-** Line protocol (one command per line, '\n' terminated):
-**   AUTH <secret>                     authenticate the connection (if a secret
-**                                     is configured)
-**   PUB <#channel> <type> :<message>  inject an event into a channel
-**   PING                              liveness check -> "PONG"
-*/
 class PlatformBus : public IServerExtension {
  public:
   PlatformBus(Server* server, int port, const std::string& secret,
               const std::string& serviceNick);
   ~PlatformBus();
 
-  /* ─── IServerExtension ─── */
   const char* name() const;
-  void onServerStart(Server& server); /* binds + listens */
-  bool ownsFd(int fd) const;          /* listen fd + connections */
+  void onServerStart(Server& server);
+  bool ownsFd(int fd) const;
   void onFdEvent(Server& server, int fd, uint32_t events);
 
-  bool start();            /* bind+listen on 127.0.0.1:port */
-  bool owns(int fd) const; /* is fd a bus connection? */
+  bool start();
+  bool owns(int fd) const;
   void acceptConnection();
   void handleInput(int fd);
   void closeConnection(int fd);
@@ -120,4 +51,4 @@ class PlatformBus : public IServerExtension {
   std::map<int, Conn> _conns;
 };
 
-#endif /* PLATFORMBUS_HPP */
+#endif

@@ -1,5 +1,3 @@
-/* ─── Messaging commands: PRIVMSG, NOTICE, PING, PONG, QUIT ─── */
-
 #include <string>
 #include <vector>
 
@@ -8,19 +6,12 @@
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
 
-/* ─── PRIVMSG ─── */
-
 void Server::cmdPrivmsg(Client* client, const Message& msg) {
-  /* An empty target is a missing target, not something to interpolate
-  ** into a numeric (where it collapses two spaces and shifts the
-  ** parameter list for a strict parser). */
   if (msg.params.empty() || msg.params[0].empty()) {
     sendReply(client, ERR_NORECIPIENT, ":No recipient given (PRIVMSG)");
     return;
   }
-  /* A trailing ":" parses to a present-but-empty second parameter, so a
-  ** bare size check lets "PRIVMSG #chan :" through and relays an empty
-  ** message. RFC 2812 wants 412 here. */
+
   if (msg.params.size() < 2 || msg.params[1].empty()) {
     sendReply(client, ERR_NOTEXTTOSEND, ":No text to send");
     return;
@@ -34,7 +25,6 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
     const std::string& target = targets[t];
 
     if (target[0] == '#') {
-      // Channel message
       Channel* chan = findChannel(target);
       if (!chan) {
         sendReply(client, ERR_NOSUCHCHANNEL, target + " :No such channel");
@@ -49,13 +39,11 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
           ":" + client->getPrefix() + " PRIVMSG " + target + " :" + text,
           client);
     } else {
-      // A virtual participant (bot, service) may claim this target
       bool handled = false;
       for (size_t k = 0; k < _extensions.size() && !handled; ++k)
         handled = _extensions[k]->onPrivmsg(*this, *client, target, text);
       if (handled) continue;
 
-      // Private message to user
       Client* dest = findClientByNick(target);
       if (!dest) {
         sendReply(client, ERR_NOSUCHNICK, target + " :No such nick/channel");
@@ -67,11 +55,7 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
   }
 }
 
-/* ─── NOTICE ─── */
-
 void Server::cmdNotice(Client* client, const Message& msg) {
-  // NOTICE is like PRIVMSG but must never generate automatic replies --
-  // so an empty text is dropped silently rather than drawing a 412.
   if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
     return;
 
@@ -97,8 +81,6 @@ void Server::cmdNotice(Client* client, const Message& msg) {
   }
 }
 
-/* ─── PING ─── */
-
 void Server::cmdPing(Client* client, const Message& msg) {
   if (msg.params.empty()) {
     sendReply(client, ERR_NEEDMOREPARAMS, "PING :Not enough parameters");
@@ -108,15 +90,11 @@ void Server::cmdPing(Client* client, const Message& msg) {
                        msg.params[0]);
 }
 
-/* ─── PONG ─── */
-
 void Server::cmdPong(Client* client, const Message& msg) {
   (void)msg;
   client->updateLastActivity();
   client->setPingSent(false);
 }
-
-/* ─── QUIT ─── */
 
 void Server::cmdQuit(Client* client, const Message& msg) {
   std::string reason = "Quit";

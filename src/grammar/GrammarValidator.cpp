@@ -1,5 +1,8 @@
 #include "grammar/GrammarValidator.hpp"
 
+#include <string>
+#include <vector>
+
 #include "grammar/GrammarNode.hpp"
 
 GrammarValidator::GrammarValidator() : _grammar(NULL) {}
@@ -38,7 +41,7 @@ bool GrammarValidator::isNullable(int node, std::vector<char>& busy) const {
 
     case GrammarNode::Reference: {
       const std::size_t rule = static_cast<std::size_t>(n.lo);
-      if (busy[rule]) return false; /* conservative on a cycle */
+      if (busy[rule]) return false;
       busy[rule] = 1;
       const int root = _grammar->ruleRoot(n.lo);
       const bool result = (root == Grammar::kNoRule) || isNullable(root, busy);
@@ -84,9 +87,7 @@ void GrammarValidator::collectLeftReachable(int node, std::vector<char>& seen,
       for (int k = 0; k < n.count; ++k) {
         const int c = _grammar->child(n.first + k);
         collectLeftReachable(c, seen, busy);
-        /* Keep walking rightwards only while everything so far could match
-        ** nothing; past the first mandatory element we are no longer at the
-        ** left edge. */
+
         if (!isNullable(c, busy)) break;
       }
       return;

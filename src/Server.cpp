@@ -1,7 +1,5 @@
 #include "Server.hpp"
 
-#include "IrcTrace.hpp"
-
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -19,6 +17,7 @@
 #include <vector>
 
 #include "IrcCase.hpp"
+#include "IrcTrace.hpp"
 #include "Log.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
@@ -44,8 +43,6 @@ void Server::audit(const std::string& event, const std::string& actor,
   for (size_t i = 0; i < _extensions.size(); ++i)
     _extensions[i]->onAudit(event, actor, detail);
 }
-
-/* ─── Extension seam ─── */
 
 void Server::addExtension(IServerExtension* ext) {
   if (ext) _extensions.push_back(ext);
@@ -76,11 +73,9 @@ Server::~Server() {
        it != _channels.end(); ++it) {
     delete it->second;
   }
-  /* _reactor closes its epoll fd itself */
+
   if (_listenFd >= 0) close(_listenFd);
 }
-
-/* ─── Socket setup ─── */
 
 void Server::createListenSocket() {
   _listenFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -93,7 +88,6 @@ void Server::createListenSocket() {
     throw std::runtime_error("setsockopt() failed: " +
                              std::string(strerror(errno)));
 
-  // Set non-blocking
   if (fcntl(_listenFd, F_SETFL, O_NONBLOCK) < 0)
     throw std::runtime_error("fcntl() failed: " + std::string(strerror(errno)));
 
@@ -134,8 +128,6 @@ void Server::removeFromEpoll(int fd) {
     Log::error(std::string("epoll_ctl DEL failed: ") + strerror(errno));
 }
 
-/* ─── Main event loop ─── */
-
 void Server::run() {
   struct epoll_event events[MAX_EVENTS];
 
@@ -145,7 +137,6 @@ void Server::run() {
     _extensions[i]->onServerStart(*this);
 
   while (isRunning) {
-    /* The subject's single poll-equivalent call site. */
     int nfds = epoll_wait(_reactor.fd(), events, MAX_EVENTS, 1000);
     if (nfds < 0) {
       if (errno == EINTR) continue;
@@ -163,11 +154,9 @@ void Server::run() {
         if (ev & EPOLLIN) handleClientInput(fd);
         if ((ev & EPOLLOUT) && _clients.count(fd)) handleClientOutput(fd);
         if ((ev & (EPOLLERR | EPOLLHUP)) && _clients.count(fd))
-          // Immediate: the socket already signaled an error,
-          // draining into it would be futile at best.
+
           disconnectClientNow(fd, "Connection error");
       } else if (!dispatchExtensionFd(fd, ev)) {
-        /* fd belongs to nobody (raced a disconnect) — drop it */
         removeFromEpoll(fd);
       }
     }
@@ -185,7 +174,6 @@ void Server::run() {
   }
 }
 
-/* Route an epoll event to the extension owning that fd (if any). */
 bool Server::dispatchExtensionFd(int fd, uint32_t events) {
   for (size_t i = 0; i < _extensions.size(); ++i) {
     if (_extensions[i]->ownsFd(fd)) {
@@ -196,8 +184,6 @@ bool Server::dispatchExtensionFd(int fd, uint32_t events) {
   return false;
 }
 
-/* ─── Event handlers ─── */
-
 void Server::acceptClient() {
   struct sockaddr_in clientAddr;
   socklen_t addrLen = sizeof(clientAddr);
@@ -206,20 +192,12 @@ void Server::acceptClient() {
       _listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
   if (clientFd < 0) return;
 
-  // Connection cap: reject gracefully instead of exhausting fds
   if (_clients.size() >= MAX_CLIENTS) {
-    /* Reject by closing only. This does NOT go through the deferred-
-    ** teardown mechanism (disconnectClient/finalizeDisconnect, T4): this
-    ** client never enters _clients, so it's invisible to the reconcile
-    ** sweep and checkPendingCloseTimeouts() that mechanism relies on.
-    ** A courtesy "Server full" line here is out of scope for T4 and
-    ** remains an accepted regression -- see CLAUDE.md. */
     close(clientFd);
     Log::warn("connection rejected: MAX_CLIENTS reached");
     return;
   }
 
-  // Set non-blocking
   if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
     Log::error(std::string("fcntl() failed on client fd: ") + strerror(errno));
     close(clientFd);
@@ -265,16 +243,11 @@ void Server::handleClientInput(int fd) {
   std::vector<std::string> messages = client->extractMessages();
   for (size_t i = 0; i < messages.size(); ++i) {
     handleMessage(client, messages[i]);
-    // Check if the client was disconnected during handling, or just
-    // marked pending-close (e.g. QUIT deferred behind unflushed data)
-    // -- either way, stop feeding it more commands from this batch.
+
     std::map<int, Client*>::iterator cit = _clients.find(fd);
     if (cit == _clients.end() || cit->second->isPendingClose()) return;
   }
 
-  // SendQ sweep: never disconnect mid-broadcast, only between events.
-  // Immediate: draining towards a peer that already blew SendQ would
-  // recreate the T6 frozen-reader scenario.
   if (client->isSendQExceeded()) disconnectClientNow(fd, "SendQ exceeded");
 }
 
@@ -291,26 +264,15 @@ void Server::handleClientOutput(int fd) {
   client->clearSendBuffer(bytesSent);
 
   if (client->isPendingClose()) {
-    /* Draining a deferred close: finish once _out empties. If it
-    ** blows SendQ mid-drain, don't linger waiting on a peer that
-    ** isn't reading (T6) -- close now. teardownClientState() already
-    ** ran when this client was marked, so no re-notification here. */
     if (!client->hasPendingData() || client->isSendQExceeded())
       finalizeDisconnect(fd);
     return;
   }
 
-  // SendQ sweep: the peer is too slow / flooded; its stream already
-  // lost messages, so terminate it cleanly. Immediate for the same
-  // reason as above.
   if (client->isSendQExceeded()) disconnectClientNow(fd, "SendQ exceeded");
 }
 
 void Server::handleMessage(Client* client, const std::string& raw) {
-  /* Traced before parsing, and before the registration gate, so the console
-  ** shows exactly what the client sent -- including the malformed lines that
-  ** never become a Message at all, which are precisely the ones worth seeing
-  ** when a client "does nothing". */
   IrcTrace::inbound(client->getFd(), client->getNickname(), raw);
 
   Message msg = Message::parse(raw);
@@ -321,8 +283,7 @@ void Server::handleMessage(Client* client, const std::string& raw) {
 
 void Server::updateEpollInterest(Client* client) {
   int fd = client->getFd();
-  /* A pending-close client is write-only: no more input is ever read
-  ** for it, it's just draining towards finalizeDisconnect(). */
+
   uint32_t want = (client->isPendingClose() ? 0u : EPOLLIN) |
                   (client->hasPendingData() ? EPOLLOUT : 0u);
   std::map<int, uint32_t>::iterator it = _epollMask.find(fd);
@@ -341,8 +302,7 @@ void Server::checkTimeouts() {
   for (std::map<int, Client*>::iterator it = _clients.begin();
        it != _clients.end(); ++it) {
     Client* client = it->second;
-    /* Already tearing down -- its fate is decided (drain or
-    ** checkPendingCloseTimeouts()), not re-evaluated here. */
+
     if (client->isPendingClose()) continue;
     time_t idle = now - client->getLastActivity();
 
@@ -355,22 +315,13 @@ void Server::checkTimeouts() {
       client->setPingSent(true);
     }
   }
-  // Immediate: draining towards a peer that already blew SendQ would
-  // recreate the T6 frozen-reader scenario.
+
   for (size_t i = 0; i < sendQNow.size(); ++i)
     disconnectClientNow(sendQNow[i], "SendQ exceeded");
   for (size_t i = 0; i < pingTimeoutDeferred.size(); ++i)
     disconnectClient(pingTimeoutDeferred[i], "Ping timeout");
 }
 
-/* Safety net for the deferred-close path: a client marked pending-close
-** whose _out never drains (peer not reading) would otherwise sit in
-** _clients forever, since updateEpollInterest() stops requesting EPOLLIN
-** for it and a full send-buffer can mean EPOLLOUT never re-fires either.
-** Runs every tick, unthrottled (unlike checkTimeouts()'s 30s gate) and
-** off its own _pendingCloseSince timestamp, not _lastActivity -- the
-** latter stops updating once EPOLLIN is stripped, which would make a
-** deadline based on it never elapse. */
 void Server::checkPendingCloseTimeouts() {
   time_t now = std::time(NULL);
   std::vector<int> expired;
@@ -381,12 +332,6 @@ void Server::checkPendingCloseTimeouts() {
       expired.push_back(it->first);
   }
   for (size_t i = 0; i < expired.size(); ++i) {
-    /* This peer never freed enough window to drain the backlog, so a
-    ** plain close() would leave the kernel trying to gracefully
-    ** flush it for an indeterminate time -- the whole point of the
-    ** deadline is to stop waiting on this peer, so force an
-    ** abortive close (RST, discard unsent data) instead of letting
-    ** the OS keep trying on our behalf after we've already given up. */
     struct linger lg;
     lg.l_onoff = 1;
     lg.l_linger = 0;
@@ -395,12 +340,9 @@ void Server::checkPendingCloseTimeouts() {
   }
 }
 
-/* ─── Command dispatch ─── */
-
 void Server::dispatchCommand(Client* client, const Message& msg) {
   const std::string& cmd = msg.command;
 
-  // Pre-registration commands (always allowed)
   if (cmd == "CAP") {
     cmdCap(client, msg);
     return;
@@ -426,7 +368,6 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
     return;
   }
 
-  // Everything else requires registration
   if (!client->isRegistered()) {
     sendReply(client, ERR_NOTREGISTERED, ":You have not registered");
     return;
@@ -481,8 +422,6 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
     return;
   }
 
-  // Extensions may add commands here — after the core chain, so they can
-  // never shadow an RFC command.
   for (size_t i = 0; i < _extensions.size(); ++i) {
     if (_extensions[i]->onCommand(*this, *client, msg)) return;
   }
@@ -490,28 +429,11 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
   sendReply(client, ERR_UNKNOWNCOMMAND, cmd + " :Unknown command");
 }
 
-/* ─── Client management ─── */
-
 Client* Server::findClientByFd(int fd) const {
   std::map<int, Client*>::const_iterator it = _clients.find(fd);
   return it == _clients.end() ? NULL : it->second;
 }
 
-/* Resolves a nick to a client that may actually be addressed: registered,
-** and not already tearing down. Both exclusions matter.
-**
-** Unregistered: a connection that sent NICK but no PASS never passed the
-** password gate, so delivering PRIVMSG/INVITE/FILE SEND to it would leak
-** traffic to an unauthenticated peer (and its username is still empty,
-** which makes 311/352 replies malformed).
-**
-** Tearing down: such a client has already broadcast its QUIT and left every
-** channel -- it is logically gone -- but it lingers in _clients while _out
-** drains (deferred close, T4). Binding anything to it means binding to an fd
-** that is about to be closed and handed to the next accept(), so a session
-** created in that window gets inherited by whoever receives the recycled fd.
-**
-** Nick *ownership* is a different question -- see isNickInUse(). */
 Client* Server::findClientByNick(const std::string& nickname) const {
   for (std::map<int, Client*>::const_iterator it = _clients.begin();
        it != _clients.end(); ++it) {
@@ -521,11 +443,6 @@ Client* Server::findClientByNick(const std::string& nickname) const {
   return NULL;
 }
 
-/* Is this nickname spoken for? Unlike findClientByNick() this *does* count
-** connections that have sent NICK but not finished registering: they hold
-** the name, otherwise two of them could claim it and both complete
-** registration as the same nick. Clients already tearing down have given
-** their name back. `except` lets a client keep its own nick. */
 bool Server::isNickInUse(const std::string& nickname,
                          const Client* except) const {
   for (std::map<int, Client*>::const_iterator it = _clients.begin();
@@ -546,15 +463,6 @@ void Server::sendReply(Client* client, const std::string& numeric,
                        client->getNickname() + " " + params);
 }
 
-/* Logical goodbye: QUIT to channel peers (deduped by fd), leave channels,
-** notify extensions, log/audit. Runs exactly once per client regardless of
-** whether the physical close happens now or after draining. Self-guarding:
-** marks the client as tearing down before doing anything else, so a
-** reentrant call for the same client -- e.g. an extension's
-** onClientDisconnect synchronously calling back into
-** disconnectClient()/disconnectClientNow() for its own fd from inside the
-** extension fan-out below -- is a no-op instead of a double QUIT broadcast,
-** double fan-out, or a delete of *client out from under this very loop. */
 void Server::teardownClientState(Client* client, const std::string& reason) {
   if (client->isTearingDown()) return;
   client->markTearingDown();
@@ -563,19 +471,12 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
   std::string prefix = client->getPrefix();
   std::string quitMsg = ":" + prefix + " QUIT :" + reason;
 
-  // Broadcast QUIT to all channels the client is in, and remove them.
-  // Dedup by fd across channels (same pattern as broadcastToChannels)
-  // so a peer sharing N channels with the departing client gets the
-  // QUIT line queued once, not N times.
   std::set<int> alreadySent;
   alreadySent.insert(fd);
   for (std::map<std::string, Channel*>::iterator it = _channels.begin();
        it != _channels.end();) {
     Channel* chan = it->second;
-    /* Retire any invite this connection holds, in every channel --
-    ** not just the ones it joined, since an unredeemed invite is
-    ** precisely the one that outlives its holder. Without this the
-    ** fd could be recycled by a new client that inherits it. */
+
     chan->removeInvite(client);
     if (chan->isMember(client)) {
       std::vector<Client*> members = chan->getMembers();
@@ -604,10 +505,6 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
   audit("disconnect", client->getNickname(), reason);
 }
 
-/* Physical close only: epoll/fd/heap teardown, no re-notification. Used
-** once teardownClientState() has already run for this client -- either
-** just now (immediate path) or earlier, at the moment it was marked
-** pending-close (deferred path, drain-complete or deadline). */
 void Server::finalizeDisconnect(int fd) {
   _epollMask.erase(fd);
   removeFromEpoll(fd);
@@ -616,28 +513,13 @@ void Server::finalizeDisconnect(int fd) {
   _clients.erase(fd);
 }
 
-/* Deferred close (default path): the client's departure is announced and
-** it leaves its channels right away (teardownClientState), but the fd
-** itself only closes once _out drains via the existing EPOLLOUT-gated
-** handleClientOutput(), or _pendingCloseTimeoutSec elapses
-** (checkPendingCloseTimeouts()) -- whichever comes first. This is what
-** lets a reply queued right before disconnecting (e.g. 464 on password
-** mismatch) actually reach the client instead of being discarded with the
-** socket still holding it -- conditional on the client draining within
-** the deadline. The deadline doesn't distinguish a frozen peer (T6's
-** target) from one that's simply slow: a real client draining a large
-** reply over a congested link can legitimately still be mid-drain when
-** the deadline hits, and gets the same abortive close, losing whatever
-** of the reply hadn't gone out yet. Accepted trade-off, not a bug -- see
-** CLAUDE.md's Known traps entry. */
 void Server::disconnectClient(int fd, const std::string& reason) {
   std::map<int, Client*>::iterator cit = _clients.find(fd);
   if (cit == _clients.end()) return;
 
   Client* client = cit->second;
   if (client->isTearingDown())
-    return;  // already tearing down (deferred drain, deadline, or a
-             // reentrant call from inside our own teardown) -- no-op
+    return;
 
   teardownClientState(client, reason);
   if (!client->hasPendingData()) {
@@ -647,32 +529,22 @@ void Server::disconnectClient(int fd, const std::string& reason) {
   client->markPendingClose();
 }
 
-/* Immediate close, bypassing the drain: for SendQ-exceeded and socket
-** errors, where waiting to flush _out would either write to an
-** already-errored socket or recreate the T6 frozen-reader scenario against
-** a peer that isn't consuming its backlog. */
 void Server::disconnectClientNow(int fd, const std::string& reason) {
   std::map<int, Client*>::iterator cit = _clients.find(fd);
   if (cit == _clients.end()) return;
 
   Client* client = cit->second;
   if (client->isPendingClose()) {
-    // Already announced at mark time; just stop draining and close.
     finalizeDisconnect(fd);
     return;
   }
   if (client->isTearingDown())
-    return;  // reentrant call from inside our own teardown fan-out --
-             // the outer, original call still owns finalizing this fd
+    return;
 
   teardownClientState(client, reason);
   finalizeDisconnect(fd);
 }
 
-/* ─── Channel management ─── */
-
-/* Channels are keyed by their casemapped name; the original-case display
-** name lives in Channel::_name. */
 Channel* Server::findChannel(const std::string& name) const {
   std::map<std::string, Channel*>::const_iterator it =
       _channels.find(ircToLower(name));
@@ -701,16 +573,11 @@ void Server::removeChannel(const std::string& name) {
   }
 }
 
-/* ─── Getters ─── */
-
 const std::string& Server::getServerName() const { return _serverName; }
-
-/* ─── Utility ─── */
 
 bool Server::isValidNickname(const std::string& nick) const {
   if (nick.empty()) return false;
 
-  // First char must be letter or special
   char first = nick[0];
   if (!std::isalpha(static_cast<unsigned char>(first)) && first != '[' &&
       first != ']' && first != '{' && first != '}' && first != '\\' &&
@@ -731,7 +598,7 @@ bool Server::isValidChannelName(const std::string& name) const {
   if (name.empty() || name.size() > MAX_CHANNELLEN) return false;
   if (name[0] != '#') return false;
   if (name.size() < 2) return false;
-  // No spaces, ctrl-G (BEL), or commas
+
   for (size_t i = 0; i < name.size(); ++i) {
     if (name[i] == ' ' || name[i] == '\x07' || name[i] == ',') return false;
   }

@@ -2,6 +2,8 @@
 
 #include <cstdlib>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "grammar/AbnfChars.hpp"
 #include "grammar/AbnfLineReader.hpp"
@@ -25,16 +27,13 @@ bool AbnfCompiler::fail(const std::string& message) {
   return false;
 }
 
-/* ─── Interning and node construction ─── */
-
 int AbnfCompiler::internRule(const std::string& name) {
   const std::string key = lowered(name);
   for (std::size_t i = 0; i < _grammar->_ruleNames.size(); ++i)
     if (_grammar->_ruleNames[i] == key) return static_cast<int>(i);
 
   _grammar->_ruleNames.push_back(key);
-  /* A reference to a rule not yet defined leaves a placeholder root. Anything
-  ** still unset when compilation ends is an undefined rule. */
+
   _grammar->_ruleRoots.push_back(Grammar::kNoRule);
   return static_cast<int>(_grammar->_ruleNames.size() - 1);
 }
@@ -58,8 +57,6 @@ int AbnfCompiler::addChildren(const std::vector<int>& children) {
     _grammar->_children.push_back(children[i]);
   return first;
 }
-
-/* ─── num-val = "%" "x" 1*HEXDIG [ "-" 1*HEXDIG / 1*( "." 1*HEXDIG ) ] ─── */
 
 bool AbnfCompiler::parseNumericValue(const std::string& s, std::size_t& i,
                                      int& out) {
@@ -93,7 +90,6 @@ bool AbnfCompiler::parseNumericValue(const std::string& s, std::size_t& i,
     range.hi = high;
     pieces.push_back(addNode(range));
 
-    /* %x0D.0A -- a dotted concatenation of octet values. */
     if (i < s.size() && s[i] == '.') {
       ++i;
       continue;
@@ -113,8 +109,6 @@ bool AbnfCompiler::parseNumericValue(const std::string& s, std::size_t& i,
   out = addNode(seq);
   return true;
 }
-
-/* ─── element = rulename / group / option / char-val / num-val ─── */
 
 bool AbnfCompiler::parseElement(const std::string& s, std::size_t& i,
                                 int& out) {
@@ -140,7 +134,6 @@ bool AbnfCompiler::parseElement(const std::string& s, std::size_t& i,
     if (i >= s.size() || s[i] != ']') return fail("unclosed '['");
     ++i;
 
-    /* An option is just a 0-or-1 repetition. */
     GrammarNode rep;
     rep.kind = GrammarNode::Repetition;
     rep.lo = 0;
@@ -173,7 +166,6 @@ bool AbnfCompiler::parseElement(const std::string& s, std::size_t& i,
     return parseNumericValue(s, i, out);
   }
 
-  /* `$name` -- the one extension: match rule `name`, record its span. */
   bool capture = false;
   if (c == '$') {
     capture = true;
@@ -199,8 +191,6 @@ bool AbnfCompiler::parseElement(const std::string& s, std::size_t& i,
   return fail(std::string("unexpected character '") + c + "' in rule body");
 }
 
-/* ─── repetition = [repeat] element ─── */
-
 bool AbnfCompiler::parseRepetition(const std::string& s, std::size_t& i,
                                    int& out) {
   skipBlanks(s, i);
@@ -225,7 +215,6 @@ bool AbnfCompiler::parseRepetition(const std::string& s, std::size_t& i,
                  ? GrammarNode::kUnbounded
                  : static_cast<int>(std::strtol(after.c_str(), NULL, 10));
     } else {
-      /* `5(x)` -- an exact count. */
       low = high = static_cast<int>(std::strtol(before.c_str(), NULL, 10));
     }
 
@@ -252,8 +241,6 @@ bool AbnfCompiler::parseRepetition(const std::string& s, std::size_t& i,
   out = addNode(rep);
   return true;
 }
-
-/* ─── concatenation = repetition *(1*c-wsp repetition) ─── */
 
 bool AbnfCompiler::parseConcatenation(const std::string& s, std::size_t& i,
                                       int& out) {
@@ -284,8 +271,6 @@ bool AbnfCompiler::parseConcatenation(const std::string& s, std::size_t& i,
   return true;
 }
 
-/* ─── alternation = concatenation *(*c-wsp "/" *c-wsp concatenation) ─── */
-
 bool AbnfCompiler::parseAlternation(const std::string& s, std::size_t& i,
                                     int& out) {
   std::vector<int> branches;
@@ -315,8 +300,6 @@ bool AbnfCompiler::parseAlternation(const std::string& s, std::size_t& i,
   out = addNode(alt);
   return true;
 }
-
-/* ─── rule = rulename defined-as elements ─── */
 
 bool AbnfCompiler::parseRule(const std::string& line, std::size_t lineNo) {
   _lineNo = lineNo;
@@ -351,10 +334,6 @@ bool AbnfCompiler::parseRule(const std::string& line, std::size_t lineNo) {
   const std::size_t slot = static_cast<std::size_t>(rule);
 
   if (incremental) {
-    /* `=/` folds the new alternative in beside what is already there. Building
-    ** a fresh Alternation of [old, new] rather than appending to an existing
-    ** one keeps the child array append-only: a child list is a contiguous
-    ** range, so growing one in place would mean it is no longer last. */
     if (_grammar->_ruleRoots[slot] == Grammar::kNoRule)
       return fail("'" + name + " =/' before that rule was ever defined");
 
@@ -377,10 +356,6 @@ bool AbnfCompiler::parseRule(const std::string& line, std::size_t lineNo) {
   return true;
 }
 
-/* ─── compile ─────────────────────────────────────────────────────────────
-**
-** Read lines, parse each into nodes, then validate the whole graph. Each of
-** those three is somebody else's class; this is just the order. */
 bool AbnfCompiler::compile(const std::string& text, Grammar& out) {
   _error.clear();
   _lineNo = 0;

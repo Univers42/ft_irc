@@ -1,10 +1,23 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   GrammarMatcher.cpp                                 :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: dlesieur <dlesieur@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/22 21:56:15 by dlesieur          #+#    #+#             */
+/*   Updated: 2026/08/22 21:56:16 by dlesieur         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "grammar/GrammarMatcher.hpp"
+
+#include <string>
 
 const long GrammarMatcher::kMaxSteps = 200000;
 const int GrammarMatcher::kMaxDepth = 256;
 
 namespace {
-
 char fold(char c) {
   if (c >= 'A' && c <= 'Z') return static_cast<char>(c - 'A' + 'a');
   return c;
@@ -18,13 +31,6 @@ GrammarMatcher::GrammarMatcher(const Grammar& grammar)
 bool GrammarMatcher::lastExhausted() const { return _exhausted; }
 
 const Grammar& GrammarMatcher::grammar() const { return _grammar; }
-
-/* ─── Single-octet detection ─────────────────────────────────────────────
-**
-** Answers "does this node always eat exactly one character?". A capture
-** disqualifies a node even when it would otherwise qualify: the fast path does
-** not run the continuation machinery that records spans, so taking it would
-** silently drop the capture. */
 
 bool GrammarMatcher::octetMatches(int node, unsigned char c) const {
   const GrammarNode& n = _grammar.node(node);
@@ -59,8 +65,6 @@ bool GrammarMatcher::isSingleOctet(int node) const {
 
   if (_singleOctet[index] != 0) return _singleOctet[index] == 1;
 
-  /* Marked "no" while in progress: a cyclic rule cannot be single-octet, and
-  ** this keeps the recursion finite without a separate visited set. */
   _singleOctet[index] = 2;
 
   const GrammarNode& n = _grammar.node(node);
@@ -94,8 +98,6 @@ bool GrammarMatcher::isSingleOctet(int node) const {
       break;
   }
 
-  /* Re-index rather than reusing a reference taken before the recursion: the
-  ** vector above may have been reallocated by it. */
   _singleOctet[index] = yes ? 1 : 2;
   return yes;
 }
@@ -118,20 +120,10 @@ const unsigned char* GrammarMatcher::octetBitmap(int node) const {
   return bits;
 }
 
-/* ─── The walk ───────────────────────────────────────────────────────────
-**
-** matchNode(n, pos, k) asks: can node `n` match starting at `pos`, such that
-** the continuation `k` then matches the rest? Threading the continuation
-** through is what makes backtracking correct across concatenation -- a
-** sequence child that could match at several lengths gets each tried against
-** whatever follows, rather than the first being committed to. */
-
 bool GrammarMatcher::matchContinuation(const Continuation* k, std::size_t pos,
                                        Walk& walk) const {
   if (walk.exhausted) return false;
 
-  /* End of every obligation: the line must be entirely consumed. A partial
-  ** match is a non-match -- "JOIN #a rubbish" is not a JOIN. */
   if (k == NULL) return pos == walk.line->size();
 
   switch (k->kind) {
@@ -145,10 +137,6 @@ bool GrammarMatcher::matchContinuation(const Continuation* k, std::size_t pos,
       return matchRepetition(k->node, k->counter, k->start, pos, k->next, walk);
 
     case ContCloseCapture: {
-      /* Record the span, then require the rest to match. If it does not, undo
-      ** the record before backtracking: a capture written on a path that was
-      ** abandoned would otherwise survive into a later, successful path that
-      ** never went through this rule at all. */
       const std::size_t slot = static_cast<std::size_t>(k->counter);
       const std::string saved = walk.values[slot];
       const char wasPresent = walk.present[slot];
@@ -189,9 +177,6 @@ bool GrammarMatcher::matchRepetition(int node, int count, std::size_t iterStart,
   const GrammarNode& n = _grammar.node(node);
   const int child = _grammar.child(n.first);
 
-  /* Fast path: a run of single-octet matches is counted, not recursed. Taken
-  ** only on first entry -- once mid-repetition the slow path is already
-  ** unwinding and must stay consistent. */
   if (count == 0 && isSingleOctet(child)) {
     const std::size_t least = static_cast<std::size_t>(n.lo < 0 ? 0 : n.lo);
     const std::size_t most = (n.hi == GrammarNode::kUnbounded)
@@ -217,7 +202,6 @@ bool GrammarMatcher::matchRepetition(int node, int count, std::size_t iterStart,
     }
     if (taken < least) return false;
 
-    /* Greedy, then give ground one octet at a time. */
     for (std::size_t take = taken + 1; take-- > least;) {
       if (matchContinuation(next, pos + take, walk)) return true;
       if (walk.exhausted) return false;
@@ -228,9 +212,6 @@ bool GrammarMatcher::matchRepetition(int node, int count, std::size_t iterStart,
 
   bool canRepeat = (n.hi == GrammarNode::kUnbounded) || (count < n.hi);
 
-  /* Zero-width guard. A repetition whose body can match nothing would
-  ** otherwise iterate forever without advancing. If the iteration just
-  ** finished consumed no input, another would consume none either. */
   if (count > 0 && pos == iterStart) canRepeat = false;
 
   if (canRepeat) {
@@ -253,9 +234,6 @@ bool GrammarMatcher::matchNode(int node, std::size_t pos,
                                const Continuation* next, Walk& walk) const {
   if (walk.exhausted) return false;
 
-  /* The budgets. Exceeding either is not an error to report upward -- it
-  ** unwinds as an ordinary non-match and the caller answers the line as
-  ** malformed. What it must never do is keep going. */
   if (++walk.steps > kMaxSteps) {
     walk.exhausted = true;
     return false;

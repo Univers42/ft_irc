@@ -10,15 +10,11 @@ class Server;
 class Client;
 struct Message;
 
-/* Bonus bot — a virtual participant plugged in through the extension seam:
-** it claims PRIVMSGs addressed to its nick (onPrivmsg) and reserves that
-** nick against clients (reservesNick). */
 class Bot : public IServerExtension {
  public:
   explicit Bot(Server* server);
   ~Bot();
 
-  /* ─── IServerExtension ─── */
   const char* name() const;
   bool onPrivmsg(Server& server, Client& sender, const std::string& target,
                  const std::string& text);
@@ -40,7 +36,7 @@ class Bot : public IServerExtension {
 
   Server* _server;
   std::string _nickname;
-  /* Rotating cursor into _jokes -- see Bot::cmdJoke. */
+
   int _nextJoke;
 
   static const char* _jokes[];

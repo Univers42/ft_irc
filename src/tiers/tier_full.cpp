@@ -1,19 +1,3 @@
-/* ─── Tier: full (default `make`) ───
-**
-** Bonus set + the optional real-time platform features, still runtime-gated:
-** they activate only when the env var FT_IRC_CONFIG points to an INI file.
-** Without it, this binary behaves byte-for-byte like the bonus tier.
-**
-**   [bus]
-**   enabled = true
-**   port    = 6700
-**   secret  = change-me
-**   nick    = platform
-**
-**   [audit]
-**   enabled = true
-**   path    = ./ircserv-audit.csv
-*/
 #include <cstdlib>
 #include <new>
 #include <string>
@@ -61,7 +45,6 @@ static void registerPlatformFeatures(Server& server) {
     std::string nick = cfg.get("bus", "nick", "platform");
 
     try {
-      /* listens lazily via onServerStart, once run() begins */
       server.addExtension(new PlatformBus(&server, port, secret, nick));
     } catch (const std::bad_alloc&) {
       Log::warn("could not create platform bus (out of memory)");
@@ -73,7 +56,6 @@ void registerExtensions(Server& server) {
   try {
     Log::setSink(new FancyLogSink());
   } catch (const std::bad_alloc&) {
-    /* plain fallback stays active */
   }
 
   try {

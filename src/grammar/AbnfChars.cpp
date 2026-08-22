@@ -1,7 +1,8 @@
 #include "grammar/AbnfChars.hpp"
 
-namespace AbnfChars {
+#include <string>
 
+namespace AbnfChars {
 bool isAlpha(char c) {
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }

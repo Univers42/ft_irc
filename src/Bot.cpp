@@ -1,5 +1,3 @@
-/* ─── Bot: internal IRC bot (bonus) ─── */
-
 #include "Bot.hpp"
 
 #include <ctime>
@@ -29,8 +27,6 @@ Bot::Bot(Server* server) : _server(server), _nickname("ircbot"), _nextJoke(0) {}
 
 Bot::~Bot() {}
 
-/* ─── IServerExtension ─── */
-
 const char* Bot::name() const { return "bot"; }
 
 bool Bot::onPrivmsg(Server& server, Client& sender, const std::string& target,
@@ -48,7 +44,6 @@ bool Bot::reservesNick(const std::string& nick) const {
 void Bot::handleMessage(Client* sender, const std::string& text) {
   if (text.empty()) return;
 
-  // Parse command
   std::string cmd;
   std::string param;
 
@@ -86,13 +81,11 @@ void Bot::cmdTime(Client* sender) {
 
 void Bot::cmdInfo(Client* sender, const std::string& param) {
   if (param.empty() || param[0] != '#') {
-    // Server info
     reply(sender,
           "Server: " + _server->getServerName() + " v" + SERVER_VERSION);
     return;
   }
 
-  // Channel info
   Channel* chan = _server->findChannel(param);
   if (!chan) {
     reply(sender, "Channel " + param + " does not exist.");
@@ -106,11 +99,6 @@ void Bot::cmdInfo(Client* sender, const std::string& param) {
   if (!chan->getTopic().empty()) reply(sender, "Topic: " + chan->getTopic());
 }
 
-/* Rotates through the jokes instead of drawing a random one. The old form
-** reseeded the global PRNG on every call with a one-second-granularity seed,
-** so consecutive calls inside the same second returned the identical joke --
-** and it clobbered the process-wide rand() sequence for everything else. A
-** counter needs no seed and actually varies. */
 void Bot::cmdJoke(Client* sender) {
   reply(sender, _jokes[_nextJoke]);
   _nextJoke = (_nextJoke + 1) % _jokeCount;

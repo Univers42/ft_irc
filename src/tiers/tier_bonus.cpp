@@ -1,8 +1,3 @@
-/* ─── Tier: bonus ───
-**
-** Mandatory kernel + the subject's bonus features: the bot and file
-** transfer. Built by `make bonus`.
-*/
 #include <new>
 
 #include "Bot.hpp"

@@ -8,29 +8,10 @@
 
 #include "libcpp/str/format.hpp"
 
-/*
-** Plain-iostream renderer — the only logging the kernel needs. The full
-** build swaps in FancyLogSink (src/extras/) at startup via setSink; the
-** mandatory tier never links any terminal-styling code.
-*/
-
 namespace {
 Log::ILogSink* g_sink = 0;
 Log::Level g_level = Log::LOG_INFO;
 
-/* "19:04:11" — whole-second wall clock, deliberately with no fraction.
-**
-** A sub-second stamp was tried and removed. gettimeofday() is neither C++98
-** nor on the subject's External Functions list (an earlier sub-second clock
-** in this tree was reverted for exactly that reason — see the deferred-close
-** note in CLAUDE.md), and the C++98 alternative, std::clock(), measures
-** PROCESSOR time. On a server that spends its life blocked in epoll_wait
-** that barely advances, so every line in a session printed the same ".002"
-** — which reads as "these all happened at the same instant" and is worse
-** than no fraction at all.
-**
-** Ordering within a second is not lost: a log is sequential, so line order
-** is event order. */
 std::string stamp() {
   std::time_t now = std::time(NULL);
   std::tm* lt = std::localtime(&now);
@@ -74,13 +55,6 @@ void render(char kind, const std::string& msg) {
 }
 }  // namespace
 
-/* Default protocol rendering: one aligned, greppable line.
-**
-**   19:04:11.882 fd   6  <<  NICK alice                    NICK
-**
-** A sink that can do better overrides this; the plain build should still be
-** readable, and "<<" / ">>" are chosen so `grep '>>'` isolates one direction
-** without matching the protocol text itself. */
 void Log::ILogSink::protocol(char dir, int fd, const std::string& peer,
                              const std::string& line, const std::string& note) {
   std::string arrow = (dir == '<') ? "<<" : ">>";
@@ -121,8 +95,6 @@ void Log::configureFromEnv() {
     g_level = LOG_DEBUG;
   else if (std::strcmp(v, "trace") == 0 || std::strcmp(v, "5") == 0)
     g_level = LOG_TRACE;
-  /* Anything else: keep the default rather than guessing. An unreadable
-  ** FT_IRC_LOG should not silently turn the console off. */
 }
 
 void Log::banner(const std::string& title) {
@@ -160,8 +132,7 @@ void Log::protocol(char dir, int fd, const std::string& peer,
     g_sink->protocol(dir, fd, peer, line, note);
     return;
   }
-  /* No sink installed: reuse the default rendering by way of a tiny
-  ** adapter, so plain and fancy builds print the same shape. */
+
   struct PlainSink : public ILogSink {
     void write(char kind, const std::string& msg) { fallback(kind, msg); }
   };

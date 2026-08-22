@@ -1,9 +1,16 @@
 #include "grammar/MatchResult.hpp"
 
+#include <string>
+
 #include "grammar/Grammar.hpp"
 
 namespace {
-const std::string kEmpty;
+
+const std::string& emptyString() {
+  static const std::string kEmpty;
+  return kEmpty;
+}
+
 }  // namespace
 
 MatchResult::MatchResult() : _grammar(NULL) {}
@@ -24,9 +31,9 @@ bool MatchResult::has(const std::string& name) const {
 
 const std::string& MatchResult::get(const std::string& name) const {
   const int slot = slotOf(name);
-  if (slot < 0) return kEmpty;
+  if (slot < 0) return emptyString();
   const std::size_t i = static_cast<std::size_t>(slot);
-  return _present[i] ? _values[i] : kEmpty;
+  return _present[i] ? _values[i] : emptyString();
 }
 
 void MatchResult::clear() {

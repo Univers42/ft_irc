@@ -21,8 +21,6 @@ Channel::Channel(const std::string& name, Client* creator)
 
 Channel::~Channel() {}
 
-/* ─── Getters ─── */
-
 const std::string& Channel::getName() const { return _name; }
 const std::string& Channel::getTopic() const { return _topic; }
 const std::string& Channel::getTopicSetter() const { return _topicSetter; }
@@ -57,11 +55,6 @@ std::string Channel::getModeParams() const {
   return params;
 }
 
-/* Packs members into chunks of at most `budget` bytes so the caller can emit
-** one RPL_NAMREPLY per chunk. A single member never straddles two chunks; if
-** one entry alone exceeds the budget it gets its own (over-long) chunk and
-** Client::queueMessage's cap is what keeps the wire legal -- unreachable in
-** practice with NICKLEN=9. */
 std::vector<std::string> Channel::getNamesChunks(size_t budget) const {
   std::vector<std::string> chunks;
   std::string cur;
@@ -79,12 +72,10 @@ std::vector<std::string> Channel::getNamesChunks(size_t budget) const {
     cur += entry;
   }
   if (!cur.empty()) chunks.push_back(cur);
-  /* An empty channel still owes the client one (empty) 353. */
+
   if (chunks.empty()) chunks.push_back(std::string());
   return chunks;
 }
-
-/* ─── Setters ─── */
 
 void Channel::setTopic(const std::string& topic, const std::string& setter) {
   _topic = topic;
@@ -103,8 +94,6 @@ void Channel::setTopicRestricted(bool restricted) {
   _topicRestricted = restricted;
 }
 
-/* ─── Member management ─── */
-
 void Channel::addMember(Client* client) { _members[client->getFd()] = client; }
 
 void Channel::removeMember(Client* client) {
@@ -118,8 +107,6 @@ bool Channel::isMember(Client* client) const {
 
 bool Channel::isEmpty() const { return _members.empty(); }
 
-/* ─── Operator management ─── */
-
 bool Channel::isOperator(Client* client) const {
   return _operators.count(client->getFd()) > 0;
 }
@@ -131,14 +118,6 @@ void Channel::setOperator(Client* client, bool op) {
     _operators.erase(client->getFd());
 }
 
-/* ─── Invite management ─── */
-
-/* Invites are held against the invited connection's fd, not its nickname.
-** A nick is a label a client can drop (NICK) or release (QUIT), and the next
-** client to claim it would otherwise inherit the invite and walk into a +i
-** channel. Keyed this way an invite follows its holder across renames and
-** dies with the connection -- Server::teardownClientState() clears it from
-** every channel so a recycled fd can never inherit one either. */
 void Channel::addInvite(Client* client) { _inviteList.insert(client->getFd()); }
 
 bool Channel::isInvited(Client* client) const {
@@ -149,8 +128,6 @@ void Channel::removeInvite(Client* client) {
   _inviteList.erase(client->getFd());
 }
 
-/* ─── Messaging ─── */
-
 void Channel::broadcastMessage(const std::string& msg, Client* exclude) {
   for (std::map<int, Client*>::iterator it = _members.begin();
        it != _members.end(); ++it) {
@@ -158,8 +135,6 @@ void Channel::broadcastMessage(const std::string& msg, Client* exclude) {
     it->second->queueMessage(msg);
   }
 }
-
-/* ─── Utility ─── */
 
 Client* Channel::findMember(const std::string& nickname) const {
   for (std::map<int, Client*>::const_iterator it = _members.begin();

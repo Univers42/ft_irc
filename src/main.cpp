@@ -8,17 +8,12 @@
 #include "ext/RegisterExtensions.hpp"
 #include "libcpp/str/format.hpp"
 
-// Async-signal-safe: only flip the flag. The run() loop notices it and
-// returns; the (non-signal-safe, pretty) shutdown line is printed from
-// main() afterwards, through the Log writer.
 static void signalHandler(int signum) {
   (void)signum;
   Server::isRunning = false;
 }
 
 int main(int argc, char** argv) {
-  /* Before the first log call, so FT_IRC_LOG=quiet silences even the usage
-  ** error, and FT_IRC_LOG=trace covers the whole run. */
   Log::configureFromEnv();
 
   if (argc != 3) {
@@ -29,9 +24,6 @@ int main(int argc, char** argv) {
   std::string portStr = argv[1];
   std::string password = argv[2];
 
-  /* One strict, range-checked parse. The previous digits-check + atoi()
-  ** pair let an in-range-looking but overflowing port ("99999999999")
-  ** through to atoi, whose result on overflow is undefined. */
   long port = 0;
   if (!libcpp::str::parse_long(portStr, 1, 65535, port)) {
     Log::error("port must be a number between 1 and 65535");
@@ -43,24 +35,23 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Ignore SIGPIPE (critical — send() to closed socket)
   signal(SIGPIPE, SIG_IGN);
   signal(SIGINT, signalHandler);
   signal(SIGTERM, signalHandler);
 
   try {
     Server server(static_cast<int>(port), password);
-    registerExtensions(server); /* which set depends on the build tier */
+    registerExtensions(server);
     server.run();
     Log::info("traffic: " + IrcTrace::summary());
     Log::info("shutting down — server stopped cleanly");
   } catch (const std::exception& e) {
     Log::error(std::string("fatal: ") + e.what());
-    Log::setSink(NULL); /* free any installed log sink before exit */
+    Log::setSink(NULL);
     return 1;
   }
 
   Log::setSink(
-      NULL); /* free any installed log sink — nothing left in use at exit */
+      NULL);
   return 0;
 }

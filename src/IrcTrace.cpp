@@ -11,14 +11,6 @@
 #include "libcpp/str/format.hpp"
 
 namespace {
-
-/* ─── Numeric → RFC name ───
-**
-** Exactly the numerics this server sends, mirroring Replies.hpp. The table is
-** built from those macros rather than re-typed, so a numeric can never drift
-** between what is sent and what the log calls it. Replies.hpp is deliberately
-** an inventory of what the server actually emits, which makes it the right
-** and only source for this list. */
 struct NumericEntry {
   const char* code;
   const char* name;
@@ -74,7 +66,6 @@ const NumericEntry kNumerics[] = {
     {ERR_INVALIDMODEPARAM, "ERR_INVALIDMODEPARAM"},
     {0, 0}};
 
-/* ─── Session and global counters ─── */
 struct Stats {
   unsigned long linesIn;
   unsigned long linesOut;
@@ -98,9 +89,6 @@ unsigned long& sessionCount() {
   return n;
 }
 
-/* The first word of a line, skipping an optional ":prefix ". Mirrors
-** Message::parse's own prefix handling so the label the log prints is the
-** command the dispatcher will actually see. */
 std::string commandOf(const std::string& line) {
   std::string::size_type pos = 0;
   while (pos < line.size() && line[pos] == ' ') ++pos;
@@ -115,16 +103,6 @@ std::string commandOf(const std::string& line) {
   return line.substr(pos, end - pos);
 }
 
-/* Replace parameter number `idx` (0-based, after the command) with ***.
-** Operates on the raw line so the redacted form is still a valid IRC line —
-** the log is meant to be re-readable as protocol, not as prose.
-**
-** An optional leading ":prefix" is skipped, not counted. Outbound lines carry
-** one and inbound lines normally do not, so treating the prefix as the
-** command shifts every field by one: the server's own JOIN echo had its
-** CHANNEL starred out instead of a key, and a MODE broadcast starred the
-** "+k" rather than the secret after it — redacting the wrong token while
-** still printing the credential. */
 std::string redactParam(const std::string& line, size_t idx) {
   std::string out;
   std::string::size_type pos = 0;
@@ -134,14 +112,15 @@ std::string redactParam(const std::string& line, size_t idx) {
 
   while (pos <= line.size()) {
     std::string::size_type sp = line.find(' ', pos);
-    std::string tok =
-        (sp == std::string::npos) ? line.substr(pos) : line.substr(pos, sp - pos);
+    std::string tok = (sp == std::string::npos)
+                          ? line.substr(pos)
+                          : line.substr(pos, sp - pos);
 
     if (!tok.empty()) {
       if (!sawPrefix && !sawCommand && tok[0] == ':') {
-        sawPrefix = true; /* a prefix, not the command */
+        sawPrefix = true;
       } else if (!sawCommand) {
-        sawCommand = true; /* this token is the command */
+        sawCommand = true;
       } else {
         if (field == idx) tok = "***";
         ++field;
@@ -155,42 +134,33 @@ std::string redactParam(const std::string& line, size_t idx) {
   return out;
 }
 
-/* The line's parameters, prefix and command excluded. */
 std::vector<std::string> paramsOf(const std::string& line) {
   std::vector<std::string> all = libcpp::str::split_nonempty(line, ' ');
   std::vector<std::string> out;
   size_t i = 0;
-  if (i < all.size() && !all[i].empty() && all[i][0] == ':') ++i; /* prefix */
-  if (i < all.size()) ++i;                                        /* command */
+  if (i < all.size() && !all[i].empty() && all[i][0] == ':') ++i;
+  if (i < all.size()) ++i;
   for (; i < all.size(); ++i) out.push_back(all[i]);
   return out;
 }
 
-/* Credentials never reach the console. A trace that cannot be pasted into a
-** bug report is a trace nobody uses. */
 std::string redact(const std::string& line) {
   std::string cmd = ircToLower(commandOf(line));
 
   if (cmd == "pass") return redactParam(line, 0);
 
-  /* JOIN <channels> <keys> — the second parameter is a key list. The
-  ** server's own JOIN echo has no key, so this only ever fires inbound. */
   if (cmd == "join") {
     if (paramsOf(line).size() >= 2) return redactParam(line, 1);
     return line;
   }
 
-  /* MODE <target> <modestring> [params] — redact a key argument. The
-  ** parameter index of the key depends on where 'k' sits among the
-  ** parameter-taking letters, so walk the mode string the way
-  ** handleChannelMode does rather than guessing a fixed position. */
   if (cmd == "mode") {
     std::vector<std::string> params = paramsOf(line);
     if (params.size() < 2) return line;
 
     const std::string& modeStr = params[1];
     bool adding = true;
-    size_t paramNo = 0;   /* index among parameters after the mode string */
+    size_t paramNo = 0;
     size_t keyParam = 0;
     bool found = false;
     for (size_t i = 0; i < modeStr.size(); ++i) {
@@ -210,20 +180,10 @@ std::string redact(const std::string& line) {
       }
     }
     if (!found) return line;
-    /* Parameter 0 is the target and 1 is the mode string, so the arguments
-    ** the mode letters consume start at 2. */
+
     return redactParam(line, 2 + keyParam);
   }
 
-  /* RPL_CHANNELMODEIS (324) reports the channel's modes back to a member,
-  ** and carries the +k key as a parameter -- the very reason the MODE query
-  ** path requires membership. It is the one *reply* that contains a
-  ** credential, so it is redacted like the commands above.
-  **
-  **   :ft_irc 324 bob #k +k topsecret   ->   :ft_irc 324 bob #k +k ***
-  **
-  ** Parameters here are <nick> <channel> <modestring> [args], so the mode
-  ** arguments start at index 3 rather than 2. */
   if (cmd == RPL_CHANNELMODEIS) {
     std::vector<std::string> params = paramsOf(line);
     if (params.size() < 3) return line;
@@ -256,14 +216,10 @@ std::string redact(const std::string& line) {
   return line;
 }
 
-/* "  fd 7 " — right-aligned so columns line up as fds grow past 9. */
 std::string fdField(int fd) {
   return "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' ');
 }
 
-/* The annotation printed after the line: the command, plus the RFC name when
-** it is a numeric. This is what turns ":ft_irc 462 bob :You may not
-** reregister" from a string into a diagnosis. */
 std::string annotate(const std::string& line) {
   std::string cmd = commandOf(line);
   if (cmd.empty()) return "";
@@ -285,7 +241,7 @@ void IrcTrace::inbound(int fd, const std::string& peer,
                        const std::string& line) {
   Stats& s = sessions()[fd];
   ++s.linesIn;
-  s.bytesIn += line.size() + 2; /* the CRLF is on the wire too */
+  s.bytesIn += line.size() + 2;
   ++total().linesIn;
   total().bytesIn += line.size() + 2;
 
@@ -323,15 +279,14 @@ void IrcTrace::sessionClose(int fd, const std::string& peer,
   if (it != sessions().end()) {
     if (Log::enabled(Log::LOG_DEBUG)) {
       const Stats& s = it->second;
-      Log::debug(fdField(fd) + "  --  " + (peer.empty() ? "*" : peer) + " left (" +
-                 reason + ") — " + libcpp::str::to_string(s.linesIn) + " in / " +
+      Log::debug(fdField(fd) + "  --  " + (peer.empty() ? "*" : peer) +
+                 " left (" + reason + ") — " +
+                 libcpp::str::to_string(s.linesIn) + " in / " +
                  libcpp::str::to_string(s.linesOut) + " out, " +
                  libcpp::str::to_string(s.bytesIn) + " B / " +
                  libcpp::str::to_string(s.bytesOut) + " B");
     }
-    /* Erased on every close, including the abortive ones: fds are recycled,
-    ** and a stale entry would credit the next client with this one's
-    ** traffic. */
+
     sessions().erase(it);
   }
 }

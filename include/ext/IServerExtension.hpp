@@ -10,45 +10,23 @@ class Client;
 class Channel;
 struct Message;
 
-/*
-** IServerExtension — the seam between the RFC 2812 kernel and everything
-** optional (bot, platform bus, audit trail, fancy console).
-**
-** Server fires these hooks at well-defined points; it owns the registered
-** extensions and deletes them in reverse registration order. Which
-** extensions exist is decided purely at link time by the tier's
-** registerExtensions() translation unit (src/tiers/) — the kernel sources
-** never name a concrete extension and carry zero #ifdef.
-**
-** Interception hooks return true to mean "handled, stop processing":
-**   - onCommand fires only where ERR_UNKNOWNCOMMAND would be sent, so an
-**     extension can add commands but never shadow a core one.
-**   - onPrivmsg fires per resolved non-channel target, before the nick
-**     lookup, so a virtual participant can claim the message.
-*/
 class IServerExtension {
  public:
   virtual ~IServerExtension() {}
 
   virtual const char* name() const = 0;
 
-  /* ─── lifecycle ─── */
   virtual void onServerStart(Server& server) { (void)server; }
   virtual void onTick(Server& server, time_t now) {
     (void)server;
     (void)now;
   }
 
-  /* ─── client lifecycle ─── */
   virtual void onClientRegistered(Server& server, Client& client) {
     (void)server;
     (void)client;
   }
-  /* Fired mid-teardown (QUIT already broadcast, channels already left).
-  ** Safe to queue messages to other clients here; do NOT synchronously
-  ** call disconnectClient()/disconnectClientNow() on `client`'s own fd --
-  ** the kernel guards against the resulting reentrancy (it becomes a
-  ** no-op), but relying on that guard is fragile and unintended. */
+
   virtual void onClientDisconnect(Server& server, Client& client,
                                   const std::string& reason) {
     (void)server;
@@ -56,7 +34,6 @@ class IServerExtension {
     (void)reason;
   }
 
-  /* ─── channel events ─── */
   virtual void onJoin(Server& server, Client& client, Channel& channel) {
     (void)server;
     (void)client;
@@ -68,7 +45,6 @@ class IServerExtension {
     (void)channel;
   }
 
-  /* ─── interception (true = handled) ─── */
   virtual bool onCommand(Server& server, Client& client, const Message& msg) {
     (void)server;
     (void)client;
@@ -88,7 +64,6 @@ class IServerExtension {
     return false;
   }
 
-  /* ─── foreign-fd plumbing (extensions with their own sockets) ─── */
   virtual bool ownsFd(int fd) const {
     (void)fd;
     return false;
@@ -99,7 +74,6 @@ class IServerExtension {
     (void)events;
   }
 
-  /* ─── audit fan-out ─── */
   virtual void onAudit(const std::string& event, const std::string& actor,
                        const std::string& detail) {
     (void)event;
@@ -108,4 +82,4 @@ class IServerExtension {
   }
 };
 
-#endif /* ISERVEREXTENSION_HPP */
+#endif

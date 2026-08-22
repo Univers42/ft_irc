@@ -1,6 +1,8 @@
 #include "grammar/AbnfLineReader.hpp"
 
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "grammar/AbnfChars.hpp"
 
@@ -10,7 +12,6 @@ const std::string& AbnfLineReader::error() const { return _error; }
 
 std::size_t AbnfLineReader::errorLine() const { return _errorLine; }
 
-/* A ';' inside a string literal is data, not the start of a comment. */
 std::string AbnfLineReader::stripComment(const std::string& raw) {
   std::string out(raw);
   bool inQuote = false;

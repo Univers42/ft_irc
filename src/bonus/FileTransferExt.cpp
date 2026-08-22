@@ -1,5 +1,3 @@
-/* ─── Bonus: server-mediated file transfer (see header for the protocol) ─── */
-
 #include "bonus/FileTransferExt.hpp"
 
 #include <cerrno>
@@ -19,8 +17,6 @@ FileTransferExt::FileTransferExt() : _transfers(), _nextId(1) {}
 FileTransferExt::~FileTransferExt() {}
 
 const char* FileTransferExt::name() const { return "file-transfer"; }
-
-/* ─── validation helpers ─── */
 
 static bool isValidFilename(const std::string& name) {
   if (name.empty() || name.size() > FileTransferExt::MAX_FILENAME) return false;
@@ -45,14 +41,6 @@ static bool isBase64Chunk(const std::string& chunk) {
   return true;
 }
 
-/* Decoded byte count of one base64 chunk (upper bound, padding-aware).
-** The subtraction is clamped: these are unsigned longs, and a chunk of pure
-** padding ("=") gives (1*3)/4 - 1, which wrapped to ULONG_MAX and made the
-** declared-size guard in cmdData() overflow and pass -- turning the size cap
-** off entirely. Returns 0 for anything carrying no payload; cmdData()
-** rejects such a chunk rather than relaying it, which is what guarantees
-** every accepted chunk advances relayedBytes and so keeps declaredSize a
-** real bound on the total relayed volume. */
 static unsigned long decodedBytes(const std::string& chunk) {
   unsigned long pad = 0;
   if (!chunk.empty() && chunk[chunk.size() - 1] == '=') ++pad;
@@ -64,8 +52,6 @@ static unsigned long decodedBytes(const std::string& chunk) {
 static bool parseId(const std::string& s, long& id) {
   return libcpp::str::parse_long(s, 1, LONG_MAX, id);
 }
-
-/* ─── plumbing ─── */
 
 void FileTransferExt::notice(Server& server, Client& client,
                              const std::string& text) {
@@ -99,8 +85,6 @@ void FileTransferExt::abortTransfer(Server& server, long id,
   if (recipient) notice(server, *recipient, line);
   _transfers.erase(it);
 }
-
-/* ─── IServerExtension ─── */
 
 bool FileTransferExt::onCommand(Server& server, Client& client,
                                 const Message& msg) {
@@ -140,7 +124,7 @@ void FileTransferExt::onClientDisconnect(Server& server, Client& client,
     if (it->second.senderFd == fd || it->second.recipientFd == fd) {
       long id = it->first;
       ++it;
-      /* the leaver's copy of the notice is discarded with its queue */
+
       abortTransfer(server, id, "peer disconnected");
     } else {
       ++it;
@@ -160,8 +144,6 @@ void FileTransferExt::onTick(Server& server, time_t now) {
     }
   }
 }
-
-/* ─── subcommands ─── */
 
 void FileTransferExt::cmdSend(Server& server, Client& client,
                               const Message& msg) {
@@ -186,8 +168,6 @@ void FileTransferExt::cmdSend(Server& server, Client& client,
     return;
   }
 
-  /* parse_ulong rejects a leading '-' outright; bare strtoul would have
-  ** accepted "-1" and wrapped it to ULONG_MAX. */
   unsigned long size = 0;
   if (!libcpp::str::parse_ulong(msg.params[3], 1, MAX_FILE_SIZE, size)) {
     notice(server, client,
@@ -279,11 +259,7 @@ void FileTransferExt::cmdData(Server& server, Client& client,
     abortTransfer(server, id, "malformed chunk");
     return;
   }
-  /* A chunk that decodes to nothing ("=", "A=") carries no file data, so
-  ** it would relay a line while advancing relayedBytes by zero -- an
-  ** unbounded relay against any declared size. Payload-free chunks are
-  ** malformed by definition here; rejecting them is what keeps
-  ** declaredSize an actual ceiling on how much this session can move. */
+
   if (decodedBytes(chunk) == 0) {
     abortTransfer(server, id, "malformed chunk");
     return;
@@ -299,8 +275,6 @@ void FileTransferExt::cmdData(Server& server, Client& client,
     return;
   }
 
-  /* Flow control: never let a fast sender blow the recipient's SENDQ —
-  ** ask the sender to retry once the recipient has drained. */
   if (recipient->getSendBuffer().size() > MAX_SENDQ / 2) {
     notice(server, client, "FILE WAIT " + msg.params[1]);
     return;

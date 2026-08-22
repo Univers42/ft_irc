@@ -1,9 +1,22 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Grammar.cpp                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: dlesieur <dlesieur@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/22 21:56:12 by dlesieur          #+#    #+#             */
+/*   Updated: 2026/08/22 21:56:13 by dlesieur         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "grammar/Grammar.hpp"
+
+#include <string>
 
 const int Grammar::kNoRule = -1;
 
 namespace {
-
 char asciiLower(char c) {
   if (c >= 'A' && c <= 'Z') return static_cast<char>(c - 'A' + 'a');
   return c;
@@ -16,7 +29,10 @@ std::string lowered(const std::string& s) {
   return out;
 }
 
-const std::string kEmpty;
+const std::string& emptyString() {
+  static const std::string kEmpty;
+  return kEmpty;
+}
 
 }  // namespace
 
@@ -37,7 +53,7 @@ int Grammar::ruleRoot(int rule) const {
 
 const std::string& Grammar::ruleName(int rule) const {
   if (rule < 0 || static_cast<std::size_t>(rule) >= _ruleNames.size())
-    return kEmpty;
+    return emptyString();
   return _ruleNames[static_cast<std::size_t>(rule)];
 }
 
@@ -57,7 +73,7 @@ const std::string& Grammar::literal(int index) const {
 
 const std::string& Grammar::captureName(int index) const {
   if (index < 0 || static_cast<std::size_t>(index) >= _captureNames.size())
-    return kEmpty;
+    return emptyString();
   return _captureNames[static_cast<std::size_t>(index)];
 }
 

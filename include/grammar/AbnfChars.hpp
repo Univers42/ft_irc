@@ -4,15 +4,7 @@
 #include <cstddef>
 #include <string>
 
-/* Character classification for ABNF text.
-**
-** Spelled out rather than taken from <cctype>. isalpha/isalnum are
-** locale-sensitive, and under a non-C locale they would quietly admit 8-bit
-** octets into rule names. The rest of this project avoids them for the same
-** reason -- see vendor/libcpp/src/str/case.cpp.
-*/
 namespace AbnfChars {
-
 bool isAlpha(char c);
 bool isDigit(char c);
 bool isHexDigit(char c);
@@ -27,4 +19,4 @@ std::string trimmed(const std::string& s);
 
 }  // namespace AbnfChars
 
-#endif /* ABNFCHARS_HPP */
+#endif

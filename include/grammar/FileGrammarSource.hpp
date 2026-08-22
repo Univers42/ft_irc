@@ -5,10 +5,6 @@
 
 #include "grammar/IGrammarSource.hpp"
 
-/* A grammar read from a file, for experimenting with the wire syntax without
-** rebuilding. Selected by $FT_IRC_GRAMMAR; the subject's file list allows an
-** optional configuration file, and this is it.
-*/
 class FileGrammarSource : public IGrammarSource {
  public:
   explicit FileGrammarSource(const std::string& path);
@@ -21,4 +17,4 @@ class FileGrammarSource : public IGrammarSource {
   std::string _path;
 };
 
-#endif /* FILEGRAMMARSOURCE_HPP */
+#endif

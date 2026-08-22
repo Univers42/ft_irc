@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <string>
 
 FileGrammarSource::FileGrammarSource(const std::string& path) : _path(path) {}
 

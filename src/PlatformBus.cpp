@@ -18,8 +18,6 @@
 #include "libcpp/str/format.hpp"
 #include "libcpp/str/secure.hpp"
 
-/* A protocol line on the bus is short ("PUB <#chan> <type> :<msg>"); anything
-** beyond this without a newline is garbage or a flood. */
 #define MAX_BUS_LINE 8192
 
 PlatformBus::PlatformBus(Server* server, int port, const std::string& secret,
@@ -38,13 +36,11 @@ PlatformBus::~PlatformBus() {
   if (_listenFd >= 0) close(_listenFd);
 }
 
-/* ─── IServerExtension ─── */
-
 const char* PlatformBus::name() const { return "platform-bus"; }
 
 void PlatformBus::onServerStart(Server& server) {
   (void)server;
-  start(); /* on failure the bus stays inert (no fds owned) */
+  start();
 }
 
 bool PlatformBus::ownsFd(int fd) const {
@@ -81,7 +77,7 @@ bool PlatformBus::start() {
   struct sockaddr_in addr;
   std::memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); /* 127.0.0.1 only */
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   addr.sin_port = htons(static_cast<uint16_t>(_port));
 
   if (bind(_listenFd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) <
@@ -127,7 +123,7 @@ void PlatformBus::acceptConnection() {
     return;
   }
   Conn conn;
-  conn.authed = _secret.empty(); /* no secret configured -> loopback trust */
+  conn.authed = _secret.empty();
   _conns[fd] = conn;
 }
 
@@ -148,12 +144,10 @@ void PlatformBus::handleInput(int fd) {
   std::string line;
   while (it->second.buffer.next(line)) {
     handleLine(fd, libcpp::str::trim(line));
-    if (_conns.find(fd) == _conns.end()) /* closed mid-processing */
+    if (_conns.find(fd) == _conns.end())
       return;
   }
 
-  /* Flood guard: a peer that streams kilobytes without a newline is not
-  ** speaking the protocol — drop it instead of buffering without bound. */
   if (it->second.buffer.size() > MAX_BUS_LINE) {
     send(fd, "ERR line too long");
     closeConnection(fd);
@@ -201,7 +195,6 @@ void PlatformBus::handleLine(int fd, const std::string& line) {
     return;
   }
   if (cmd == "PUB") {
-    /* rest = "<#channel> <type> :<message>" */
     std::string::size_type s1 = rest.find(' ');
     if (s1 == std::string::npos) {
       send(fd, "ERR usage: PUB <#channel> <type> :<message>");
@@ -229,7 +222,7 @@ void PlatformBus::handleLine(int fd, const std::string& line) {
 void PlatformBus::publish(const std::string& channel, const std::string& type,
                           const std::string& message) {
   Channel* chan = _server->findChannel(channel);
-  if (!chan) return; /* nobody is listening on that channel yet */
+  if (!chan) return;
 
   std::string body = message;
   if (!type.empty()) body = "[" + type + "] " + message;

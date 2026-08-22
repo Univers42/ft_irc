@@ -5,8 +5,6 @@
 #include <vector>
 
 AuditLog::AuditLog(const std::string& path) : _csv() {
-  /* CsvWriter probes the file before opening, so the header is written
-  ** exactly once per file lifetime. */
   if (_csv.open(path) && _csv.isNewFile()) {
     std::vector<std::string> header;
     header.push_back("timestamp");
@@ -18,8 +16,6 @@ AuditLog::AuditLog(const std::string& path) : _csv() {
 }
 
 AuditLog::~AuditLog() { _csv.close(); }
-
-/* ─── IServerExtension ─── */
 
 const char* AuditLog::name() const { return "audit-log"; }
 

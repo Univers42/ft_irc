@@ -1,5 +1,3 @@
-/* ─── Channel commands: JOIN, PART ─── */
-
 #include <string>
 #include <vector>
 
@@ -7,20 +5,12 @@
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
 
-/* ─── JOIN ─── */
-
 void Server::cmdJoin(Client* client, const Message& msg) {
-  /* A trailing ":" parses to a present-but-empty parameter. An empty
-  ** channel name is a missing one -- answer it, rather than falling
-  ** through to a loop that iterates zero times and replies nothing. */
   if (msg.params.empty() || msg.params[0].empty()) {
     sendReply(client, ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
     return;
   }
 
-  /* Channel names: blanks dropped ("#a,,#b" is two channels). Keys:
-  ** blanks KEPT, because they are positional -- "k1,,k3" means the second
-  ** channel has no key, not that there are two keys. */
   std::vector<std::string> channels =
       libcpp::str::split_nonempty(msg.params[0], ',');
 
@@ -38,24 +28,20 @@ void Server::cmdJoin(Client* client, const Message& msg) {
 
     Channel* chan = findChannel(name);
     if (chan) {
-      // Channel exists — check restrictions
-      if (chan->isMember(client)) continue;  // Already in channel
+      if (chan->isMember(client)) continue;
 
-      // Check invite-only
       if (chan->isInviteOnly() && !chan->isInvited(client)) {
         sendReply(client, ERR_INVITEONLYCHAN,
                   name + " :Cannot join channel (+i)");
         continue;
       }
 
-      // Check channel key
       if (!chan->getKey().empty() && chan->getKey() != key) {
         sendReply(client, ERR_BADCHANNELKEY,
                   name + " :Cannot join channel (+k)");
         continue;
       }
 
-      // Check user limit
       if (chan->getUserLimit() > 0 &&
           chan->getMemberCount() >= chan->getUserLimit()) {
         sendReply(client, ERR_CHANNELISFULL,
@@ -66,7 +52,6 @@ void Server::cmdJoin(Client* client, const Message& msg) {
       chan->addMember(client);
       chan->removeInvite(client);
     } else {
-      // Create new channel — creator becomes operator
       chan = createChannel(name, client);
       if (!chan) {
         sendReply(client, ERR_NOSUCHCHANNEL,
@@ -75,16 +60,12 @@ void Server::cmdJoin(Client* client, const Message& msg) {
       }
     }
 
-    /* Broadcast JOIN to all channel members (including the joiner),
-    ** naming the channel in its canonical stored case rather than
-    ** however this joiner spelled it. */
     chan->broadcastMessage(
         ":" + client->getPrefix() + " JOIN " + chan->getName(), NULL);
     audit("join", client->getNickname(), name);
     for (size_t k = 0; k < _extensions.size(); ++k)
       _extensions[k]->onJoin(*this, *client, *chan);
 
-    // Send topic
     if (!chan->getTopic().empty()) {
       sendReply(client, RPL_TOPIC, name + " :" + chan->getTopic());
       sendReply(client, RPL_TOPICWHOTIME,
@@ -94,10 +75,6 @@ void Server::cmdJoin(Client* client, const Message& msg) {
       sendReply(client, RPL_NOTOPIC, name + " :No topic is set");
     }
 
-    /* Send the names list, split across as many 353s as the 512-byte
-    ** line limit needs. The budget is what's left of a legal line once
-    ** sendReply's own framing (":<server> 353 <nick> ") and the
-    ** "= <channel> :" head are accounted for. */
     std::string namesHead = "= " + name + " :";
     size_t framing = 1 + _serverName.size() + 1 + 3 + 1 +
                      client->getNickname().size() + 1 + namesHead.size();
@@ -109,8 +86,6 @@ void Server::cmdJoin(Client* client, const Message& msg) {
       sendReply(client, RPL_NAMREPLY, namesHead + chunks[c]);
     sendReply(client, RPL_ENDOFNAMES, name + " :End of /NAMES list");
 
-    // Proactively report channel modes (mirrors the MODE query) so the
-    // client sees +itkl state on join without having to ask.
     std::string modes = chan->getModeString();
     std::string modeParams = chan->getModeParams();
     std::string modeReply = name + " " + modes;
@@ -120,8 +95,6 @@ void Server::cmdJoin(Client* client, const Message& msg) {
               name + " " + libcpp::str::to_string(chan->getCreationTime()));
   }
 }
-
-/* ─── PART ─── */
 
 void Server::cmdPart(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[0].empty()) {

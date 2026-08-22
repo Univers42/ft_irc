@@ -14,7 +14,6 @@ class Channel {
   Channel(const std::string& name, Client* creator);
   ~Channel();
 
-  /* ─── Getters ─── */
   const std::string& getName() const;
   const std::string& getTopic() const;
   const std::string& getTopicSetter() const;
@@ -27,12 +26,9 @@ class Channel {
   size_t getMemberCount() const;
   std::string getModeString() const;
   std::string getModeParams() const;
-  /* The member list as one or more space-separated chunks, each at most
-  ** `budget` bytes, so RPL_NAMREPLY can stay inside the 512-byte line
-  ** limit on a channel of any size. Always returns at least one chunk. */
+
   std::vector<std::string> getNamesChunks(size_t budget) const;
 
-  /* ─── Setters ─── */
   void setTopic(const std::string& topic, const std::string& setter);
   void setKey(const std::string& key);
   void removeKey();
@@ -41,28 +37,20 @@ class Channel {
   void setInviteOnly(bool inviteOnly);
   void setTopicRestricted(bool restricted);
 
-  /* ─── Member management ─── */
   void addMember(Client* client);
   void removeMember(Client* client);
   bool isMember(Client* client) const;
   bool isEmpty() const;
 
-  /* ─── Operator management ─── */
   bool isOperator(Client* client) const;
   void setOperator(Client* client, bool op);
 
-  /* ─── Invite management ─── */
-  /* Keyed by the invited *connection*, never by its nickname: a name can
-  ** be released (NICK) or freed (QUIT) and picked up by someone else,
-  ** which would hand them a +i channel they were never invited to. */
   void addInvite(Client* client);
   bool isInvited(Client* client) const;
   void removeInvite(Client* client);
 
-  /* ─── Messaging ─── */
   void broadcastMessage(const std::string& msg, Client* exclude);
 
-  /* ─── Utility ─── */
   Client* findMember(const std::string& nickname) const;
   std::vector<Client*> getMembers() const;
 
