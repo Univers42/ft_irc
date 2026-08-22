@@ -15,8 +15,6 @@
    and thus it is beyond the scope of this document.  More details can
    be found in "Internet Relay Chat: Channel Management" [IRC-CHAN].
 
-
-
    The protocol messages must be extracted from the contiguous stream of
    octets.  The current solution is to designate two characters, CR and
    LF, as message separators.  Empty messages are silently ignored,

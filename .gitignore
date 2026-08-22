@@ -18,3 +18,5 @@ tests/test_runner
 .claude/skills*
 # Simulation harness state
 .sim/
+
+CLAUDE/*
