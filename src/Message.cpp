@@ -4,6 +4,10 @@
 
 #include "libcpp/str/case.hpp"
 
+Message::Message() : trailingIndex(-1) {}
+
+bool Message::hasTrailing() const { return trailingIndex >= 0; }
+
 Message Message::parse(const std::string& raw) {
   Message msg;
   std::string line = raw;

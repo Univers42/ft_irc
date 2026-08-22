@@ -1,6 +1,7 @@
 #include "grammar/interpreted/TreeMatcher.hpp"
 
 #include <string>
+#include <vector>
 
 namespace Abnf {
 namespace Interpreted {
@@ -128,16 +129,14 @@ bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos,
 
     case ContCloseCapture: {
       const std::size_t slot = static_cast<std::size_t>(k->counter);
-      const std::string saved = walk.values[slot];
-      const char wasPresent = walk.present[slot];
+      std::vector<std::string>& list = walk.values[slot];
+      const std::size_t mark = list.size();
 
-      walk.values[slot].assign(*walk.line, k->start, pos - k->start);
-      walk.present[slot] = 1;
+      list.push_back(walk.line->substr(k->start, pos - k->start));
 
       if (matchContinuation(k->next, pos, walk)) return true;
 
-      walk.values[slot] = saved;
-      walk.present[slot] = wasPresent;
+      list.resize(mark);
       return false;
     }
   }
@@ -313,8 +312,7 @@ bool TreeMatcher::match(int rule, const std::string& line,
 
   Walk walk;
   walk.line = &line;
-  walk.values.assign(_grammar.captureCount(), std::string());
-  walk.present.assign(_grammar.captureCount(), 0);
+  walk.values.assign(_grammar.captureCount(), std::vector<std::string>());
   walk.steps = 0;
   walk.depth = 0;
   walk.exhausted = false;
@@ -323,7 +321,7 @@ bool TreeMatcher::match(int rule, const std::string& line,
 
   _exhausted = walk.exhausted;
   if (ok) {
-    out.adopt(walk.values, walk.present);
+    out.adopt(walk.values);
   }
   return ok;
 }

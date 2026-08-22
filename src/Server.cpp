@@ -9,7 +9,9 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <map>
 #include <new>
 #include <set>
@@ -17,6 +19,10 @@
 #include <vector>
 
 #include "IrcCase.hpp"
+#include "grammar/EmbeddedGrammarSource.hpp"
+#include "grammar/FileGrammarSource.hpp"
+#include "grammar/GrammarBuilder.hpp"
+#include "grammar/interpreted/TreeMatcher.hpp"
 #include "IrcTrace.hpp"
 #include "Log.hpp"
 #include "ext/IServerExtension.hpp"
@@ -32,7 +38,10 @@ Server::Server(int port, const std::string& password,
       _listenFd(-1),
       _reactor(),
       _lastPingCheck(std::time(NULL)),
+      _matcher(NULL),
+      _messageRule(Abnf::Grammar::kNoRule),
       _pendingCloseTimeoutSec(pendingCloseTimeoutSec) {
+  initGrammar();
   createListenSocket();
   createEpoll();
   addToEpoll(_listenFd, EPOLLIN);
@@ -59,7 +68,58 @@ bool Server::registerExternalFd(int fd, uint32_t events) {
 
 void Server::unregisterExternalFd(int fd) { removeFromEpoll(fd); }
 
+void Server::initGrammar() {
+  const char* grammarPath = std::getenv("FT_IRC_GRAMMAR");
+
+  Abnf::EmbeddedGrammarSource embedded;
+  Abnf::FileGrammarSource file(grammarPath ? grammarPath : "");
+  const Abnf::IGrammarSource& source =
+      grammarPath ? static_cast<const Abnf::IGrammarSource&>(file)
+               : static_cast<const Abnf::IGrammarSource&>(embedded);
+
+  std::string text;
+  if (!source.read(text))
+    throw std::runtime_error(std::string("cannot read grammar from ") +
+                             source.origin());
+
+  Abnf::GrammarBuilder builder;
+  if (!builder.compile(text, _grammar))
+    throw std::runtime_error(std::string("grammar from ") + source.origin() +
+                             ": " + builder.error());
+
+  _matcher = new Abnf::Interpreted::TreeMatcher(_grammar);
+  _messageRule = _grammar.ruleIndex("message");
+  if (_messageRule == Abnf::Grammar::kNoRule)
+    throw std::runtime_error("grammar defines no 'message' rule");
+
+  Log::debug(std::string("grammar: ") + source.origin() + " -> " +
+             _matcher->strategy());
+}
+
+bool Server::parseLine(const std::string& raw, Message& out) const {
+  Abnf::MatchResult result;
+  if (!_matcher->match(_messageRule, raw, result)) return false;
+
+  out.command = result.get("command");
+  for (std::size_t i = 0; i < out.command.size(); ++i) {
+    const char c = out.command[i];
+    if (c >= 'a' && c <= 'z') out.command[i] = static_cast<char>(c - 'a' + 'A');
+  }
+
+  const std::vector<std::string>& middles = result.all("param");
+  out.params.assign(middles.begin(), middles.end());
+
+  if (result.count("trail") > 0) {
+    out.trailingIndex = static_cast<int>(out.params.size());
+    out.params.push_back(result.get("trail"));
+  }
+  return true;
+}
+
 Server::~Server() {
+  delete _matcher;
+  _matcher = NULL;
+
   for (std::vector<IServerExtension*>::reverse_iterator it =
            _extensions.rbegin();
        it != _extensions.rend(); ++it)
@@ -275,7 +335,8 @@ void Server::handleClientOutput(int fd) {
 void Server::handleMessage(Client* client, const std::string& raw) {
   IrcTrace::inbound(client->getFd(), client->getNickname(), raw);
 
-  Message msg = Message::parse(raw);
+  Message msg;
+  if (!parseLine(raw, msg)) return;
   if (msg.command.empty()) return;
 
   dispatchCommand(client, msg);

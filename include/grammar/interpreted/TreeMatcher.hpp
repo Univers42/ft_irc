@@ -48,8 +48,7 @@ class TreeMatcher : public IMatcher {
 
   struct Walk {
     const std::string* line;
-    std::vector<std::string> values;
-    std::vector<char> present;
+    std::vector<std::vector<std::string> > values;
     long steps;
     int depth;
     bool exhausted;

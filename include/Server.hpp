@@ -9,6 +9,8 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "Message.hpp"
+#include "grammar/Grammar.hpp"
+#include "grammar/IMatcher.hpp"
 #include "Replies.hpp"
 #include "libcpp98/reactor.hpp"
 
@@ -75,6 +77,9 @@ class Server {
 
   void dispatchCommand(Client* client, const Message& msg);
 
+  void initGrammar();
+  bool parseLine(const std::string& raw, Message& out) const;
+
   void cmdCap(Client* client, const Message& msg);
   void cmdPass(Client* client, const Message& msg);
   void cmdNick(Client* client, const Message& msg);
@@ -116,6 +121,9 @@ class Server {
   std::map<std::string, Channel*> _channels;
   std::vector<IServerExtension*> _extensions;
   time_t _lastPingCheck;
+  Abnf::Grammar _grammar;
+  Abnf::IMatcher* _matcher;
+  int _messageRule;
   time_t _pendingCloseTimeoutSec;
 
   static const int MAX_EVENTS = 64;

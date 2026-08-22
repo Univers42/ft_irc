@@ -16,18 +16,23 @@ class MatchResult {
 
   const std::string& get(const std::string& name) const;
 
+  std::size_t count(const std::string& name) const;
+
+  const std::string& at(const std::string& name, std::size_t index) const;
+
+  const std::vector<std::string>& all(const std::string& name) const;
+
   void clear();
 
   void reset(const Grammar& grammar);
 
-  void adopt(std::vector<std::string>& values, std::vector<char>& present);
+  void adopt(std::vector<std::vector<std::string> >& values);
 
  private:
   int slotOf(const std::string& name) const;
 
   const Grammar* _grammar;
-  std::vector<std::string> _values;
-  std::vector<char> _present;
+  std::vector<std::vector<std::string> > _values;
 };
 
 }  // namespace Abnf

@@ -12,6 +12,11 @@ const std::string& emptyString() {
   return kEmpty;
 }
 
+const std::vector<std::string>& emptyList() {
+  static const std::vector<std::string> kEmpty;
+  return kEmpty;
+}
+
 }  // namespace
 
 MatchResult::MatchResult() : _grammar(NULL) {}
@@ -27,32 +32,48 @@ int MatchResult::slotOf(const std::string& name) const {
 bool MatchResult::has(const std::string& name) const {
   const int slot = slotOf(name);
   if (slot < 0) return false;
-  return _present[static_cast<std::size_t>(slot)] != 0;
+  return !_values[static_cast<std::size_t>(slot)].empty();
+}
+
+std::size_t MatchResult::count(const std::string& name) const {
+  const int slot = slotOf(name);
+  if (slot < 0) return 0;
+  return _values[static_cast<std::size_t>(slot)].size();
 }
 
 const std::string& MatchResult::get(const std::string& name) const {
+  return at(name, 0);
+}
+
+const std::string& MatchResult::at(const std::string& name,
+                                   std::size_t index) const {
   const int slot = slotOf(name);
   if (slot < 0) return emptyString();
-  const std::size_t i = static_cast<std::size_t>(slot);
-  return _present[i] ? _values[i] : emptyString();
+  const std::vector<std::string>& list =
+      _values[static_cast<std::size_t>(slot)];
+  if (index >= list.size()) return emptyString();
+  return list[index];
+}
+
+const std::vector<std::string>& MatchResult::all(
+    const std::string& name) const {
+  const int slot = slotOf(name);
+  if (slot < 0) return emptyList();
+  return _values[static_cast<std::size_t>(slot)];
 }
 
 void MatchResult::clear() {
   _values.clear();
-  _present.clear();
   _grammar = NULL;
 }
 
 void MatchResult::reset(const Grammar& grammar) {
   _grammar = &grammar;
-  _values.assign(grammar.captureCount(), std::string());
-  _present.assign(grammar.captureCount(), 0);
+  _values.assign(grammar.captureCount(), std::vector<std::string>());
 }
 
-void MatchResult::adopt(std::vector<std::string>& values,
-                        std::vector<char>& present) {
+void MatchResult::adopt(std::vector<std::vector<std::string> >& values) {
   _values.swap(values);
-  _present.swap(present);
 }
 
 }  // namespace Abnf

@@ -67,7 +67,16 @@ const char kGrammar[] =
     " [ SPACE $modestring [ SPACE $modeargs ] ]\n"
     "who-cmd    =  \"WHO\" [ SPACE $whomask ]\n"
     "whois-cmd  =  \"WHOIS\" SPACE [ middle SPACE ] $whoisnick\n"
-    "userhost-cmd = \"USERHOST\" SPACE $hostnicks\n";
+    "userhost-cmd = \"USERHOST\" SPACE $hostnicks\n"
+
+    "command    =  1*letter / 3digit\n"
+    "param      =  middle\n"
+    "trail      =  trailing\n"
+    "prefix     =  middle\n"
+    "sp         =  1*SPACE\n"
+    "params     =  *14( sp $param ) [ sp \":\" $trail ]\n"
+    "           =/ 14( sp $param ) [ sp [ \":\" ] $trail ]\n"
+    "message    =  *SPACE [ \":\" $prefix sp ] $command [ params ] *SPACE\n";
 
 }  // namespace
 
