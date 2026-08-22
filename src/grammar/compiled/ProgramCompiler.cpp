@@ -121,6 +121,19 @@ bool ProgramCompiler::buildClass(int node, unsigned char* bits) const {
   }
 }
 
+bool ProgramCompiler::hasCapture(int node) const {
+  const GrammarNode& n = _grammar->node(node);
+
+  if (n.kind == GrammarNode::Reference) {
+    if (n.capture != GrammarNode::kNoCapture) return true;
+    const int root = _grammar->ruleRoot(n.lo);
+    return root != Grammar::kNoRule && hasCapture(root);
+  }
+  for (int i = 0; i < n.count; ++i)
+    if (hasCapture(_grammar->child(n.first + i))) return true;
+  return false;
+}
+
 bool ProgramCompiler::emitBody(int node, int times) {
   for (int i = 0; i < times; ++i)
     if (!emitNode(node)) return false;
@@ -135,6 +148,12 @@ bool ProgramCompiler::emitRepetition(int node) {
   if (!emitBody(child, least)) return false;
 
   if (n.hi == GrammarNode::kUnbounded) {
+    if (hasCapture(child))
+      return fail(
+          "a capture inside an unbounded repetition cannot be compiled: the "
+          "loop reuses one slot pair, so only the last match would survive. "
+          "Give the repetition an upper bound so it can be unrolled.");
+
     const int loop = emit(Instruction::Split, 0, 0);
     _program->_code[static_cast<std::size_t>(loop)].x =
         static_cast<int>(_program->_code.size());

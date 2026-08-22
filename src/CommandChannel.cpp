@@ -1,3 +1,4 @@
+#include <map>
 #include <string>
 #include <vector>
 
@@ -6,16 +7,18 @@
 #include "libcpp/str/format.hpp"
 
 void Server::cmdJoin(Client* client, const Message& msg) {
-  if (msg.params.empty() || msg.params[0].empty()) {
+  if (!msg.matched()) {
     sendReply(client, ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
     return;
   }
 
-  std::vector<std::string> channels =
-      libcpp::str::split_nonempty(msg.params[0], ',');
+  if (!msg.has("chanlist")) {
+    partAllChannels(client);
+    return;
+  }
 
-  std::vector<std::string> keys;
-  if (msg.params.size() > 1) keys = libcpp::str::split(msg.params[1], ',');
+  std::vector<std::string> channels = msg.list("chanlist", ',');
+  std::vector<std::string> keys = msg.listKeepEmpty("keylist", ',');
 
   for (size_t i = 0; i < channels.size(); ++i) {
     const std::string& name = channels[i];
@@ -97,16 +100,14 @@ void Server::cmdJoin(Client* client, const Message& msg) {
 }
 
 void Server::cmdPart(Client* client, const Message& msg) {
-  if (msg.params.empty() || msg.params[0].empty()) {
+  if (!msg.matched()) {
     sendReply(client, ERR_NEEDMOREPARAMS, "PART :Not enough parameters");
     return;
   }
 
-  std::string reason;
-  if (msg.params.size() > 1) reason = msg.params[1];
+  const std::string reason = msg.field("partmsg");
 
-  std::vector<std::string> targets =
-      libcpp::str::split_nonempty(msg.params[0], ',');
+  std::vector<std::string> targets = msg.list("chanlist", ',');
 
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& chanName = targets[t];
@@ -133,5 +134,28 @@ void Server::cmdPart(Client* client, const Message& msg) {
     chan->removeMember(client);
 
     if (chan->isEmpty()) removeChannel(chanName);
+  }
+}
+
+void Server::partAllChannels(Client* client) {
+  std::vector<std::string> names;
+  for (std::map<std::string, Channel*>::iterator it = _channels.begin();
+       it != _channels.end(); ++it)
+    if (it->second->isMember(client)) names.push_back(it->first);
+
+  for (size_t i = 0; i < names.size(); ++i) {
+    Channel* chan = findChannel(names[i]);
+    if (chan == NULL) continue;
+
+    const std::string partMsg =
+        ":" + client->getPrefix() + " PART " + chan->getName();
+
+    chan->broadcastMessage(partMsg, NULL);
+    audit("part", client->getNickname(), names[i]);
+    for (size_t k = 0; k < _extensions.size(); ++k)
+      _extensions[k]->onPart(*this, *client, *chan);
+    chan->removeMember(client);
+
+    if (chan->isEmpty()) removeChannel(names[i]);
   }
 }

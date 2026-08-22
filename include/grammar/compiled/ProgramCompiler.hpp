@@ -29,6 +29,7 @@ class ProgramCompiler {
   int addClass(const unsigned char* bits);
   bool buildClass(int node, unsigned char* bits) const;
   bool isSingleOctet(int node) const;
+  bool hasCapture(int node) const;
 
   bool fail(const std::string& message);
 

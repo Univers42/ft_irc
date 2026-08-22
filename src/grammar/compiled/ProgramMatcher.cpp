@@ -130,6 +130,8 @@ bool ProgramMatcher::match(int rule, const std::string& line,
 
         std::vector<std::vector<std::string> > values(
             _grammar.captureCount(), std::vector<std::string>());
+        std::vector<std::string> sequence;
+        std::vector<int> owners;
         for (std::size_t slot = 0; slot < program->slotCount(); ++slot) {
           const std::vector<int>& saved =
               _arena[static_cast<std::size_t>(thread.slots)];
@@ -137,11 +139,15 @@ bool ProgramMatcher::match(int rule, const std::string& line,
           const int end = saved[slot * 2 + 1];
           if (start < 0 || end < 0 || end < start) continue;
           const int capture = program->captureOfSlot(slot);
-          values[static_cast<std::size_t>(capture)].push_back(
+          const std::string text =
               line.substr(static_cast<std::size_t>(start),
-                          static_cast<std::size_t>(end - start)));
+                          static_cast<std::size_t>(end - start));
+          values[static_cast<std::size_t>(capture)].push_back(text);
+          sequence.push_back(text);
+          owners.push_back(capture);
         }
         out.adopt(values);
+        out.adoptSequence(sequence, owners);
         _generation = generation;
         return true;
       }

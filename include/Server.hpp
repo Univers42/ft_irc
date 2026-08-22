@@ -11,6 +11,7 @@
 #include "Message.hpp"
 #include "grammar/Grammar.hpp"
 #include "grammar/IMatcher.hpp"
+#include "grammar/MatchResult.hpp"
 #include "Replies.hpp"
 #include "libcpp98/reactor.hpp"
 
@@ -76,9 +77,15 @@ class Server {
   void finalizeDisconnect(int fd);
 
   void dispatchCommand(Client* client, const Message& msg);
+  void partAllChannels(Client* client);
 
   void initGrammar();
+  void bindCommandRules();
+  int commandRule(const std::string& command) const;
   bool parseLine(const std::string& raw, Message& out) const;
+  std::string firstToken(const std::string& raw) const;
+  void fillParams(const Abnf::MatchResult& fields,
+                  Message& out) const;
 
   void cmdCap(Client* client, const Message& msg);
   void cmdPass(Client* client, const Message& msg);
@@ -124,6 +131,7 @@ class Server {
   Abnf::Grammar _grammar;
   Abnf::IMatcher* _matcher;
   int _messageRule;
+  std::map<std::string, int> _commandRules;
   time_t _pendingCloseTimeoutSec;
 
   static const int MAX_EVENTS = 64;

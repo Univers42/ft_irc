@@ -25,6 +25,7 @@ class Grammar {
 
   const std::string& captureName(int index) const;
   std::size_t captureCount() const;
+  int captureIndex(const std::string& name) const;
 
   bool isEmpty() const;
   void clear();

@@ -6,6 +6,7 @@
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/case.hpp"
+#include "libcpp/str/format.hpp"
 #include "libcpp/str/secure.hpp"
 
 void Server::cmdCap(Client* client, const Message& msg) {
@@ -28,7 +29,7 @@ void Server::cmdPass(Client* client, const Message& msg) {
     sendReply(client, ERR_NEEDMOREPARAMS, "PASS :Not enough parameters");
     return;
   }
-  client->setPassword(msg.params[0]);
+  client->setPassword(msg.matched() ? msg.field("password") : msg.params[0]);
   client->setPassSent(true);
 }
 
@@ -38,7 +39,7 @@ void Server::cmdNick(Client* client, const Message& msg) {
     return;
   }
 
-  std::string nick = msg.params[0];
+  std::string nick = msg.matched() ? msg.field("newnick") : msg.params[0];
 
   if (!isValidNickname(nick)) {
     sendReply(client, ERR_ERRONEUSNICKNAME, nick + " :Erroneous nickname");
@@ -77,6 +78,26 @@ void Server::cmdNick(Client* client, const Message& msg) {
   }
 }
 
+static bool isValidUsernameChar(unsigned char c) {
+  return (c >= 0x01 && c <= 0x09) || (c >= 0x0B && c <= 0x0C) ||
+         (c >= 0x0E && c <= 0x1F) || (c >= 0x21 && c <= 0x3F) || (c >= 0x41);
+}
+
+static bool isValidUsername(const std::string& user) {
+  if (user.empty()) return false;
+  for (std::string::size_type i = 0; i < user.size(); ++i)
+    if (!isValidUsernameChar(static_cast<unsigned char>(user[i]))) return false;
+  return true;
+}
+
+static void applyUserModeBitmask(Client* client, const std::string& param) {
+  long bits = 0;
+  if (!libcpp::str::parse_long(param, 0, 255, bits)) return;
+
+  if (bits & 4) client->setWallops(true);
+  if (bits & 8) client->setInvisible(true);
+}
+
 void Server::cmdUser(Client* client, const Message& msg) {
   if (client->isRegistered()) {
     sendReply(client, ERR_ALREADYREGISTRED, ":You may not reregister");
@@ -87,11 +108,22 @@ void Server::cmdUser(Client* client, const Message& msg) {
     return;
   }
 
-  std::string username = msg.params[0];
+  if (msg.matched() ? false : msg.trailingIndex != 3) {
+    sendReply(client, ERR_NEEDMOREPARAMS, "USER :Not enough parameters");
+    return;
+  }
+
+  std::string username = msg.matched() ? msg.field("username") : msg.params[0];
   if (username.size() > MAX_USERLEN) username.erase(MAX_USERLEN);
+  if (!isValidUsername(username)) {
+    sendReply(client, ERR_NEEDMOREPARAMS, "USER :Invalid username");
+    return;
+  }
   client->setUsername(username);
 
-  client->setRealname(msg.params[3]);
+  applyUserModeBitmask(client, msg.params[1]);
+
+  client->setRealname(msg.matched() ? msg.field("realname") : msg.params[3]);
   client->setUserSet(true);
 
   if (client->hasNick()) completeRegistration(client);

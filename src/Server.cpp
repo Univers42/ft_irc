@@ -105,8 +105,62 @@ void Server::initGrammar() {
   if (_messageRule == Abnf::Grammar::kNoRule)
     throw std::runtime_error("grammar defines no 'message' rule");
 
+  bindCommandRules();
+
   Log::debug(std::string("grammar: ") + source.origin() + " -> " +
-             _matcher->strategy());
+             _matcher->strategy() + ", " +
+             libcpp::str::to_string(static_cast<int>(_commandRules.size())) +
+             " command productions");
+}
+
+void Server::bindCommandRules() {
+  _commandRules.clear();
+
+  const std::string suffix = "-cmd";
+  for (std::size_t i = 0; i < _grammar.ruleCount(); ++i) {
+    const std::string& rule = _grammar.ruleName(static_cast<int>(i));
+    if (rule.size() <= suffix.size()) continue;
+    if (rule.compare(rule.size() - suffix.size(), suffix.size(), suffix) != 0)
+      continue;
+
+    std::string name = rule.substr(0, rule.size() - suffix.size());
+    for (std::size_t k = 0; k < name.size(); ++k) {
+      const char c = name[k];
+      if (c >= 'a' && c <= 'z') name[k] = static_cast<char>(c - 'a' + 'A');
+    }
+    _commandRules[name] = static_cast<int>(i);
+  }
+}
+
+int Server::commandRule(const std::string& command) const {
+  std::map<std::string, int>::const_iterator it = _commandRules.find(command);
+  if (it == _commandRules.end()) return Abnf::Grammar::kNoRule;
+  return it->second;
+}
+
+std::string Server::firstToken(const std::string& raw) const {
+  std::size_t i = 0;
+  while (i < raw.size() && raw[i] == ' ') ++i;
+  if (i < raw.size() && raw[i] == ':') return std::string();
+
+  std::string name;
+  while (i < raw.size() && raw[i] != ' ') {
+    const char c = raw[i++];
+    name += (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+  }
+  return name;
+}
+
+void Server::fillParams(const Abnf::MatchResult& fields, Message& out) const {
+  const int commandSlot = _grammar.captureIndex("command");
+  const int prefixSlot = _grammar.captureIndex("prefix");
+
+  out.params.clear();
+  for (std::size_t i = 0; i < fields.sequenceSize(); ++i) {
+    const int owner = fields.sequenceOwner(i);
+    if (owner == commandSlot || owner == prefixSlot) continue;
+    out.params.push_back(fields.sequenceAt(i));
+  }
 }
 
 bool Server::parseLine(const std::string& raw, Message& out) const {
@@ -119,13 +173,9 @@ bool Server::parseLine(const std::string& raw, Message& out) const {
     if (c >= 'a' && c <= 'z') out.command[i] = static_cast<char>(c - 'a' + 'A');
   }
 
-  const std::vector<std::string>& middles = result.all("param");
-  out.params.assign(middles.begin(), middles.end());
-
-  if (result.count("trail") > 0) {
-    out.trailingIndex = static_cast<int>(out.params.size());
-    out.params.push_back(result.get("trail"));
-  }
+  fillParams(result, out);
+  if (result.count("trail") > 0)
+    out.trailingIndex = static_cast<int>(out.params.size()) - 1;
   return true;
 }
 
@@ -349,7 +399,19 @@ void Server::handleMessage(Client* client, const std::string& raw) {
   IrcTrace::inbound(client->getFd(), client->getNickname(), raw);
 
   Message msg;
-  if (!parseLine(raw, msg)) return;
+  Abnf::MatchResult fields;
+
+  const std::string name = firstToken(raw);
+  const int rule = name.empty() ? Abnf::Grammar::kNoRule : commandRule(name);
+
+  if (rule != Abnf::Grammar::kNoRule && _matcher->match(rule, raw, fields)) {
+    msg.command = name;
+    msg.fields = &fields;
+    fillParams(fields, msg);
+  } else if (!parseLine(raw, msg)) {
+    return;
+  }
+
   if (msg.command.empty()) return;
 
   dispatchCommand(client, msg);

@@ -131,12 +131,18 @@ bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos,
       const std::size_t slot = static_cast<std::size_t>(k->counter);
       std::vector<std::string>& list = walk.values[slot];
       const std::size_t mark = list.size();
+      const std::size_t order = walk.sequence.size();
 
-      list.push_back(walk.line->substr(k->start, pos - k->start));
+      const std::string text = walk.line->substr(k->start, pos - k->start);
+      list.push_back(text);
+      walk.sequence.push_back(text);
+      walk.owners.push_back(static_cast<int>(slot));
 
       if (matchContinuation(k->next, pos, walk)) return true;
 
       list.resize(mark);
+      walk.sequence.resize(order);
+      walk.owners.resize(order);
       return false;
     }
   }
@@ -313,6 +319,8 @@ bool TreeMatcher::match(int rule, const std::string& line,
   Walk walk;
   walk.line = &line;
   walk.values.assign(_grammar.captureCount(), std::vector<std::string>());
+  walk.sequence.clear();
+  walk.owners.clear();
   walk.steps = 0;
   walk.depth = 0;
   walk.exhausted = false;
@@ -322,6 +330,7 @@ bool TreeMatcher::match(int rule, const std::string& line,
   _exhausted = walk.exhausted;
   if (ok) {
     out.adopt(walk.values);
+    out.adoptSequence(walk.sequence, walk.owners);
   }
   return ok;
 }

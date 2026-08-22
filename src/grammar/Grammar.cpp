@@ -68,6 +68,12 @@ const std::string& Grammar::captureName(int index) const {
 
 std::size_t Grammar::captureCount() const { return _captureNames.size(); }
 
+int Grammar::captureIndex(const std::string& name) const {
+  for (std::size_t i = 0; i < _captureNames.size(); ++i)
+    if (_captureNames[i] == name) return static_cast<int>(i);
+  return -1;
+}
+
 bool Grammar::isEmpty() const { return _ruleNames.empty(); }
 
 void Grammar::clear() {

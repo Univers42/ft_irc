@@ -62,13 +62,35 @@ const std::vector<std::string>& MatchResult::all(
   return _values[static_cast<std::size_t>(slot)];
 }
 
+std::size_t MatchResult::sequenceSize() const { return _sequence.size(); }
+
+const std::string& MatchResult::sequenceAt(std::size_t index) const {
+  if (index >= _sequence.size()) return emptyString();
+  return _sequence[index];
+}
+
+int MatchResult::sequenceOwner(std::size_t index) const {
+  if (index >= _owners.size()) return -1;
+  return _owners[index];
+}
+
+void MatchResult::adoptSequence(std::vector<std::string>& sequence,
+                                std::vector<int>& owners) {
+  _sequence.swap(sequence);
+  _owners.swap(owners);
+}
+
 void MatchResult::clear() {
+  _sequence.clear();
+  _owners.clear();
   _values.clear();
   _grammar = NULL;
 }
 
 void MatchResult::reset(const Grammar& grammar) {
   _grammar = &grammar;
+  _sequence.clear();
+  _owners.clear();
   _values.assign(grammar.captureCount(), std::vector<std::string>());
 }
 

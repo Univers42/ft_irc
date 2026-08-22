@@ -17,10 +17,12 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
     return;
   }
 
-  const std::string& text = msg.params[1];
+  const std::string text =
+      msg.matched() ? msg.field("msgtext") : msg.params[1];
 
   std::vector<std::string> targets =
-      libcpp::str::split_nonempty(msg.params[0], ',');
+      msg.matched() ? msg.list("msgtarget", ',')
+                    : libcpp::str::split_nonempty(msg.params[0], ',');
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& target = targets[t];
 
@@ -59,10 +61,12 @@ void Server::cmdNotice(Client* client, const Message& msg) {
   if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
     return;
 
-  const std::string& text = msg.params[1];
+  const std::string text =
+      msg.matched() ? msg.field("msgtext") : msg.params[1];
 
   std::vector<std::string> targets =
-      libcpp::str::split_nonempty(msg.params[0], ',');
+      msg.matched() ? msg.list("msgtarget", ',')
+                    : libcpp::str::split_nonempty(msg.params[0], ',');
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& target = targets[t];
 
@@ -98,7 +102,10 @@ void Server::cmdPong(Client* client, const Message& msg) {
 
 void Server::cmdQuit(Client* client, const Message& msg) {
   std::string reason = "Quit";
-  if (!msg.params.empty()) reason = msg.params[0];
+  if (msg.matched())
+    reason = msg.field("quitmsg");
+  else if (!msg.params.empty())
+    reason = msg.params[0];
 
   int fd = client->getFd();
   disconnectClient(fd, reason);
