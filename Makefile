@@ -12,7 +12,15 @@ CXX			= c++
 CXXFLAGS	= -Wall -Wextra -Werror -std=c++98
 
 .NOTPARALLEL:
-.DEFAULT_GOAL := all
+
+#  Bare `make` prints the help screen and builds nothing; `make all` builds.
+#  There were two .DEFAULT_GOAL assignments here and the later one silently
+#  won -- consolidated so the choice is visible in one place.
+#
+#  Anything automated must therefore say `make all` explicitly, never bare
+#  `make`. scripts/audit.sh does (its no-relink check compares two `make all`
+#  runs); so do tests/12_build_norm.sh, the Dockerfile and ci.yml.
+.DEFAULT_GOAL := help
 
 SRCDIR		= src
 

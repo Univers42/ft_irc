@@ -65,7 +65,7 @@ for tier in mandatory bonus; do
 		fail "make $tier failed"; tail -20 "$BUILD_LOG"
 	fi
 done
-make >/dev/null 2>&1   # leave the default (full) binary in place
+make all >/dev/null 2>&1   # leave the default (full) binary in place
 
 # ── 2. no C++11+ tokens in build sources ─────────────────────────────────────
 section "C++98 compliance (no C++11+ constructs)"
@@ -142,8 +142,10 @@ done
 
 # ── 7. no unnecessary relink ─────────────────────────────────────────────────
 section "no unnecessary relinking"
-make >/dev/null 2>&1
-SECOND="$(make 2>&1)"
+# `make all`, never bare `make`: the Makefile's default goal is `help`, which
+# builds nothing and would make this check compare two help screens.
+make all >/dev/null 2>&1
+SECOND="$(make all 2>&1)"
 if printf '%s' "$SECOND" | grep -qiE 'Nothing to be done|is up to date' \
 	|| [ -z "$(printf '%s' "$SECOND" | grep -E '\.o|ircserv')" ]; then
 	pass "second 'make' is a no-op"
@@ -155,8 +157,24 @@ fi
 section "header include cycles"
 CYC="vendor/libcpp/vendor/scripts/check_header_cycles.py"
 if [ -f "$CYC" ]; then
-	if python3 "$CYC" include src >/tmp/ircaudit_cyc 2>&1; then
+	# A checker that cannot run is a BROKEN GATE, not a clean result, and the
+	# two have to report differently. This gate silently degraded for a while:
+	# the libcpp scripts submodule had unresolved merge markers committed into
+	# check_header_cycles.py (bare <<<<<<< / ======= lines above the shebang),
+	# so every run died with a SyntaxError -- and because that only produced a
+	# warn, the audit still printed AUDIT PASSED with the cycle check never
+	# having executed. Parse first, and treat a crash as a failure.
+	# ast.parse rather than py_compile: py_compile would drop a __pycache__
+	# artifact inside the submodule and dirty it.
+	if ! python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' \
+			"$CYC" 2>/tmp/ircaudit_cyc; then
+		fail "check_header_cycles.py does not parse — gate is broken, not clean:"
+		sed 's/^/      /' /tmp/ircaudit_cyc | head
+	elif python3 "$CYC" include src >/tmp/ircaudit_cyc 2>&1; then
 		pass "no header cycles"
+	elif grep -q 'Traceback (most recent call last)' /tmp/ircaudit_cyc; then
+		fail "check_header_cycles.py crashed — gate did not run:"
+		sed 's/^/      /' /tmp/ircaudit_cyc | head
 	else
 		warn "check_header_cycles reported issues:"; sed 's/^/      /' /tmp/ircaudit_cyc | head
 	fi
