@@ -1,5 +1,7 @@
 /* ─── Integration tests: full IRC protocol via TCP sockets ─── */
 
+#include <poll.h>
+
 #include "PostMan.hpp"
 #include "TestHarness.hpp"
 #include "ext/IServerExtension.hpp"
@@ -858,8 +860,9 @@ TEST_F(IntegrationTest, BotViaPrivmsg)
 struct DeadlineRefillProbe : public IServerExtension
 {
 	int targetFd;
+	bool claimed; /* a subject was chosen once; never adopt another */
 
-	DeadlineRefillProbe() : targetFd(-1) {}
+	DeadlineRefillProbe() : targetFd(-1), claimed(false) {}
 
 	const char *name() const override { return "deadline-refill-probe"; }
 
@@ -879,7 +882,44 @@ struct DeadlineRefillProbe : public IServerExtension
 
 	void onClientRegistered(Server &server, Client &client) override
 	{
+		/* Only the FIRST client that registers is the subject.
+		**
+		** The guard is `claimed`, not `targetFd != -1`: onTick() resets
+		** targetFd to -1 once the subject is finalized, so an fd-based test
+		** goes back to accepting candidates. This test then opens a second,
+		** healthy connection (hb) to keep the event loop ticking -- and the
+		** probe adopted it, queued 50 KB at it and disconnected it too, so
+		** the heartbeat meant to drive checkPendingCloseTimeouts() was
+		** itself pending-close. */
+		if (claimed)
+			return;
+		claimed = true;
+
 		targetFd = client.getFd();
+
+		/* Clamp the SERVER's socket send buffer.
+		**
+		** Without this the test cannot work at all, and this is what made
+		** it fail: Client::_out is USERSPACE. send() moves bytes into the
+		** kernel's socket buffer, and _out empties as soon as the kernel
+		** accepts them -- whether or not the peer ever reads. The default
+		** tcp_wmem here starts at 16 KB and autotunes towards
+		** wmem_max (208 KB on this box), so a backlog of 50 KB vanishes
+		** into the kernel, hasPendingData() goes false, and
+		** handleClientOutput() finalizes on the DRAIN-COMPLETE path in a
+		** couple of hundred milliseconds -- long before any deadline.
+		**
+		** Raising the backlog instead is not an option: it must stay under
+		** MAX_SENDQ (64 KiB) or this turns into a SendQ close, and 64 KiB
+		** is far below what the kernel will absorb. Shrinking the pipe is
+		** the only lever that leaves _out non-empty.
+		**
+		** The client shrinks its own receive buffer symmetrically (see the
+		** SO_RCVBUF call in the test body); both ends are needed, since
+		** either one alone still leaves room for the whole backlog. */
+		int sndbuf = 4096;
+		setsockopt(targetFd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+
 		queueBacklog(server, &client, 50000);
 		server.disconnectClient(targetFd, "deadline test");
 	}
@@ -934,21 +974,22 @@ protected:
 
 TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 {
+	/* Shrink tc's receive window well below MAX_SENDQ, BEFORE connect().
+	**
+	** On loopback the default tcp_rmem here is 128 KiB -- larger than the
+	** 64 KiB MAX_SENDQ the probe must stay under -- so the whole payload
+	** fits in the receiver's window and the server flushes it in one pass:
+	** drain-complete, not the deadline, closes the connection, and no
+	** payload size under MAX_SENDQ can outrun that.
+	**
+	** This clamp used to be applied AFTER connect(), which looks equivalent
+	** and is not: the window is advertised during the handshake from the
+	** buffer size in effect at that moment, and a sender may burst up to
+	** the advertised window. The buffer read back as the requested 8 KiB
+	** while the peer still absorbed all 50 KB, measured with SIOCOUTQ
+	** showing the server's kernel send queue fully drained and ACKed. */
 	TestClient tc;
-	ASSERT_TRUE(tc.connect(serverPort));
-
-	/* Shrink tc's own receive window well below MAX_SENDQ *before* it sends
-	** anything: on a loopback with a generous default tcp_rmem (seen here:
-	** 128 KiB, bigger than the 64 KiB MAX_SENDQ), the whole probe payload
-	** fits inside the receiver's initial window and the server can flush it
-	** in one send() -- drain-complete, not the deadline, closes the
-	** connection, regardless of payload size (nothing under MAX_SENDQ can
-	** outrun that). A real, deliberately undersized window forces the kind
-	** of backpressure a frozen reader is supposed to create, so the deadline
-	** path actually gets exercised. Set here, before PASS/NICK/USER, so the
-	** first ACKs the server sees already advertise the shrunk window. */
-	int rcvbuf = 4096;
-	setsockopt(tc.fd(), SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+	ASSERT_TRUE(tc.connect(serverPort, 4096));
 
 	tc.sendCmd("PASS testpass");
 	tc.sendCmd("NICK deadline1");
@@ -961,24 +1002,32 @@ TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 	** later) apart from a drain-complete one (near-instant). */
 	std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
-	char buf[4096];
 	ssize_t n = -1;
-	/* Even though this test never reads, some of the continuously-topped-up
-	   backlog may already have landed in the OS's own receive buffer
-	   (nothing shrinks it here) -- so the first few recv() calls can
-	   legitimately return real, already-delivered bytes. Drain past that
-	   backlog first; only the terminal (n <= 0) result says anything about
-	   whether the connection itself is gone. The deadline finalize forces
-	   an abortive close (SO_LINGER 0) since it gave up on undrained
-	   backlog, so the peer can see either a clean EOF or ECONNRESET
-	   depending on timing -- both mean "gone". EAGAIN after draining
-	   everything buffered means the connection is still open. */
+	/* Detect closure WITHOUT reading a single byte.
+	**
+	** The previous version drained with recv() in a loop of up to 100 x 4 KB
+	** per call, every 20 ms -- roughly 20 MB/s. That is the opposite of the
+	** frozen peer this test is named after: the draining kept the window
+	** open, so the server flushed its backlog and closed on drain-
+	** completion. The comment above it said "this test never reads" while
+	** the code beneath it read as fast as it could.
+	**
+	** poll() answers the only question that matters -- is the connection
+	** gone -- and answers it without consuming the backlog that has to stay
+	** unconsumed for the deadline to be reachable. Both shutdown shapes are
+	** covered: the deadline's abortive close (SO_LINGER 0) raises
+	** POLLERR/POLLHUP, and a graceful FIN raises POLLRDHUP. POLLERR and
+	** POLLHUP are reported in revents whether or not they were requested. */
 	auto checkClosed = [&]() -> bool {
-		int reads = 0;
-		do {
-			n = recv(tc.fd(), buf, sizeof(buf), MSG_DONTWAIT);
-		} while (n > 0 && ++reads < 100);
-		return (n == 0) || (n < 0 && (errno == ECONNRESET || errno == ENOTCONN));
+		struct pollfd pfd;
+		pfd.fd = tc.fd();
+		pfd.events = POLLRDHUP;
+		pfd.revents = 0;
+		if (::poll(&pfd, 1, 0) < 0)
+			return false;
+		bool gone = (pfd.revents & (POLLERR | POLLHUP | POLLRDHUP)) != 0;
+		n = gone ? 0 : 1;
+		return gone;
 	};
 
 	bool closed = checkClosed();

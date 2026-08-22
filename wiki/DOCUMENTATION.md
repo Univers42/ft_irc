@@ -541,7 +541,7 @@ HexChat automatically sends:
 ### RPL_ISUPPORT Tokens
 
 ```
-CHANTYPES=#  PREFIX=(o)@  CHANMODES=,k,,itl  NICKLEN=9
+CHANTYPES=#  PREFIX=(o)@  CHANMODES=,,kl,it  NICKLEN=9
 CHANNELLEN=50  TOPICLEN=390  NETWORK=ft_irc  CASEMAPPING=ascii
 ```
 

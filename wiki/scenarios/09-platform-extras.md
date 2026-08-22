@@ -111,6 +111,10 @@ The C++ server contains no AI code and does not know the companion is one. All
 outbound IRC lines funnel through a single writer task, so a multi-second model
 call never delays PING/PONG.
 
+It is more than a question-answer bot: it reads channel scrollback, WHOs the
+roster, reads topic and modes, searches the web, and — when explicitly enabled —
+moderates. That has its own page: [10 — The AI assistant](10-ai-assistant.md).
+
 Server only, no companion:
 
 ```bash

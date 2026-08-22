@@ -36,6 +36,7 @@ Two conventions used throughout:
 | 07 | [File transfer](07-file-transfer.md) | `FILE` relay and HexChat DCC — bonus tier |
 | 08 | [Failure & resilience](08-resilience.md) | Split packets, abrupt kills, ping timeout, floods, shutdown |
 | 09 | [Platform extras](09-platform-extras.md) | `FT_IRC_CONFIG`: audit trail, platform bus, Docker |
+| 10 | [The AI assistant](10-ai-assistant.md) | `assistant`: the agentic Claude companion — outside the 42 build |
 
 Plus [**commands.md**](commands.md) — the flat reference: every command, its
 raw syntax, its HexChat equivalent, and the numerics it can answer with.

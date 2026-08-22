@@ -49,6 +49,7 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/Channel.cpp \
 			  ../src/Message.cpp \
 			  ../src/IrcCase.cpp \
+			  ../src/IrcTrace.cpp \
 			  ../src/CommandRegistration.cpp \
 			  ../src/CommandChannel.cpp \
 			  ../src/CommandMessaging.cpp \

@@ -176,6 +176,49 @@ Everyone sees it, including bob, and the reason is optional. Operator-only
 
 ---
 
+## Two rules about mode strings
+
+**One reply per distinct complaint.** A mode string is a list of letters, and
+the same letter can appear many times. `MODE #ops jfsadfsahf` names ten
+characters but only six distinct ones, and you get six `472` replies — not ten.
+`MODE #ops +ooo` with no parameters gets **one** `461`, not three. Answering
+per occurrence turned a single 512-octet MODE into hundreds of lines (measured
+at 46 KB from one 507-octet request) and told you nothing you did not already
+know.
+
+**`-k` only takes an argument when it is spare.** RFC 2812 spells `-k` with the
+key, and HexChat sends one, but a bare `-k` is just as common — so the argument
+is optional, and it is consumed only when it is surplus to what the modes after
+it still need:
+
+```
+MODE #ops -k                    -> -k              nothing to consume
+MODE #ops -k oldkey             -> -k oldkey       spare, consumed and echoed
+MODE #ops -k+o alice            -> -k+o alice      alice is needed by +o
+MODE #ops -k+o oldkey alice     -> -k+o oldkey alice
+```
+
+Before this rule, `-k+o alice` ate `alice` as a key it then discarded; `+o`
+found no parameter, answered `461`, and **the operator grant silently never
+happened** — while the broadcast read a bare `-k`, showing no sign that a
+parameter had been eaten. That is the shape most "`/mode +o` doesn't work"
+reports take.
+
+The `005` token matches: `CHANMODES=,,kl,it` puts both `k` and `l` in group C
+— *a parameter when set, none when removed*. That is not the conventional
+place for `k`, and the reason is this server's optional `-k` argument.
+Advertising the usual group B ("always a parameter") makes HexChat mis-read
+the broadcast `-k+o alice` as `-k alice` plus a parameterless `+o`, and it
+renders *"alice gives channel operator status to "* with an empty nick — even
+though the server opped the right person. ISUPPORT has no way to say
+"optional", so C is the group that describes what actually goes out.
+
+Fuzz it yourself:
+
+```bash
+scripts/simulation.sh --fuzz-mode 400
+```
+
 ## Mode reference
 
 | Mode | Parameter | Effect | Refused with |

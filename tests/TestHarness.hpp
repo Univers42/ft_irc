@@ -35,10 +35,24 @@ public:
 	TestClient() : _fd(-1) {}
 	~TestClient() { disconnect(); }
 
-	bool connect(int port)
+	/* rcvBufBytes > 0 clamps SO_RCVBUF *before* connect().
+	**
+	** The ordering is the whole point. Setting SO_RCVBUF after connect()
+	** does resize the buffer, but the receive window was already advertised
+	** during the handshake from the default (128 KiB here), and a sender may
+	** burst up to that window -- so a "frozen" peer still absorbs ~64 KiB it
+	** was never supposed to have room for. Clamping before connect() is what
+	** makes the small window real on the wire.
+	**
+	** Only backpressure tests need this; everyone else calls connect(port). */
+	bool connect(int port, int rcvBufBytes = 0)
 	{
 		_fd = socket(AF_INET, SOCK_STREAM, 0);
 		if (_fd < 0) return false;
+
+		if (rcvBufBytes > 0)
+			setsockopt(_fd, SOL_SOCKET, SO_RCVBUF, &rcvBufBytes,
+					   sizeof(rcvBufBytes));
 
 		struct sockaddr_in addr;
 		std::memset(&addr, 0, sizeof(addr));

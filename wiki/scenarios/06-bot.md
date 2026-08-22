@@ -82,8 +82,9 @@ assistant: summarise the last few messages
 /msg assistant hello
 ```
 
-It answers only when addressed. See
-[09 — Platform extras](09-platform-extras.md).
+It answers only when addressed, and it can *act* — read scrollback, WHO the
+roster, read topic and modes, and (when enabled) moderate. Full walkthrough:
+[10 — The AI assistant](10-ai-assistant.md).
 
 ---
 

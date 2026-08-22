@@ -4,6 +4,7 @@
 
 #include "IrcCase.hpp"
 #include "Log.hpp"
+#include "IrcTrace.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/case.hpp"
@@ -168,9 +169,28 @@ void Server::completeRegistration(Client* client) {
   sendReply(client, RPL_MYINFO,
             _serverName + " " + SERVER_VERSION + " o itkol");
 
-  // 005 RPL_ISUPPORT
+  /* 005 RPL_ISUPPORT
+  **
+  ** CHANMODES groups are A,B,C,D: A = list modes (always a parameter),
+  ** B = always a parameter both ways, C = a parameter only when set,
+  ** D = never a parameter.
+  **
+  ** `l` lives in C, not D: "+l 20" carries the limit while "-l" does not.
+  ** It was advertised in D, which told a client that MODE #chan +l takes no
+  ** argument -- the one client that believed the token would mis-parse
+  ** every +l broadcast this server sends.
+  **
+  ** `k` is in C rather than the conventional B, because this server's "-k"
+  ** does NOT require an argument: handleChannelMode() takes one only when
+  ** it is surplus to what the modes after it need. Advertising B was tried
+  ** and is observably wrong -- HexChat believes the token, so it read the
+  ** broadcast ":alice MODE #general -k+o bob" as "-k bob" plus a "+o" with
+  ** no argument and rendered "alice gives channel operator status to "
+  ** with an empty nick, while the server had correctly opped bob. ISUPPORT
+  ** cannot say "optional", so C -- no argument on removal -- is the group
+  ** that matches what this server actually sends. */
   sendReply(client, RPL_ISUPPORT,
-            "CHANTYPES=# PREFIX=(o)@ CHANMODES=,k,,itl "
+            "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it "
             "NICKLEN=9 CHANNELLEN=50 TOPICLEN=390 "
             "NETWORK=" +
                 _serverName +
@@ -180,6 +200,7 @@ void Server::completeRegistration(Client* client) {
   // 422 ERR_NOMOTD (we don't have a MOTD file)
   sendReply(client, ERR_NOMOTD, ":MOTD File is missing");
 
+  IrcTrace::sessionRegistered(client->getFd(), prefix);
   Log::success("registered " + nick + " (" + client->getUsername() + "@" +
                client->getHostname() + ")");
   audit("register", nick, client->getUsername() + "@" + client->getHostname());

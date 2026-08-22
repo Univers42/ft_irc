@@ -48,7 +48,7 @@ The three tiers share the kernel sources and differ **only at link time**: per-t
 
 The **server** compiles under **C++98** (`Makefile`). The **test suite** compiles under **C++17** (`tests/Makefile`, required by Google Test 1.16). This means project sources in `src/` — and the vendored **`vendor/libcpp/c98/`** tier — must stay C++98-clean *while also* compiling under C++17. Do not introduce C++11+ constructs into `src/` or `vendor/libcpp/c98/`, even though `make test` would accept them. `tests/` and the rest of `vendor/` may use C++17 freely.
 
-`vendor/googletest`, `vendor/libcpp`, and `vendor/scripts` (utility repo; `make norm` calls its `norminette.sh`) are git submodules — run `git submodule update --init --recursive` before building on a fresh clone (`--recursive` because the audit's header-cycle check runs from libcpp's own nested scripts submodule). All submodule URLs are **HTTPS**, so a clone works with no GitHub key; they were SSH, which meant `make` failed outright for anyone who wasn't the author, since `vendor/libcpp` is a hard build dependency of even `make mandatory`. Keep them HTTPS. To *push* to libcpp, set a push-only SSH URL locally (`git -C vendor/libcpp remote set-url --push origin git@github.com:Univers42/libcpp.git`) — that is local config and does not touch `.gitmodules`. libcpp's C++98-clean modules (`str/*`, `util/config`, `term/*`, plus the dedicated `c98/` tier: `LineBuffer`, `CsvWriter`, `Reactor`, `BufferedSocket`, namespace `libcpp98`) are **compiled from source into ircserv** — no external library is linked (subject-safe). Changes to libcpp are committed inside the submodule first, then the pointer is bumped here.
+`vendor/googletest`, `vendor/libcpp`, and `vendor/scripts` (utility repo; `make norm` calls its `norminette.sh`) are git submodules — run `git submodule update --init --recursive` before building on a fresh clone (`--recursive` because the audit's header-cycle check runs from libcpp's own nested scripts submodule). All submodule URLs are **HTTPS**, so a clone works with no GitHub key; they were SSH, which meant `make` failed outright for anyone who wasn't the author, since `vendor/libcpp` is a hard build dependency of even `make mandatory`. Keep them HTTPS. To *push* to libcpp, set a push-only SSH URL locally (`git -C vendor/libcpp remote set-url --push origin git@github.com:Univers42/libcpp.git`) — that is local config and does not touch `.gitmodules`. libcpp is built by **its own Makefile via `make -C`**, the way a 42 library is expected to be. It has an `STD` profile: `make -C vendor/libcpp STD=c++98` (alias `c98`) compiles only the **28 of 44** modules that pass `-std=c++98 -Wall -Wextra -Werror` and archives them as `build/c98/lib/libftpp98.a`, which `ircserv` links; the default `STD=c++17` profile still builds the full `build/lib/libftpp.a`/`.so` and is byte-for-byte what it was before the split. The membership of each list was established by **compiling every module individually**, not by reading it — re-run that check before moving a name between `SRC_C98_CORE`, `SRC_C98_TIER` and `SRC_MODERN` in libcpp's Makefile. The 16 modern modules fail because their headers use `= delete`, `= default`, default member initializers or `<thread>`/`<chrono>` (the exception is `mem/leak_guard.cpp`, which fails on `operator new` missing its `throw(std::bad_alloc)` spec). Those cannot be `#ifdef`-ed from within — a C++98 compiler has to *tokenize* the file before the preprocessor branch is taken — so they are excluded at the source list **and** at the include graph: `include/libcpp/config.hpp` defines `LIBCPP_HAS_CXX11`/`LIBCPP_HAS_CXX17`, and the umbrella headers (`libcpp.hpp`, `async/threading.hpp`, `net/network.hpp`, `math/mathematics.hpp`, `data/data_structures.hpp`) gate the modern includes on it, so a C++98 consumer can include any of them without a parse error. The `STD=c++98` profile also drops libcpp's default `MAKEFLAGS += -j$(nproc)` in favour of `.NOTPARALLEL` (unbounded `-j` is the measured swap-freeze cause fixed in `2113e0c`). ft_irc links the archive **last** on the link line (a static archive only supplies symbols still unresolved when the linker reaches it) while listing it **first** in the `$(NAME)` prerequisites (dependency builds before the program). Changes to libcpp are committed inside the submodule first, then the pointer is bumped here.
 
 **A broken `evals42` gitlink is currently in the index**: commit `571bfcc` added a gitlink at `evals42` with no matching `.gitmodules` entry, so `git submodule status` aborts with *"no submodule mapping found"*. The working tree now has an untracked `Evals42/` (different case) holding its own `.git`. Don't `git add -A` blindly — decide whether that directory belongs in the repo, and if it does, add a proper `.gitmodules` stanza.
 
@@ -103,7 +103,7 @@ Dispatch enforces a **registration gate**: only CAP/PASS/NICK/USER/QUIT/PONG run
 
 `companions/` holds two Rust processes that connect to `ircserv` as **ordinary IRC clients** over TCP — the C++98 server is subject-clean and unaware of them; no make tier includes them. Each builds with plain cargo (`Cargo.lock` committed; CI builds `--locked`):
 
-- **ai-assistant** — Claude-backed channel bot (nick `assistant`), answers only when addressed (`!ai …`, `assistant: …`, or direct PRIVMSG). Raw Messages API over reqwest; all outbound IRC lines funnel through a single writer task so multi-second model calls never delay PING/PONG.
+- **ai-assistant** — Claude-backed **agentic** channel bot (nick `assistant`, `claude-opus-5`), answers only when addressed (`!ai …`, `assistant: …`, or direct PRIVMSG). Raw Messages API over reqwest (no official Rust SDK), so it owns the tool loop itself; all outbound IRC lines funnel through a single writer task so multi-second model calls never delay PING/PONG. Modules: `config`/`irc`/`memory`/`tools`/`claude`. Client-side tools act via ordinary IRC commands (WHO, WHOIS, TOPIC, MODE, JOIN, PART, KICK, INVITE) through a **pending-query registry** in `irc.rs` — a tool runs in a spawned task but its numeric reply lands on the read loop, so it registers a `QuerySpec` and the read loop completes a oneshot on the terminating numeric; `324`/`332` have no terminator at all, hence every query also carries a timeout. Three gate tiers (read / `AI_ALLOW_CHANNEL_OPS` / `AI_ALLOW_MODERATION`, last off by default); moderation additionally requires an `AI_ADMINS` nick **and** live operator status re-read via WHO, checked against the *requester*, never a model-supplied nick. `web_search_20260209`/`web_fetch_20260209` are declared server-side — do **not** add `code_execution` beside them (second execution environment). `stop_reason` must be checked for `refusal` (content is not an answer) and `pause_turn` (resend with no new user message) before reading text. The system prompt is byte-stable on purpose — it carries the cache breakpoint, and a unit test asserts two builds are identical; volatile context rides in the user message. Scrollback is deliberately **not** in the prompt (tool-read only). 25 unit tests. **Local `cargo` 1.75 cannot parse the v4 `Cargo.lock`** — build/test it in `rust:1-slim` with `CARGO_TARGET_DIR` pointed off `/home/dlesieur`, which is a 4.7 GB disk sitting at 99% full.
 - **realtime-bridge** — bidirectional bridge to `realtime-agnostic` (WebSocket pub/sub + DB change-capture; compose pins its image by digest). IRC→realtime publishes under `irc:**`, which the bridge never subscribes to (loop-free by namespace); realtime→IRC injects `irc-in/<channel>` chat events via short-lived **puppet** connections registering the web user's own nick (derived to a valid ≤9-char nick, 433 collisions suffixed, idle-TTL + pool cap, write-only), and CDC events (`pg/**`, `mongo/**`) via its main `rtbridge` client.
 
 Docker stack (`docker-compose.yml`; secrets only in the gitignored `.env`, from `.env.example` — `ANTHROPIC_API_KEY` required):
@@ -207,6 +207,32 @@ Two rules the shell suite depends on, and both have already cost real debugging 
   `close()`d, while a large SendQ was still pending for it, killed the whole
   process with SIGPIPE (exit 141). Now installed in `tests/test_main.cpp`.
   Keep it there; it is a property of the process, not of any one fixture.
+- **Backpressure tests must clamp SO_RCVBUF *before* connect()**: setting it
+  afterwards resizes the buffer but does NOT shrink the receive window already
+  advertised during the handshake, and a sender may burst up to that window.
+  `DeferredCloseDeadlineTest` clamped after connect and the socket read back
+  the requested 8 KiB while the "frozen" peer still absorbed all 50 KB —
+  confirmed with SIOCOUTQ showing the server's kernel send queue fully drained
+  and ACKed. The server then closed on drain-completion at ~221ms and the test
+  failed against a 1000ms deadline, looking for all the world like a server
+  timing bug. `TestClient::connect(port, rcvBufBytes)` now applies the clamp
+  before `connect()`; only backpressure tests pass the second argument.
+  Related: `Client::_out` is USERSPACE only, so `hasPendingData()` goes false
+  as soon as the kernel accepts the bytes — a backlog must exceed
+  *both* socket buffers to stay pending, and it cannot exceed MAX_SENDQ
+  (64 KiB), so shrinking both ends is the only lever.
+- **A frozen-peer test must not read**: the same test's `checkClosed()` drained
+  up to 100 x 4 KiB every 20 ms (~20 MB/s) while its comment above said "this
+  test never reads". Detect closure with `poll()` for POLLERR/POLLHUP (the
+  deadline's abortive SO_LINGER close) or POLLRDHUP (a graceful FIN) — it
+  answers "is it gone" without consuming the backlog that has to stay
+  unconsumed for the deadline to be reachable at all.
+- **A probe extension that reacts to `onClientRegistered` must claim exactly
+  one subject**: `DeadlineRefillProbe` guarded on `targetFd != -1`, but its own
+  `onTick` resets that to -1 when the subject is finalized — so it then adopted
+  the healthy heartbeat connection the test opens to keep the event loop
+  ticking, queued 50 KB at it and disconnected it too. Guard on a separate
+  latched `claimed` flag.
 - **Backpressure tests use a self-terminating flood**: the T6 frozen-reader
   tests (`test_robustness.cpp`) flood until the test says stop (`stopFlood`),
   bounded by a `FLOOD_CAP` safety net — NOT for a fixed `FLOOD_LINES` count.
@@ -284,8 +310,20 @@ Two rules the shell suite depends on, and both have already cost real debugging 
   would be a CPU-usage assertion: flaky, threshold-arbitrary, rejected. Don't
   add one; if you think idle-spin regressed, the bug would be in the
   `_epollMask` sweep logic, testable directly — not via CPU sampling.
-- **Known conformance gaps (audited, not fixed)**: the 005 CHANMODES token
-  classifies +l in the wrong group (it takes a param on set, so it belongs in
-  group C, not D), and 004 RPL_MYINFO advertises 'o' as a user mode. Both are
-  cosmetic — HexChat parses neither strictly — and were left as-is (see the A1
-  conformance audit). Don't "fix" them without checking the audit's rationale.
+- **005 CHANMODES is `,,kl,it`, and both k and l belong in group C.** The
+  token was `,k,,itl` (l in D, k in B) and both halves were wrong. `l` takes a
+  parameter on set, so D was a lie. `k` is the subtler one: this server's
+  `-k` does **not** require an argument (`handleChannelMode` takes one only
+  when it is surplus to what the modes after it need), so group B — "always a
+  parameter" — is wrong too, and observably so. HexChat believes the token: it
+  parsed the broadcast `:alice MODE #general -k+o bob` as `-k bob` plus a
+  parameterless `+o` and rendered *"alice gives channel operator status to "*
+  with an empty nick, while the server had correctly opped bob. ISUPPORT has
+  no way to say "optional", so C — no argument on removal — is the group that
+  matches what is actually sent. Verified against HexChat 2.16, both ways.
+  Don't move `k` back to B without re-running that check.
+- **Known conformance gap (audited, not fixed)**: 004 RPL_MYINFO advertises
+  'o' as a user mode, which it is not — this server supports no user modes at
+  all. The field is positional and there is no correct value for "none", so it
+  was left alone; HexChat does not parse 004 strictly. Don't "fix" it without
+  deciding what an empty user-mode field should look like on the wire.

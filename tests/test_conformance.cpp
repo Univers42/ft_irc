@@ -17,6 +17,20 @@
  *                            isNickInUse check) two different over-long
  *                            nicks could truncate to the same name and
  *                            both register.
+ *   - ModeReplyStorm.*     : handleChannelMode() answered per OCCURRENCE
+ *                            rather than per distinct complaint, so one
+ *                            512-octet MODE could produce hundreds of
+ *                            replies -- measured at 495 lines / 46 KB from
+ *                            a single 507-octet request (91x), all charged
+ *                            to the sender's own 64 KiB SENDQ.
+ *                            "MODE #c jfsadfsahf" answered 472 ten times,
+ *                            repeating f, s and a.
+ *   - ModeKeyParamTheft.*  : "-k" consumed the next positional parameter
+ *                            unconditionally and never echoed it, so
+ *                            "MODE #c -k+o nick" ate `nick` as a key it
+ *                            then discarded; +o found no parameter left,
+ *                            answered 461, and the operator grant silently
+ *                            never happened.
  */
 
 #include <gtest/gtest.h>
@@ -959,4 +973,145 @@ TEST_F(ConformanceTest, UserModeStillRejectsSomeoneElsesNick)
 		<< "MODE for another user's nick must still be refused";
 
 	tc.sendCmd("QUIT");
+}
+
+
+/* ─── MODE reply storms and parameter theft ─── */
+
+/* Occurrences of `needle` in `hay` — the mode-storm tests care about HOW MANY
+ * times a numeric came back, not merely whether it did. */
+static size_t countOccurrences(const std::string &hay, const std::string &needle)
+{
+	size_t n = 0;
+	std::string::size_type at = 0;
+	while ((at = hay.find(needle, at)) != std::string::npos)
+	{
+		++n;
+		at += needle.size();
+	}
+	return n;
+}
+
+TEST_F(ConformanceTest, ModeReplyStormUnknownCharAnsweredOncePerDistinctChar)
+{
+	/* RED: one ERR_UNKNOWNMODE per occurrence. "jfsadfsahf" holds ten
+	 * characters but only six distinct ones (j f s a d h), and the server
+	 * answered ten times -- telling the client three separate times that
+	 * 'f' is unknown. Scaled to a full-length mode string that is 495
+	 * replies from one command. */
+	TestClient op;
+	ASSERT_TRUE(op.connect(serverPort));
+	op.registerClient("testpass", "stormop", "stormop");
+	op.recvAll(200);
+
+	op.sendCmd("JOIN #storm");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	op.recvAll(200);
+
+	op.sendCmd("MODE #storm jfsadfsahf");
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	std::string got = op.recvAll(400);
+
+	EXPECT_EQ(countOccurrences(got, ERR_UNKNOWNMODE), 6u)
+		<< "expected one 472 per DISTINCT unknown mode char (j f s a d h), got:\n"
+		<< got;
+
+	op.sendCmd("QUIT");
+}
+
+TEST_F(ConformanceTest, ModeReplyStormMissingParamAnsweredOnce)
+{
+	/* RED: "+ooo" with no parameters answered 461 three times. The
+	 * shortfall is a property of the command, not of each letter. */
+	TestClient op;
+	ASSERT_TRUE(op.connect(serverPort));
+	op.registerClient("testpass", "stormop2", "stormop2");
+	op.recvAll(200);
+
+	op.sendCmd("JOIN #storm2");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	op.recvAll(200);
+
+	op.sendCmd("MODE #storm2 +ooo");
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	std::string got = op.recvAll(400);
+
+	EXPECT_EQ(countOccurrences(got, ERR_NEEDMOREPARAMS), 1u)
+		<< "expected exactly one 461 for one under-supplied command, got:\n"
+		<< got;
+
+	op.sendCmd("QUIT");
+}
+
+TEST_F(ConformanceTest, ModeKeyParamTheftRemoveKeyDoesNotEatTheNextParam)
+{
+	/* RED: "-k" consumed `member` as a key it discarded, so +o had no
+	 * parameter, answered 461, and member never became an operator -- while
+	 * the broadcast read a bare "-k", showing no sign a parameter had been
+	 * eaten. This is the case a colleague hit as "/mode +o does not work". */
+	TestClient op, member;
+	ASSERT_TRUE(op.connect(serverPort));
+	ASSERT_TRUE(member.connect(serverPort));
+	op.registerClient("testpass", "theftop", "theftop");
+	member.registerClient("testpass", "theftmem", "theftmem");
+	op.recvAll(200);
+	member.recvAll(200);
+
+	op.sendCmd("JOIN #theft");
+	std::this_thread::sleep_for(std::chrono::milliseconds(150));
+	member.sendCmd("JOIN #theft");
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+	op.recvAll(200);
+	member.recvAll(200);
+
+	op.sendCmd("MODE #theft -k+o theftmem");
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	std::string got = op.recvAll(400);
+
+	EXPECT_EQ(countOccurrences(got, ERR_NEEDMOREPARAMS), 0u)
+		<< "-k stole the +o parameter and starved it, got:\n" << got;
+	EXPECT_NE(got.find("+o theftmem"), std::string::npos)
+		<< "the operator grant must survive a preceding -k, got:\n" << got;
+
+	op.sendCmd("QUIT");
+	member.sendCmd("QUIT");
+}
+
+TEST_F(ConformanceTest, ModeKeyParamTheftRemoveKeyStillTakesItsOwnArgument)
+{
+	/* The fix must not go the other way: when a parameter IS surplus to what
+	 * the following modes need, "-k" still consumes it (RFC 2812 spells -k
+	 * with the key, and HexChat sends one) and now echoes it, because a
+	 * consumed parameter absent from the broadcast is indistinguishable
+	 * from one that was never sent. */
+	TestClient op, member;
+	ASSERT_TRUE(op.connect(serverPort));
+	ASSERT_TRUE(member.connect(serverPort));
+	op.registerClient("testpass", "theftop3", "theftop3");
+	member.registerClient("testpass", "theftme3", "theftme3");
+	op.recvAll(200);
+	member.recvAll(200);
+
+	op.sendCmd("JOIN #theft3");
+	std::this_thread::sleep_for(std::chrono::milliseconds(150));
+	member.sendCmd("JOIN #theft3");
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+	op.sendCmd("MODE #theft3 +k oldkey");
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	op.recvAll(200);
+	member.recvAll(200);
+
+	op.sendCmd("MODE #theft3 -k+o oldkey theftme3");
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	std::string got = op.recvAll(400);
+
+	EXPECT_EQ(countOccurrences(got, ERR_NEEDMOREPARAMS), 0u)
+		<< "surplus -k argument should not have starved +o, got:\n" << got;
+	EXPECT_NE(got.find("oldkey"), std::string::npos)
+		<< "-k consumed its argument but did not echo it, got:\n" << got;
+	EXPECT_NE(got.find("theftme3"), std::string::npos)
+		<< "the operator grant is missing from the broadcast, got:\n" << got;
+
+	op.sendCmd("QUIT");
+	member.sendCmd("QUIT");
 }

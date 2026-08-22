@@ -16,3 +16,5 @@ tests/test_runner
 
 .claude/workflow/tasks/*
 .claude/skills*
+# Simulation harness state
+.sim/

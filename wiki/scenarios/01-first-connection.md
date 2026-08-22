@@ -82,7 +82,7 @@ The server answers the moment the third one lands:
 :ft_irc 002 alice :Your host is ft_irc, running version 1.0
 :ft_irc 003 alice :This server was created 2025-01-01
 :ft_irc 004 alice ft_irc 1.0 o itkol
-:ft_irc 005 alice CHANTYPES=# PREFIX=(o)@ CHANMODES=,k,,itl NICKLEN=9 CHANNELLEN=50 TOPICLEN=390 NETWORK=ft_irc CASEMAPPING=ascii :are supported by this server
+:ft_irc 005 alice CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it NICKLEN=9 CHANNELLEN=50 TOPICLEN=390 NETWORK=ft_irc CASEMAPPING=ascii :are supported by this server
 :ft_irc 422 alice :MOTD File is missing
 ```
 

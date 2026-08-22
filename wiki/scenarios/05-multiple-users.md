@@ -102,6 +102,21 @@ someone registering a lookalike of an existing nick.
 
 ---
 
+## Try it: a whole populated server, in one command
+
+```bash
+scripts/simulation.sh                 # 10 users, several channels, ops, conversation
+scripts/simulation.sh --hexchat 2     # two of them as real HexChat windows
+scripts/simulation.sh --status
+scripts/shutdown_simulation.sh        # free all of it
+```
+
+The simulation harness brings up the server and a cast of ten users — some in
+several channels, one in none — hands out operator status, and replays a
+scripted conversation, all in the background. Clients can be netcat sockets or
+real HexChat GUIs, and the same `--send` command drives either. See
+[`scripts/sim/README.md`](../../scripts/sim/README.md).
+
 ## Try it: 12 clients, one channel
 
 ```bash
