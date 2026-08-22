@@ -22,11 +22,9 @@ class AuditLog : public IServerExtension {
   explicit AuditLog(const std::string& path);
   ~AuditLog();
 
-  /* ─── IServerExtension ─── */
   const char* name() const;
   void onAudit(const std::string& event, const std::string& actor,
                const std::string& detail);
-
   bool ok() const;
   void log(const std::string& event, const std::string& actor,
            const std::string& detail);
@@ -35,9 +33,7 @@ class AuditLog : public IServerExtension {
   AuditLog();
   AuditLog(const AuditLog& other);
   AuditLog& operator=(const AuditLog& other);
-
   static std::string timestamp();
-
   libcpp98::CsvWriter _csv;
 };
 

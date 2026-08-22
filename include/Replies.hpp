@@ -72,6 +72,7 @@
 #define ERR_CHANOPRIVSNEEDED "482"
 #define ERR_INVALIDKEY "525"
 #define ERR_USERSDONTMATCH "502"
+
 /* Generic "that mode parameter is unusable" (modern ircd numeric). Used for
 ** +l, which has no dedicated numeric the way +k has ERR_INVALIDKEY.
 ** Format: <client> <target> <mode char> <parameter> :<reason> */

@@ -26,11 +26,23 @@ class Client {
   time_t getLastActivity() const;
   bool isPingSent() const;
   bool isPendingClose() const;
+
+
+
+
+
   /* Seconds since the epoch -- feeds the pending-close deadline
   ** (Server::_pendingCloseTimeoutSec). */
   time_t getPendingCloseSince() const;
   bool isTearingDown() const;
   std::string getPrefix() const;
+
+
+
+
+
+
+
 
   /* ─── Setters ─── */
   void setNickname(const std::string& nickname);
@@ -44,11 +56,22 @@ class Client {
   void updateLastActivity();
   void setPingSent(bool sent);
   void markPendingClose();
+
+
+
+
+
+
   /* Self-guarding latch: true from the first instant teardown starts
   ** (before the drain-vs-finalize decision is even made) so a callback
   ** re-entering disconnect logic for this same client mid-teardown can
   ** be recognized and turned into a no-op. See Server::teardownClientState. */
   void markTearingDown();
+
+
+
+
+
 
   /* ─── Buffer management ─── */
   void appendToRecvBuffer(const std::string& data);
@@ -59,12 +82,18 @@ class Client {
   bool hasPendingData() const;
   bool isSendQExceeded() const;
 
+
+
+
+
+
+
  private:
   Client();
   Client(const Client& other);
   Client& operator=(const Client& other);
-
   int _fd;
+
   std::string _nickname;
   std::string _username;
   std::string _realname;
