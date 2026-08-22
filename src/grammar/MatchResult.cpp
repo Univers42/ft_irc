@@ -1,6 +1,7 @@
 #include "grammar/MatchResult.hpp"
 
 #include <string>
+#include <vector>
 
 #include "grammar/Grammar.hpp"
 
