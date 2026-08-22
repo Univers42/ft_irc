@@ -157,13 +157,40 @@ Header search paths: `include/`, `vendor/libcpp/include`,
 `vendor/libcpp/c98/include`. The vendored libcpp modules (C++98-clean
 `str/*`, `util/config`, `term/*`, and the `c98/` tier: `LineBuffer`,
 `CsvWriter`, `Reactor`, `BufferedSocket`) are compiled **from source** into
-`ircserv` — no external library is linked.
+`ircserv` — no external library is linked. That is deliberate:
+`subject.txt:91` forbids external libraries, and the least ambiguous way to
+satisfy it is for no `.a` to appear on the link line at all. The module list
+lives in `LIBCPP_CORE_NAMES` / `LIBCPP_FULL_NAMES` / `LIBCPP98_NAMES` in the
+root `Makefile`.
+
+libcpp *also* builds standalone via its own Makefile, for its other
+consumers and as proof the subset compiles — **`ircserv` consumes neither
+archive**:
+
+```bash
+make -C vendor/libcpp c98     # 28 C++98-clean modules -> build/c98/lib/libftpp98.a
+make -C vendor/libcpp         # all 40, C++17          -> build/lib/libftpp.a + .so
+```
+
+Membership of that subset was established by compiling every module
+individually under `-std=c++98 -Wall -Wextra -Werror`, not by reading the
+code; the 16 excluded modules need C++11 in their *headers* (`= delete`,
+`= default`, default member initializers, `<thread>`/`<chrono>`), which no
+`#ifdef` can hide because the file still has to tokenize. What `ircserv`
+*does* rely on from that work is the include graph:
+`vendor/libcpp/include/libcpp/config.hpp` defines `LIBCPP_HAS_CXX11`, and
+the umbrella headers gate their modern includes on it — so a C++98
+translation unit can now include `libcpp/libcpp.hpp` without a parse error.
 
 ### Usage
 
+Bare `make` prints the target/flag reference and **builds nothing**; every
+build names its target explicitly (and so must any script or CI step).
+
 ```bash
+make help                                      # targets, tiers, overridable flags
 make mandatory && ./ircserv 6667 mypassword    # the graded configuration
-make && FT_IRC_CONFIG=./realtime.conf ./ircserv 6667 mypassword  # full platform mode
+make all && FT_IRC_CONFIG=./realtime.conf ./ircserv 6667 mypassword  # full platform mode
 scripts/audit.sh                               # subject-compliance audit
 ```
 

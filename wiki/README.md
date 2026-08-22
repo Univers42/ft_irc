@@ -76,7 +76,8 @@ one `registerExtensions()` translation unit each, no `#ifdef` anywhere.
 | --- | --- |
 | `make mandatory` | Strictly the subject's mandatory part — **defend on this one** |
 | `make bonus` | + Bot, FILE transfer |
-| `make` *(default)* | + platform extras, all runtime-gated behind `FT_IRC_CONFIG` |
+| `make all` | + platform extras, all runtime-gated behind `FT_IRC_CONFIG` |
+| `make help` | Every target, tier and overridable flag — this is what bare `make` prints |
 
 Without `FT_IRC_CONFIG` the default binary is byte-identical in behaviour to
 the bonus tier.
@@ -112,8 +113,8 @@ cd tests && bash ./run_all.sh         # black-box shell suite vs a live server
 scripts/simulation.sh --fuzz-mode 400  # fuzz the MODE parser
 scripts/simulation.sh --verify-grammar # RFC 2812 §2.3.1 message grammar
 scripts/simulation.sh --verify-names   # nickname / channel productions
-bash scripts/audit.hellish            # subject-compliance audit
-bash scripts/memcheck.hellish --auto  # Valgrind gate (exit 0 / 97 leak / 90 unverified)
+bash scripts/audit.sh            # subject-compliance audit
+bash scripts/memcheck.sh --auto  # Valgrind gate (exit 0 / 97 leak / 90 unverified)
 make norm                             # style gate
 ```
 

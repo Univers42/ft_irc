@@ -272,9 +272,9 @@ Run on the tier the subject is graded against unless noted.
 | Requirement | Proof | Result |
 | --- | --- | --- |
 | Compiles with `-Wall -Wextra -Werror` | `make re` | **clean, zero warnings** |
-| C++98 (`-std=c++98`) | in `CXXFLAGS`; `scripts/audit.hellish` scans for C++11+ tokens | **pass** |
-| Makefile has `$(NAME) all clean fclean re` | `scripts/audit.hellish` | **pass** |
-| No unnecessary relinking | second `make` is a no-op | **pass** |
+| C++98 (`-std=c++98`) | in `CXXFLAGS`; `scripts/audit.sh` scans for C++11+ tokens | **pass** |
+| Makefile has `$(NAME) all clean fclean re` | `scripts/audit.sh` | **pass** |
+| No unnecessary relinking | second `make all` is a no-op | **pass** |
 | No external or Boost libraries | nothing linked but the C++ runtime; libcpp is compiled from source | **pass** |
 | Does not crash, does not quit unexpectedly | `tests/run_all.sh` (11 suites), `make test`, valgrind gate | **pass** |
 
@@ -282,7 +282,7 @@ Run on the tier the subject is graded against unless noted.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| Exactly one `poll()`/equivalent for everything | `scripts/audit.hellish` → "exactly 1 event-wait call site" | **1 `epoll_wait`** |
+| Exactly one `poll()`/equivalent for everything | `scripts/audit.sh` → "exactly 1 event-wait call site" | **1 `epoll_wait`** |
 | Never read/write a fd without polling first | every send goes through `queueMessage`, drained on `EPOLLOUT` | **pass** |
 | All I/O non-blocking | `fcntl` appears only as `fcntl(fd, F_SETFL, O_NONBLOCK)` | **pass** |
 | Forking prohibited | `tests/no_forking.sh`; thread count stays 1 | **pass** |
@@ -322,10 +322,10 @@ autojoins against `ircserv` with no error.
 | Gate | Command | Result |
 | --- | --- | --- |
 | Build | `make re` | clean, zero warnings |
-| Subject audit, 3 tiers | `bash scripts/audit.hellish` | **AUDIT PASSED** |
+| Subject audit, 3 tiers | `bash scripts/audit.sh` | **AUDIT PASSED** |
 | Unit + integration | `make test` | **515 / 515 assertions** |
 | Black-box shell suite | `cd tests && bash run_all.sh` | **11 / 11 suites OK** |
-| Leak gate under Valgrind | `bash scripts/memcheck.hellish --auto` | **exit 0**, `0 errors from 0 contexts` |
+| Leak gate under Valgrind | `bash scripts/memcheck.sh --auto` | **exit 0**, `0 errors from 0 contexts` |
 | Message grammar | `scripts/simulation.sh --verify-grammar` | 19 pass · 4 diverge · 0 fail |
 | Name grammar | `scripts/simulation.sh --verify-names` | 45 pass · 1 diverge · 0 fail |
 

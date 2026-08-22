@@ -137,7 +137,7 @@ tearing down live sessions, not an empty server.
 ## Proving there is no leak
 
 ```bash
-bash scripts/memcheck.hellish --auto
+bash scripts/memcheck.sh --auto
 ```
 
 Drives four client sessions under Valgrind, confirms one of them really joined

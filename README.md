@@ -16,7 +16,7 @@ architecture, attack playbook.
 
 ```bash
 git submodule update --init --recursive   # fresh clone only
-make
+make all                                  # bare `make` prints the help screen
 ./ircserv 6667 mypass
 ```
 
@@ -125,8 +125,8 @@ with.
 make test                             # Google Test suite, in-process
 cd tests && bash ./run_all.sh         # black-box shell suite vs a live server
 cd tests && ./run_dual.sh             # same suite under bash + hellish, diffed
-bash scripts/audit.hellish            # subject-compliance audit
-bash scripts/memcheck.hellish --auto  # Valgrind gate: 0 clean / 97 leak / 90 unverified
+bash scripts/audit.sh            # subject-compliance audit
+bash scripts/memcheck.sh --auto  # Valgrind gate: 0 clean / 97 leak / 90 unverified
 make norm                             # style gate
 ```
 
