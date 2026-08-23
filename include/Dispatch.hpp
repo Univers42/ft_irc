@@ -4,7 +4,6 @@
 #include <string>
 
 namespace Dispatch {
-
 template <class Handler>
 struct Entry {
   const char* name;

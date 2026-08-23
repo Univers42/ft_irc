@@ -5,7 +5,6 @@
 #include <string>
 
 namespace ChannelModes {
-
 struct Spec {
   char letter;
   bool paramOnAdd;

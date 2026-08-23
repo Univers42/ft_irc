@@ -646,9 +646,7 @@ void Server::removeChannel(const std::string& name) {
 
 const std::string& Server::getServerName() const { return _serverName; }
 
-static bool isAsciiAlpha(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-}
+static bool isAsciiAlpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
 
 static bool isAsciiDigit(char c) { return c >= '0' && c <= '9'; }
 
@@ -659,9 +657,7 @@ static bool isNickSpecial(char c) {
 
 static bool isNickLead(char c) { return isAsciiAlpha(c) || isNickSpecial(c); }
 
-static bool isNickBody(char c) {
-  return isAsciiAlpha(c) || isAsciiDigit(c) || isNickSpecial(c) || c == '-';
-}
+static bool isNickBody(char c) { return isAsciiAlpha(c) || isAsciiDigit(c) || isNickSpecial(c) || c == '-'; }
 
 bool Server::isValidNickname(const std::string& nick) const {
   if (nick.empty()) return false;
