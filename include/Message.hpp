@@ -31,10 +31,7 @@ struct Message {
 
   std::vector<std::string> list(const char* name, char separator) const;
 
-  std::vector<std::string> listKeepEmpty(const char* name,
-                                         char separator) const;
-
-  static Message parse(const std::string& raw);
+  std::vector<std::string> listKeepEmpty(const char* name, char separator) const;
 };
 
 #endif

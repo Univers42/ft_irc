@@ -16,8 +16,7 @@ char fold(char c) {
 
 }  // namespace
 
-TreeMatcher::TreeMatcher(const Grammar& grammar)
-    : _grammar(grammar), _exhausted(false) {}
+TreeMatcher::TreeMatcher(const Grammar& grammar) : _grammar(grammar), _exhausted(false) {}
 
 bool TreeMatcher::lastExhausted() const { return _exhausted; }
 
@@ -72,8 +71,7 @@ bool TreeMatcher::isSingleOctet(int node) const {
 
     case GrammarNode::Reference: {
       const int root = _grammar.ruleRoot(n.lo);
-      yes = (n.capture == GrammarNode::kNoCapture) &&
-            root != Grammar::kNoRule && isSingleOctet(root);
+      yes = (n.capture == GrammarNode::kNoCapture) && root != Grammar::kNoRule && isSingleOctet(root);
       break;
     }
 
@@ -104,15 +102,13 @@ const unsigned char* TreeMatcher::octetBitmap(int node) const {
   unsigned char* bits = &_bitmaps[index * 32];
   if (!_bitmapBuilt[index]) {
     for (int c = 0; c < 256; ++c)
-      if (octetMatches(node, static_cast<unsigned char>(c)))
-        bits[c >> 3] |= static_cast<unsigned char>(1u << (c & 7));
+      if (octetMatches(node, static_cast<unsigned char>(c))) bits[c >> 3] |= static_cast<unsigned char>(1u << (c & 7));
     _bitmapBuilt[index] = 1;
   }
   return bits;
 }
 
-bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos,
-                                       Walk& walk) const {
+bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos, Walk& walk) const {
   if (walk.exhausted) return false;
 
   if (k == NULL) return pos == walk.line->size();
@@ -149,8 +145,7 @@ bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos,
   return false;
 }
 
-bool TreeMatcher::matchSequence(int node, int childNo, std::size_t pos,
-                                   const Continuation* next, Walk& walk) const {
+bool TreeMatcher::matchSequence(int node, int childNo, std::size_t pos, const Continuation* next, Walk& walk) const {
   const GrammarNode& n = _grammar.node(node);
   if (childNo >= n.count) return matchContinuation(next, pos, walk);
 
@@ -164,9 +159,8 @@ bool TreeMatcher::matchSequence(int node, int childNo, std::size_t pos,
   return matchNode(_grammar.child(n.first + childNo), pos, &frame, walk);
 }
 
-bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart,
-                                     std::size_t pos, const Continuation* next,
-                                     Walk& walk) const {
+bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart, std::size_t pos, const Continuation* next,
+                                  Walk& walk) const {
   if (walk.exhausted) return false;
 
   const GrammarNode& n = _grammar.node(node);
@@ -174,9 +168,7 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart,
 
   if (count == 0 && isSingleOctet(child)) {
     const std::size_t least = static_cast<std::size_t>(n.lo < 0 ? 0 : n.lo);
-    const std::size_t most = (n.hi == GrammarNode::kUnbounded)
-                                 ? walk.line->size()
-                                 : static_cast<std::size_t>(n.hi);
+    const std::size_t most = (n.hi == GrammarNode::kUnbounded) ? walk.line->size() : static_cast<std::size_t>(n.hi);
 
     const unsigned char* bits = octetBitmap(child);
     const std::string& line = *walk.line;
@@ -225,8 +217,7 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart,
   return false;
 }
 
-bool TreeMatcher::matchNode(int node, std::size_t pos,
-                               const Continuation* next, Walk& walk) const {
+bool TreeMatcher::matchNode(int node, std::size_t pos, const Continuation* next, Walk& walk) const {
   if (walk.exhausted) return false;
 
   if (++walk.steps > kMaxSteps) {
@@ -307,8 +298,7 @@ bool TreeMatcher::matchNode(int node, std::size_t pos,
   return ok;
 }
 
-bool TreeMatcher::match(int rule, const std::string& line,
-                           MatchResult& out) const {
+bool TreeMatcher::match(int rule, const std::string& line, MatchResult& out) const {
   _exhausted = false;
 
   out.reset(_grammar);

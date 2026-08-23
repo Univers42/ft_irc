@@ -18,8 +18,7 @@ class TreeMatcher : public IMatcher {
 
   explicit TreeMatcher(const Grammar& grammar);
 
-  virtual bool match(int rule, const std::string& line,
-                     MatchResult& out) const;
+  virtual bool match(int rule, const std::string& line, MatchResult& out) const;
 
   virtual const char* strategy() const;
 
@@ -31,12 +30,7 @@ class TreeMatcher : public IMatcher {
   TreeMatcher(const TreeMatcher& other);
   TreeMatcher& operator=(const TreeMatcher& other);
 
-  enum ContinuationKind {
-    ContNode,
-    ContSequence,
-    ContRepeat,
-    ContCloseCapture
-  };
+  enum ContinuationKind { ContNode, ContSequence, ContRepeat, ContCloseCapture };
 
   struct Continuation {
     ContinuationKind kind;
@@ -56,14 +50,10 @@ class TreeMatcher : public IMatcher {
     bool exhausted;
   };
 
-  bool matchNode(int node, std::size_t pos, const Continuation* next,
-                 Walk& walk) const;
-  bool matchContinuation(const Continuation* k, std::size_t pos,
-                         Walk& walk) const;
-  bool matchSequence(int node, int childNo, std::size_t pos,
-                     const Continuation* next, Walk& walk) const;
-  bool matchRepetition(int node, int count, std::size_t iterStart,
-                       std::size_t pos, const Continuation* next,
+  bool matchNode(int node, std::size_t pos, const Continuation* next, Walk& walk) const;
+  bool matchContinuation(const Continuation* k, std::size_t pos, Walk& walk) const;
+  bool matchSequence(int node, int childNo, std::size_t pos, const Continuation* next, Walk& walk) const;
+  bool matchRepetition(int node, int count, std::size_t iterStart, std::size_t pos, const Continuation* next,
                        Walk& walk) const;
 
   bool isSingleOctet(int node) const;

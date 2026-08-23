@@ -24,6 +24,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/types.h>
 
 /* ══════════════════════════════════════════════════════════════════════════
  * TestClient — lightweight TCP client for protocol-level testing
@@ -159,7 +160,16 @@ protected:
 		server = NULL;
 		serverPort = 0;
 
-		for (int port = portBase(); port < portBase() + 100; ++port)
+		/* Two test binaries running at once (a CI matrix, or a second agent
+		** driving the suite) used to scan the SAME range and fight over it.
+		**
+		** Shift every suite by ONE per-process band rather than per-suite:
+		** the bases are only 50-100 apart, so a per-suite offset would push
+		** one suite onto another suite's base. A 1000-wide band keeps the
+		** existing relative layout intact and just moves it out of the way. */
+		const int base = portBase() + processPortBand();
+
+		for (int port = base; port < base + 100; ++port)
 		{
 			try
 			{
@@ -182,8 +192,24 @@ protected:
 			server->run();
 		});
 
-		/* Give server time to start accepting */
+		/* Deliberately a plain sleep, not a connect-probe. bind() and listen()
+		** already ran in the Server constructor, so the kernel queues
+		** connections before run() ever calls accept() -- a probe would
+		** therefore succeed instantly without proving anything, and its
+		** connect/close would land on the server as a PHANTOM CLIENT,
+		** inflating every extension's connect/disconnect counts. The real
+		** cause of the intermittent failures was port collision between
+		** concurrent test processes, which processPortBand() fixes. */
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+
+	/* One band per process, stable for the process's lifetime. Bases span
+	** 17100-17800, so 1000 is wide enough that bands cannot overlap. */
+	static int processPortBand()
+	{
+		static const int band =
+			static_cast<int>(::getpid() % 20) * 1000;
+		return band;
 	}
 
 	void TearDown() override

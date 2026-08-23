@@ -23,19 +23,17 @@ static bool isValidFilename(const std::string& name) {
   if (name == "." || name == "..") return false;
   for (std::string::size_type i = 0; i < name.size(); ++i) {
     unsigned char c = static_cast<unsigned char>(name[i]);
-    if (c <= ' ' || c == 0x7F || c == '/' || c == '\\' || c == ',')
-      return false;
+    if (c <= ' ' || c == 0x7F || c == '/' || c == '\\' || c == ',') return false;
   }
   return true;
 }
 
 static bool isBase64Chunk(const std::string& chunk) {
-  if (chunk.empty() || chunk.size() > FileTransferExt::MAX_CHUNK_B64)
-    return false;
+  if (chunk.empty() || chunk.size() > FileTransferExt::MAX_CHUNK_B64) return false;
   for (std::string::size_type i = 0; i < chunk.size(); ++i) {
     char c = chunk[i];
-    bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-              (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=';
+    bool ok =
+        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=';
     if (!ok) return false;
   }
   return true;
@@ -49,12 +47,9 @@ static unsigned long decodedBytes(const std::string& chunk) {
   return raw > pad ? raw - pad : 0;
 }
 
-static bool parseId(const std::string& s, long& id) {
-  return libcpp::str::parse_long(s, 1, LONG_MAX, id);
-}
+static bool parseId(const std::string& s, long& id) { return libcpp::str::parse_long(s, 1, LONG_MAX, id); }
 
-void FileTransferExt::notice(Server& server, Client& client,
-                             const std::string& text) {
+void FileTransferExt::notice(Server& server, Client& client, const std::string& text) {
   server.sendToClient(&client, "NOTICE " + client.getNickname() + " :" + text);
 }
 
@@ -64,17 +59,13 @@ FileTransferExt::Transfer* FileTransferExt::findById(long id) {
 }
 
 long FileTransferExt::findActive(int senderFd, int recipientFd) const {
-  for (std::map<long, Transfer>::const_iterator it = _transfers.begin();
-       it != _transfers.end(); ++it) {
-    if (it->second.senderFd == senderFd &&
-        it->second.recipientFd == recipientFd)
-      return it->first;
+  for (std::map<long, Transfer>::const_iterator it = _transfers.begin(); it != _transfers.end(); ++it) {
+    if (it->second.senderFd == senderFd && it->second.recipientFd == recipientFd) return it->first;
   }
   return 0;
 }
 
-void FileTransferExt::abortTransfer(Server& server, long id,
-                                    const std::string& why) {
+void FileTransferExt::abortTransfer(Server& server, long id, const std::string& why) {
   std::map<long, Transfer>::iterator it = _transfers.find(id);
   if (it == _transfers.end()) return;
 
@@ -86,8 +77,7 @@ void FileTransferExt::abortTransfer(Server& server, long id,
   _transfers.erase(it);
 }
 
-bool FileTransferExt::onCommand(Server& server, Client& client,
-                                const Message& msg) {
+bool FileTransferExt::onCommand(Server& server, Client& client, const Message& msg) {
   if (msg.command != "FILE") return false;
 
   if (msg.params.empty()) {
@@ -115,8 +105,7 @@ bool FileTransferExt::onCommand(Server& server, Client& client,
   return true;
 }
 
-void FileTransferExt::onClientDisconnect(Server& server, Client& client,
-                                         const std::string& reason) {
+void FileTransferExt::onClientDisconnect(Server& server, Client& client, const std::string& reason) {
   (void)reason;
   int fd = client.getFd();
   std::map<long, Transfer>::iterator it = _transfers.begin();
@@ -145,8 +134,7 @@ void FileTransferExt::onTick(Server& server, time_t now) {
   }
 }
 
-void FileTransferExt::cmdSend(Server& server, Client& client,
-                              const Message& msg) {
+void FileTransferExt::cmdSend(Server& server, Client& client, const Message& msg) {
   if (msg.params.size() < 4) {
     notice(server, client, "FILE SEND usage: FILE SEND <nick> <file> <size>");
     return;
@@ -170,15 +158,12 @@ void FileTransferExt::cmdSend(Server& server, Client& client,
 
   unsigned long size = 0;
   if (!libcpp::str::parse_ulong(msg.params[3], 1, MAX_FILE_SIZE, size)) {
-    notice(server, client,
-           "FILE: invalid size (1.." + libcpp::str::to_string(MAX_FILE_SIZE) +
-               ")");
+    notice(server, client, "FILE: invalid size (1.." + libcpp::str::to_string(MAX_FILE_SIZE) + ")");
     return;
   }
 
   if (findActive(client.getFd(), recipient->getFd()) != 0) {
-    notice(server, client,
-           "FILE: a transfer to " + nick + " is already active");
+    notice(server, client, "FILE: a transfer to " + nick + " is already active");
     return;
   }
 
@@ -193,17 +178,13 @@ void FileTransferExt::cmdSend(Server& server, Client& client,
   t.lastActivity = std::time(NULL);
   _transfers[id] = t;
 
-  recipient->queueMessage(":" + client.getPrefix() + " FILE OFFER " +
-                          libcpp::str::to_string(id) + " " + filename + " " +
-                          libcpp::str::to_string(size));
-  notice(server, client,
-         "FILE " + libcpp::str::to_string(id) + " offered to " + nick);
-  server.audit("file-offer", client.getNickname(),
-               nick + " " + filename + " " + libcpp::str::to_string(size));
+  recipient->queueMessage(":" + client.getPrefix() + " FILE OFFER " + libcpp::str::to_string(id) + " " + filename +
+                          " " + libcpp::str::to_string(size));
+  notice(server, client, "FILE " + libcpp::str::to_string(id) + " offered to " + nick);
+  server.audit("file-offer", client.getNickname(), nick + " " + filename + " " + libcpp::str::to_string(size));
 }
 
-void FileTransferExt::cmdAnswer(Server& server, Client& client,
-                                const Message& msg, bool accept) {
+void FileTransferExt::cmdAnswer(Server& server, Client& client, const Message& msg, bool accept) {
   long id = 0;
   if (msg.params.size() < 2 || !parseId(msg.params[1], id)) {
     notice(server, client, "FILE: usage: FILE ACCEPT|REJECT <id>");
@@ -225,19 +206,16 @@ void FileTransferExt::cmdAnswer(Server& server, Client& client,
   t->lastActivity = std::time(NULL);
   if (accept) {
     t->accepted = true;
-    sender->queueMessage(":" + client.getPrefix() + " FILE OK " +
-                         libcpp::str::to_string(id));
+    sender->queueMessage(":" + client.getPrefix() + " FILE OK " + libcpp::str::to_string(id));
     server.audit("file-accept", client.getNickname(), t->filename);
   } else {
-    sender->queueMessage(":" + client.getPrefix() + " FILE NO " +
-                         libcpp::str::to_string(id));
+    sender->queueMessage(":" + client.getPrefix() + " FILE NO " + libcpp::str::to_string(id));
     server.audit("file-reject", client.getNickname(), t->filename);
     _transfers.erase(id);
   }
 }
 
-void FileTransferExt::cmdData(Server& server, Client& client,
-                              const Message& msg) {
+void FileTransferExt::cmdData(Server& server, Client& client, const Message& msg) {
   long id = 0;
   if (msg.params.size() < 3 || !parseId(msg.params[1], id)) {
     notice(server, client, "FILE: usage: FILE DATA <id> <base64>");
@@ -249,8 +227,7 @@ void FileTransferExt::cmdData(Server& server, Client& client,
     return;
   }
   if (!t->accepted) {
-    notice(server, client,
-           "FILE: transfer " + msg.params[1] + " not accepted yet");
+    notice(server, client, "FILE: transfer " + msg.params[1] + " not accepted yet");
     return;
   }
 
@@ -282,12 +259,10 @@ void FileTransferExt::cmdData(Server& server, Client& client,
 
   t->relayedBytes += decodedBytes(chunk);
   t->lastActivity = std::time(NULL);
-  recipient->queueMessage(":" + client.getPrefix() + " FILE DATA " +
-                          msg.params[1] + " " + chunk);
+  recipient->queueMessage(":" + client.getPrefix() + " FILE DATA " + msg.params[1] + " " + chunk);
 }
 
-void FileTransferExt::cmdEnd(Server& server, Client& client,
-                             const Message& msg) {
+void FileTransferExt::cmdEnd(Server& server, Client& client, const Message& msg) {
   long id = 0;
   if (msg.params.size() < 2 || !parseId(msg.params[1], id)) {
     notice(server, client, "FILE: usage: FILE END <id>");
@@ -301,24 +276,20 @@ void FileTransferExt::cmdEnd(Server& server, Client& client,
 
   Client* recipient = server.findClientByFd(t->recipientFd);
   if (recipient)
-    recipient->queueMessage(":" + client.getPrefix() + " FILE END " +
-                            msg.params[1] + " " +
+    recipient->queueMessage(":" + client.getPrefix() + " FILE END " + msg.params[1] + " " +
                             libcpp::str::to_string(t->relayedBytes));
-  server.audit("file-end", client.getNickname(),
-               t->filename + " " + libcpp::str::to_string(t->relayedBytes));
+  server.audit("file-end", client.getNickname(), t->filename + " " + libcpp::str::to_string(t->relayedBytes));
   _transfers.erase(id);
 }
 
-void FileTransferExt::cmdAbort(Server& server, Client& client,
-                               const Message& msg) {
+void FileTransferExt::cmdAbort(Server& server, Client& client, const Message& msg) {
   long id = 0;
   if (msg.params.size() < 2 || !parseId(msg.params[1], id)) {
     notice(server, client, "FILE: usage: FILE ABORT <id>");
     return;
   }
   Transfer* t = findById(id);
-  if (!t ||
-      (t->senderFd != client.getFd() && t->recipientFd != client.getFd())) {
+  if (!t || (t->senderFd != client.getFd() && t->recipientFd != client.getFd())) {
     notice(server, client, "FILE: no transfer with id " + msg.params[1]);
     return;
   }

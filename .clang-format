@@ -1,6 +1,16 @@
 BasedOnStyle: Google
 IndentWidth: 2
-ColumnLimit: 80
+# 120, not Google's 80. The 80 cap was the only thing forcing a one-line
+# accessor -- `const std::string& Channel::getName() const { return _name; }`
+# and its ninety-odd siblings -- to break across three lines, which reads
+# worse than the thing it was protecting. At 120 every such definition in the
+# tree fits on its line (measured: 121 of them, up from 96 at 80), and
+# AllowShortFunctionsOnASingleLine below is what actually collapses them.
+#
+# clang-format never emits a line past this limit, so CPPLINT.cfg's
+# linelength must hold the SAME number or the two gates disagree and
+# `make norm` fails on files `make norm-fix` just wrote.
+ColumnLimit: 120
 SortIncludes: true
 IncludeBlocks: Preserve
 AllowShortFunctionsOnASingleLine: All

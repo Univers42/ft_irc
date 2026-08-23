@@ -13,8 +13,7 @@ class FileTransferExt : public IServerExtension {
 
   const char* name() const;
   bool onCommand(Server& server, Client& client, const Message& msg);
-  void onClientDisconnect(Server& server, Client& client,
-                          const std::string& reason);
+  void onClientDisconnect(Server& server, Client& client, const std::string& reason);
   void onTick(Server& server, time_t now);
 
   static const unsigned long MAX_FILE_SIZE = 50UL * 1024UL * 1024UL;
@@ -37,8 +36,7 @@ class FileTransferExt : public IServerExtension {
   };
 
   void cmdSend(Server& server, Client& client, const Message& msg);
-  void cmdAnswer(Server& server, Client& client, const Message& msg,
-                 bool accept);
+  void cmdAnswer(Server& server, Client& client, const Message& msg, bool accept);
   void cmdData(Server& server, Client& client, const Message& msg);
   void cmdEnd(Server& server, Client& client, const Message& msg);
   void cmdAbort(Server& server, Client& client, const Message& msg);

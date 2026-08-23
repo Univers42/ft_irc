@@ -22,8 +22,7 @@ bool GrammarValidator::validate(const Grammar& grammar) {
 bool GrammarValidator::checkAllRulesDefined() {
   for (std::size_t i = 0; i < _grammar->ruleCount(); ++i) {
     if (_grammar->ruleRoot(static_cast<int>(i)) == Grammar::kNoRule) {
-      _error = "rule '" + _grammar->ruleName(static_cast<int>(i)) +
-               "' is referenced but never defined";
+      _error = "rule '" + _grammar->ruleName(static_cast<int>(i)) + "' is referenced but never defined";
       return false;
     }
   }
@@ -66,8 +65,7 @@ bool GrammarValidator::isNullable(int node, std::vector<char>& busy) const {
   return false;
 }
 
-void GrammarValidator::collectLeftReachable(int node, std::vector<char>& seen,
-                                            std::vector<char>& busy) const {
+void GrammarValidator::collectLeftReachable(int node, std::vector<char>& seen, std::vector<char>& busy) const {
   const GrammarNode& n = _grammar->node(node);
 
   switch (n.kind) {
@@ -94,8 +92,7 @@ void GrammarValidator::collectLeftReachable(int node, std::vector<char>& seen,
       return;
 
     case GrammarNode::Alternation:
-      for (int k = 0; k < n.count; ++k)
-        collectLeftReachable(_grammar->child(n.first + k), seen, busy);
+      for (int k = 0; k < n.count; ++k) collectLeftReachable(_grammar->child(n.first + k), seen, busy);
       return;
 
     case GrammarNode::Repetition:
@@ -116,8 +113,7 @@ bool GrammarValidator::checkNoLeftRecursion() {
     collectLeftReachable(root, seen, busy);
 
     if (seen[r]) {
-      _error = "rule '" + _grammar->ruleName(static_cast<int>(r)) +
-               "' is left-recursive";
+      _error = "rule '" + _grammar->ruleName(static_cast<int>(r)) + "' is left-recursive";
       return false;
     }
   }

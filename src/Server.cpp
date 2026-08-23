@@ -440,26 +440,25 @@ void Server::checkPendingCloseTimeouts() {
   }
 }
 
-const Server::CommandEntry Server::kCommands[] = {
-    {"CAP", &Server::cmdCap, false},
-    {"PASS", &Server::cmdPass, false},
-    {"NICK", &Server::cmdNick, false},
-    {"USER", &Server::cmdUser, false},
-    {"QUIT", &Server::cmdQuit, false},
-    {"PONG", &Server::cmdPong, false},
-    {"PING", &Server::cmdPing, true},
-    {"JOIN", &Server::cmdJoin, true},
-    {"PART", &Server::cmdPart, true},
-    {"PRIVMSG", &Server::cmdPrivmsg, true},
-    {"NOTICE", &Server::cmdNotice, true},
-    {"KICK", &Server::cmdKick, true},
-    {"INVITE", &Server::cmdInvite, true},
-    {"TOPIC", &Server::cmdTopic, true},
-    {"MODE", &Server::cmdMode, true},
-    {"WHO", &Server::cmdWho, true},
-    {"WHOIS", &Server::cmdWhois, true},
-    {"USERHOST", &Server::cmdUserhost, true},
-    {NULL, NULL, false}};
+const Server::CommandEntry Server::kCommands[] = {{"CAP", &Server::cmdCap, false},
+                                                  {"PASS", &Server::cmdPass, false},
+                                                  {"NICK", &Server::cmdNick, false},
+                                                  {"USER", &Server::cmdUser, false},
+                                                  {"QUIT", &Server::cmdQuit, false},
+                                                  {"PONG", &Server::cmdPong, false},
+                                                  {"PING", &Server::cmdPing, true},
+                                                  {"JOIN", &Server::cmdJoin, true},
+                                                  {"PART", &Server::cmdPart, true},
+                                                  {"PRIVMSG", &Server::cmdPrivmsg, true},
+                                                  {"NOTICE", &Server::cmdNotice, true},
+                                                  {"KICK", &Server::cmdKick, true},
+                                                  {"INVITE", &Server::cmdInvite, true},
+                                                  {"TOPIC", &Server::cmdTopic, true},
+                                                  {"MODE", &Server::cmdMode, true},
+                                                  {"WHO", &Server::cmdWho, true},
+                                                  {"WHOIS", &Server::cmdWhois, true},
+                                                  {"USERHOST", &Server::cmdUserhost, true},
+                                                  {NULL, NULL, false}};
 
 const Server::CommandEntry* Server::findCommand(const std::string& name) {
   for (const CommandEntry* entry = kCommands; entry->name != NULL; ++entry)

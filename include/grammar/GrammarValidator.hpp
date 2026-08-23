@@ -21,8 +21,7 @@ class GrammarValidator {
 
   bool isNullable(int node, std::vector<char>& busy) const;
 
-  void collectLeftReachable(int node, std::vector<char>& seen,
-                            std::vector<char>& busy) const;
+  void collectLeftReachable(int node, std::vector<char>& seen, std::vector<char>& busy) const;
 
   const Grammar* _grammar;
   std::string _error;

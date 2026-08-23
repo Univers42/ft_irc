@@ -8,13 +8,7 @@
 namespace Abnf {
 namespace Compiled {
 struct Instruction {
-  enum Op {
-    Class,
-    Split,
-    Jump,
-    Save,
-    Match
-  };
+  enum Op { Class, Split, Jump, Save, Match };
 
   Op op;
   int x;

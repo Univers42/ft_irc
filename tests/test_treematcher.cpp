@@ -415,7 +415,11 @@ TEST_F(ShippedGrammar, ModeKeepsItsArgumentsForTheSignWalker) {
   ASSERT_TRUE(m("mode-cmd", "MODE #c +it-kol secret bob 50"));
   EXPECT_EQ(r.get("modetarget"), "#c");
   EXPECT_EQ(r.get("modestring"), "+it-kol");
-  EXPECT_EQ(r.get("modeargs"), "secret bob 50");
+
+  ASSERT_EQ(r.count("modeparam"), 3u);
+  EXPECT_EQ(r.at("modeparam", 0), "secret");
+  EXPECT_EQ(r.at("modeparam", 1), "bob");
+  EXPECT_EQ(r.at("modeparam", 2), "50");
 }
 
 TEST_F(ShippedGrammar, ModeQueryHasNoModeString) {

@@ -10,8 +10,7 @@ class IMatcher {
  public:
   virtual ~IMatcher() {}
 
-  virtual bool match(int rule, const std::string& line,
-                     MatchResult& out) const = 0;
+  virtual bool match(int rule, const std::string& line, MatchResult& out) const = 0;
 
   virtual const char* strategy() const = 0;
 

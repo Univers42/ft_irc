@@ -5,7 +5,6 @@
 #include "AuditLog.hpp"
 #include "Bot.hpp"
 #include "Log.hpp"
-#include "PlatformBus.hpp"
 #include "Server.hpp"
 #include "bonus/FileTransferExt.hpp"
 #include "ext/RegisterExtensions.hpp"
@@ -36,18 +35,6 @@ static void registerPlatformFeatures(Server& server) {
     } else if (audit) {
       server.addExtension(audit);
       Log::info("audit log: " + path);
-    }
-  }
-
-  if (cfg.get_bool("bus", "enabled", false)) {
-    int port = cfg.get_int("bus", "port", 6700);
-    std::string secret = cfg.get("bus", "secret", "");
-    std::string nick = cfg.get("bus", "nick", "platform");
-
-    try {
-      server.addExtension(new PlatformBus(&server, port, secret, nick));
-    } catch (const std::bad_alloc&) {
-      Log::warn("could not create platform bus (out of memory)");
     }
   }
 }

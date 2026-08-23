@@ -16,8 +16,7 @@ class Bot : public IServerExtension {
   ~Bot();
 
   const char* name() const;
-  bool onPrivmsg(Server& server, Client& sender, const std::string& target,
-                 const std::string& text);
+  bool onPrivmsg(Server& server, Client& sender, const std::string& target, const std::string& text);
   bool reservesNick(const std::string& nick) const;
 
   void handleMessage(Client* sender, const std::string& text);

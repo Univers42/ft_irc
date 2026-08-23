@@ -76,8 +76,7 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
 
       std::size_t k = 0;
       std::string name;
-      while (k < body.size() && AbnfChars::isRuleChar(body[k]))
-        name += body[k++];
+      while (k < body.size() && AbnfChars::isRuleChar(body[k])) name += body[k++];
       if (!name.empty()) lastRuleName = name;
     }
     pending.number = physical;

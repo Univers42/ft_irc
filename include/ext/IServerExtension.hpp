@@ -27,8 +27,7 @@ class IServerExtension {
     (void)client;
   }
 
-  virtual void onClientDisconnect(Server& server, Client& client,
-                                  const std::string& reason) {
+  virtual void onClientDisconnect(Server& server, Client& client, const std::string& reason) {
     (void)server;
     (void)client;
     (void)reason;
@@ -51,8 +50,7 @@ class IServerExtension {
     (void)msg;
     return false;
   }
-  virtual bool onPrivmsg(Server& server, Client& sender,
-                         const std::string& target, const std::string& text) {
+  virtual bool onPrivmsg(Server& server, Client& sender, const std::string& target, const std::string& text) {
     (void)server;
     (void)sender;
     (void)target;
@@ -64,18 +62,7 @@ class IServerExtension {
     return false;
   }
 
-  virtual bool ownsFd(int fd) const {
-    (void)fd;
-    return false;
-  }
-  virtual void onFdEvent(Server& server, int fd, uint32_t events) {
-    (void)server;
-    (void)fd;
-    (void)events;
-  }
-
-  virtual void onAudit(const std::string& event, const std::string& actor,
-                       const std::string& detail) {
+  virtual void onAudit(const std::string& event, const std::string& actor, const std::string& detail) {
     (void)event;
     (void)actor;
     (void)detail;

@@ -93,9 +93,7 @@ EmbeddedGrammarSource::EmbeddedGrammarSource() {}
 
 EmbeddedGrammarSource::~EmbeddedGrammarSource() {}
 
-const char* EmbeddedGrammarSource::origin() const {
-  return "<embedded RFC 2812 grammar>";
-}
+const char* EmbeddedGrammarSource::origin() const { return "<embedded RFC 2812 grammar>"; }
 
 bool EmbeddedGrammarSource::read(std::string& out) const {
   out.assign(kGrammar);
