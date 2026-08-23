@@ -6,7 +6,7 @@
 
 void Server::cmdWho(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[0].empty()) {
-    sendReply(client, RPL_ENDOFWHO, "* :End of WHO list");
+    sendReply(client, RPL_ENDOFWHO, "*");
     return;
   }
 
@@ -15,7 +15,7 @@ void Server::cmdWho(Client* client, const Message& msg) {
   if (target[0] == '#') {
     Channel* chan = findChannel(target);
     if (!chan) {
-      sendReply(client, RPL_ENDOFWHO, target + " :End of WHO list");
+      sendReply(client, RPL_ENDOFWHO, target);
       return;
     }
 
@@ -25,25 +25,25 @@ void Server::cmdWho(Client* client, const Message& msg) {
       std::string flags = "H";
       if (chan->isOperator(m)) flags += "@";
 
-      sendReply(client, RPL_WHOREPLY,
-                target + " " + m->getUsername() + " " + m->getHostname() + " " + _serverName + " " + m->getNickname() +
-                    " " + flags + " :0 " + m->getRealname());
+      sendNumeric(client, RPL_WHOREPLY,
+                  target + " " + m->getUsername() + " " + m->getHostname() + " " + _serverName + " " +
+                      m->getNickname() + " " + flags + " :0 " + m->getRealname());
     }
-    sendReply(client, RPL_ENDOFWHO, target + " :End of WHO list");
+    sendReply(client, RPL_ENDOFWHO, target);
   } else {
     Client* dest = findClientByNick(target);
     if (dest) {
-      sendReply(client, RPL_WHOREPLY,
-                "* " + dest->getUsername() + " " + dest->getHostname() + " " + _serverName + " " + dest->getNickname() +
-                    " H" + " :0 " + dest->getRealname());
+      sendNumeric(client, RPL_WHOREPLY,
+                  "* " + dest->getUsername() + " " + dest->getHostname() + " " + _serverName + " " +
+                      dest->getNickname() + " H" + " :0 " + dest->getRealname());
     }
-    sendReply(client, RPL_ENDOFWHO, target + " :End of WHO list");
+    sendReply(client, RPL_ENDOFWHO, target);
   }
 }
 
 void Server::cmdWhois(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[msg.params.size() > 1 ? 1 : 0].empty()) {
-    sendReply(client, ERR_NONICKNAMEGIVEN, ":No nickname given");
+    sendReply(client, ERR_NONICKNAMEGIVEN);
     return;
   }
 
@@ -51,14 +51,15 @@ void Server::cmdWhois(Client* client, const Message& msg) {
 
   Client* dest = findClientByNick(nick);
   if (!dest) {
-    sendReply(client, ERR_NOSUCHNICK, nick + " :No such nick/channel");
+    sendReply(client, ERR_NOSUCHNICK, nick);
     return;
   }
 
-  sendReply(client, RPL_WHOISUSER,
-            dest->getNickname() + " " + dest->getUsername() + " " + dest->getHostname() + " * :" + dest->getRealname());
+  sendNumeric(
+      client, RPL_WHOISUSER,
+      dest->getNickname() + " " + dest->getUsername() + " " + dest->getHostname() + " * :" + dest->getRealname());
 
-  sendReply(client, RPL_WHOISSERVER, dest->getNickname() + " " + _serverName + " :ft_irc server");
+  sendReply(client, RPL_WHOISSERVER, dest->getNickname(), _serverName);
 
   std::string chanList;
   for (std::map<std::string, Channel*>::const_iterator it = _channels.begin(); it != _channels.end(); ++it) {
@@ -70,10 +71,10 @@ void Server::cmdWhois(Client* client, const Message& msg) {
     }
   }
   if (!chanList.empty()) {
-    sendReply(client, RPL_WHOISCHANNELS, dest->getNickname() + " :" + chanList);
+    sendNumeric(client, RPL_WHOISCHANNELS, dest->getNickname() + " :" + chanList);
   }
 
-  sendReply(client, RPL_ENDOFWHOIS, dest->getNickname() + " :End of WHOIS list");
+  sendReply(client, RPL_ENDOFWHOIS, dest->getNickname());
 }
 
 void Server::cmdUserhost(Client* client, const Message& msg) {
@@ -91,5 +92,5 @@ void Server::cmdUserhost(Client* client, const Message& msg) {
     }
   }
 
-  sendReply(client, RPL_USERHOST, ":" + reply);
+  sendNumeric(client, RPL_USERHOST, ":" + reply);
 }

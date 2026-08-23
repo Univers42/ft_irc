@@ -37,7 +37,13 @@ class Server {
 
   const std::string& getServerName() const;
 
-  void sendReply(Client* client, const std::string& numeric, const std::string& params);
+  void sendNumeric(Client* client, const std::string& numeric, const std::string& params);
+
+  void sendReply(Client* client, const std::string& numeric);
+  void sendReply(Client* client, const std::string& numeric, const std::string& p0);
+  void sendReply(Client* client, const std::string& numeric, const std::string& p0, const std::string& p1);
+  void sendReply(Client* client, const std::string& numeric, const std::string& p0, const std::string& p1,
+                 const std::string& p2);
 
   void audit(const std::string& event, const std::string& actor, const std::string& detail);
 
@@ -90,6 +96,7 @@ class Server {
   void initGrammar();
   void bindCommandRules();
   void verifyCommandTable(const std::string& origin) const;
+  void verifyReplyTable() const;
   int commandRule(const std::string& command) const;
   bool parseLine(const std::string& raw, Message& out) const;
   std::string firstToken(const std::string& raw) const;

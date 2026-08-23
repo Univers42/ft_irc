@@ -97,6 +97,7 @@ void Server::initGrammar() {
 
   bindCommandRules();
   verifyCommandTable(source.origin());
+  verifyReplyTable();
 
   Log::debug() << "grammar: " << source.origin() << " -> " << _matcher->strategy() << ", " << _grammar << ", "
                << _commandRules.size() << " command productions";
@@ -117,6 +118,19 @@ void Server::bindCommandRules() {
       if (c >= 'a' && c <= 'z') name[k] = static_cast<char>(c - 'a' + 'A');
     }
     _commandRules[name] = static_cast<int>(i);
+  }
+}
+
+void Server::verifyReplyTable() const {
+  const ReplyText::Entry* rows = ReplyText::table();
+  for (const ReplyText::Entry* entry = rows; entry->code != NULL; ++entry) {
+    if (std::string(entry->code).size() != 3)
+      throw std::runtime_error("reply table: " + std::string(entry->code) + " is not a three-digit numeric");
+    if (entry->text != NULL && *entry->text == '\0')
+      throw std::runtime_error("reply table: " + std::string(entry->code) + " has empty text");
+    for (const ReplyText::Entry* other = rows; other != entry; ++other)
+      if (std::string(other->code) == entry->code)
+        throw std::runtime_error("reply table: duplicate numeric " + std::string(entry->code));
   }
 }
 
@@ -466,24 +480,24 @@ const Server::CommandEntry Server::kCommands[] = {
 const Server::CommandEntry* Server::findCommand(const std::string& name) { return Dispatch::find(kCommands, name); }
 
 void Server::replyNeedMoreParams(Client* client, const std::string& command) {
-  sendReply(client, ERR_NEEDMOREPARAMS, command + " :Not enough parameters");
+  sendReply(client, ERR_NEEDMOREPARAMS, command);
 }
 
 Channel* Server::requireChannel(Client* client, const std::string& name) {
   Channel* channel = findChannel(name);
-  if (channel == NULL) sendReply(client, ERR_NOSUCHCHANNEL, name + " :No such channel");
+  if (channel == NULL) sendReply(client, ERR_NOSUCHCHANNEL, name);
   return channel;
 }
 
 bool Server::requireMember(Client* client, Channel* channel, const std::string& name) {
   if (channel->isMember(client)) return true;
-  sendReply(client, ERR_NOTONCHANNEL, name + " :You're not on that channel");
+  sendReply(client, ERR_NOTONCHANNEL, name);
   return false;
 }
 
 bool Server::requireChanOp(Client* client, Channel* channel, const std::string& name) {
   if (channel->isOperator(client)) return true;
-  sendReply(client, ERR_CHANOPRIVSNEEDED, name + " :You're not channel operator");
+  sendReply(client, ERR_CHANOPRIVSNEEDED, name);
   return false;
 }
 
@@ -496,7 +510,7 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
   }
 
   if (!client->isRegistered()) {
-    sendReply(client, ERR_NOTREGISTERED, ":You have not registered");
+    sendReply(client, ERR_NOTREGISTERED);
     return;
   }
 
@@ -509,7 +523,7 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
     if (_extensions[i]->onCommand(*this, *client, msg)) return;
   }
 
-  sendReply(client, ERR_UNKNOWNCOMMAND, msg.command + " :Unknown command");
+  sendReply(client, ERR_UNKNOWNCOMMAND, msg.command);
 }
 
 Client* Server::findClientByFd(int fd) const {
@@ -537,8 +551,32 @@ void Server::sendToClient(Client* client, const std::string& msg) {
   client->queueMessage(":" + _serverName + " " + msg);
 }
 
-void Server::sendReply(Client* client, const std::string& numeric, const std::string& params) {
+static std::string replyBody(const std::string& numeric, const std::string& params) {
+  const char* text = ReplyText::find(numeric);
+  if (text == NULL) return params;
+  if (params.empty()) return ":" + std::string(text);
+  return params + " :" + text;
+}
+
+void Server::sendNumeric(Client* client, const std::string& numeric, const std::string& params) {
   client->queueMessage(":" + _serverName + " " + numeric + " " + client->getNickname() + " " + params);
+}
+
+void Server::sendReply(Client* client, const std::string& numeric) {
+  sendNumeric(client, numeric, replyBody(numeric, ""));
+}
+
+void Server::sendReply(Client* client, const std::string& numeric, const std::string& p0) {
+  sendNumeric(client, numeric, replyBody(numeric, p0));
+}
+
+void Server::sendReply(Client* client, const std::string& numeric, const std::string& p0, const std::string& p1) {
+  sendNumeric(client, numeric, replyBody(numeric, p0 + " " + p1));
+}
+
+void Server::sendReply(Client* client, const std::string& numeric, const std::string& p0, const std::string& p1,
+                       const std::string& p2) {
+  sendNumeric(client, numeric, replyBody(numeric, p0 + " " + p1 + " " + p2));
 }
 
 void Server::teardownClientState(Client* client, const std::string& reason) {

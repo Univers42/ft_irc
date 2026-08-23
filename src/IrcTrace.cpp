@@ -17,7 +17,7 @@ struct NumericEntry {
   const char* name;
 };
 
-#define FT_IRC_NUMERIC_ROW(replyName, replyCode) {replyCode, #replyName},
+#define FT_IRC_NUMERIC_ROW(replyName, replyCode, replyText) {replyCode, #replyName},
 const NumericEntry kNumerics[] = {FT_IRC_REPLIES(FT_IRC_NUMERIC_ROW){0, 0}};
 #undef FT_IRC_NUMERIC_ROW
 

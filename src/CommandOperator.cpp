@@ -93,7 +93,7 @@ void Server::cmdKick(Client* client, const Message& msg) {
 
   Client* targetClient = chan->findMember(target);
   if (!targetClient) {
-    sendReply(client, ERR_USERNOTINCHANNEL, target + " " + chanName + " :They aren't on that channel");
+    sendReply(client, ERR_USERNOTINCHANNEL, target, chanName);
     return;
   }
 
@@ -121,18 +121,18 @@ void Server::cmdInvite(Client* client, const Message& msg) {
 
   Client* targetClient = findClientByNick(target);
   if (!targetClient) {
-    sendReply(client, ERR_NOSUCHNICK, target + " :No such nick/channel");
+    sendReply(client, ERR_NOSUCHNICK, target);
     return;
   }
 
   if (chan->isMember(targetClient)) {
-    sendReply(client, ERR_USERONCHANNEL, target + " " + chanName + " :is already on channel");
+    sendReply(client, ERR_USERONCHANNEL, target, chanName);
     return;
   }
 
   chan->addInvite(targetClient);
 
-  sendReply(client, RPL_INVITING, target + " " + chanName);
+  sendReply(client, RPL_INVITING, target, chanName);
 
   targetClient->queueMessage(":" + client->getPrefix() + " INVITE " + target + " :" + chanName);
 }
@@ -150,11 +150,11 @@ void Server::cmdTopic(Client* client, const Message& msg) {
 
   if (msg.params.size() == 1) {
     if (chan->getTopic().empty()) {
-      sendReply(client, RPL_NOTOPIC, chanName + " :No topic is set");
+      sendReply(client, RPL_NOTOPIC, chanName);
     } else {
-      sendReply(client, RPL_TOPIC, chanName + " :" + chan->getTopic());
-      sendReply(client, RPL_TOPICWHOTIME,
-                chanName + " " + chan->getTopicSetter() + " " + libcpp::str::to_string(chan->getTopicTime()));
+      sendNumeric(client, RPL_TOPIC, chanName + " :" + chan->getTopic());
+      sendReply(client, RPL_TOPICWHOTIME, chanName, chan->getTopicSetter(),
+                libcpp::str::to_string(chan->getTopicTime()));
     }
     return;
   }
@@ -185,9 +185,9 @@ void Server::cmdMode(Client* client, const Message& msg) {
       std::string params = chan->getModeParams();
       std::string reply = target + " " + modes;
       if (!params.empty()) reply += " " + params;
-      sendReply(client, RPL_CHANNELMODEIS, reply);
+      sendNumeric(client, RPL_CHANNELMODEIS, reply);
 
-      sendReply(client, RPL_CREATIONTIME, target + " " + libcpp::str::to_string(chan->getCreationTime()));
+      sendReply(client, RPL_CREATIONTIME, target, libcpp::str::to_string(chan->getCreationTime()));
       return;
     }
     handleChannelMode(client, chan, msg);
@@ -200,12 +200,12 @@ void Server::handleUserMode(Client* client, const Message& msg) {
   const std::string& target = msg.params[0];
 
   if (!ircEquals(target, client->getNickname())) {
-    sendReply(client, ERR_USERSDONTMATCH, ":Can't change mode for other users");
+    sendReply(client, ERR_USERSDONTMATCH);
     return;
   }
 
   if (msg.params.size() == 1) {
-    sendReply(client, RPL_UMODEIS, client->getUserModeString());
+    sendNumeric(client, RPL_UMODEIS, client->getUserModeString());
     return;
   }
 
@@ -237,8 +237,7 @@ void Server::handleUserMode(Client* client, const Message& msg) {
       applied.push_back(ModeChange(adding, 'w'));
     } else {
       std::string s(1, c);
-      if (!alreadyReported(reported, "501:" + s))
-        sendReply(client, ERR_UMODEUNKNOWNFLAG, s + " :is unknown mode char to me");
+      if (!alreadyReported(reported, "501:" + s)) sendReply(client, ERR_UMODEUNKNOWNFLAG, s);
     }
   }
 
@@ -294,8 +293,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
           }
           std::string key = msg.params[paramIdx++];
           if (!isValidChannelKey(key)) {
-            if (!alreadyReported(reported, "525:" + key))
-              sendReply(client, ERR_INVALIDKEY, channel->getName() + " :Key is not well-formed");
+            if (!alreadyReported(reported, "525:" + key)) sendReply(client, ERR_INVALIDKEY, channel->getName());
             continue;
           }
           channel->setKey(key);
@@ -321,7 +319,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
         Client* target = channel->findMember(nick);
         if (!target) {
           if (!alreadyReported(reported, "441:" + ircToLower(nick)))
-            sendReply(client, ERR_USERNOTINCHANNEL, nick + " " + channel->getName() + " :They aren't on that channel");
+            sendReply(client, ERR_USERNOTINCHANNEL, nick, channel->getName());
           continue;
         }
         channel->setOperator(target, adding);
@@ -339,8 +337,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
           long limit = 0;
           if (!libcpp::str::parse_long(limitStr, 1, MAX_USERLIMIT, limit)) {
             if (!alreadyReported(reported, "696:" + limitStr))
-              sendReply(client, ERR_INVALIDMODEPARAM,
-                        channel->getName() + " l " + limitStr + " :Invalid channel limit");
+              sendReply(client, ERR_INVALIDMODEPARAM, channel->getName(), "l", limitStr);
             continue;
           }
           channel->setUserLimit(static_cast<size_t>(limit));
@@ -353,8 +350,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
       }
       default: {
         std::string s(1, c);
-        if (!alreadyReported(reported, "472:" + s))
-          sendReply(client, ERR_UNKNOWNMODE, s + " :is unknown mode char to me");
+        if (!alreadyReported(reported, "472:" + s)) sendReply(client, ERR_UNKNOWNMODE, s);
         break;
       }
     }

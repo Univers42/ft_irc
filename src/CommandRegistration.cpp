@@ -22,7 +22,7 @@ void Server::cmdCap(Client* client, const Message& msg) {
 
 void Server::cmdPass(Client* client, const Message& msg) {
   if (client->isRegistered()) {
-    sendReply(client, ERR_ALREADYREGISTRED, ":You may not reregister");
+    sendReply(client, ERR_ALREADYREGISTRED);
     return;
   }
   if (msg.params.empty()) {
@@ -35,27 +35,27 @@ void Server::cmdPass(Client* client, const Message& msg) {
 
 void Server::cmdNick(Client* client, const Message& msg) {
   if (msg.params.empty()) {
-    sendReply(client, ERR_NONICKNAMEGIVEN, ":No nickname given");
+    sendReply(client, ERR_NONICKNAMEGIVEN);
     return;
   }
 
   std::string nick = msg.matched() ? msg.field("newnick") : msg.params[0];
 
   if (!isValidNickname(nick)) {
-    sendReply(client, ERR_ERRONEUSNICKNAME, nick + " :Erroneous nickname");
+    sendReply(client, ERR_ERRONEUSNICKNAME, nick);
     return;
   }
 
   if (nick.size() > MAX_NICKLEN) nick.erase(MAX_NICKLEN);
 
   if (isNickInUse(nick, client)) {
-    sendReply(client, ERR_NICKNAMEINUSE, nick + " :Nickname is already in use");
+    sendReply(client, ERR_NICKNAMEINUSE, nick);
     return;
   }
 
   for (size_t i = 0; i < _extensions.size(); ++i) {
     if (_extensions[i]->reservesNick(nick)) {
-      sendReply(client, ERR_NICKNAMEINUSE, nick + " :Nickname is already in use");
+      sendReply(client, ERR_NICKNAMEINUSE, nick);
       return;
     }
   }
@@ -99,7 +99,7 @@ static void applyUserModeBitmask(Client* client, const std::string& param) {
 
 void Server::cmdUser(Client* client, const Message& msg) {
   if (client->isRegistered()) {
-    sendReply(client, ERR_ALREADYREGISTRED, ":You may not reregister");
+    sendReply(client, ERR_ALREADYREGISTRED);
     return;
   }
   if (msg.params.size() < 4) {
@@ -115,7 +115,7 @@ void Server::cmdUser(Client* client, const Message& msg) {
   std::string username = msg.matched() ? msg.field("username") : msg.params[0];
   if (username.size() > MAX_USERLEN) username.erase(MAX_USERLEN);
   if (!isValidUsername(username)) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "USER :Invalid username");
+    sendNumeric(client, ERR_NEEDMOREPARAMS, "USER :Invalid username");
     return;
   }
   client->setUsername(username);
@@ -130,7 +130,7 @@ void Server::cmdUser(Client* client, const Message& msg) {
 
 void Server::completeRegistration(Client* client) {
   if (!client->hasPassSent() || !libcpp::str::eq_consttime(client->getPassword(), _password)) {
-    sendReply(client, ERR_PASSWDMISMATCH, ":Password incorrect");
+    sendReply(client, ERR_PASSWDMISMATCH);
     disconnectClient(client->getFd(), "Password mismatch");
     return;
   }
@@ -140,23 +140,23 @@ void Server::completeRegistration(Client* client) {
   std::string nick = client->getNickname();
   std::string prefix = client->getPrefix();
 
-  sendReply(client, RPL_WELCOME, ":Welcome to the " + _serverName + " Network " + prefix);
+  sendNumeric(client, RPL_WELCOME, ":Welcome to the " + _serverName + " Network " + prefix);
 
-  sendReply(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + SERVER_VERSION);
+  sendNumeric(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + SERVER_VERSION);
 
-  sendReply(client, RPL_CREATED, ":This server was created " + std::string(SERVER_CREATED));
+  sendNumeric(client, RPL_CREATED, ":This server was created " + std::string(SERVER_CREATED));
 
-  sendReply(client, RPL_MYINFO, _serverName + " " + SERVER_VERSION + " o itkol");
+  sendNumeric(client, RPL_MYINFO, _serverName + " " + SERVER_VERSION + " o itkol");
 
-  sendReply(client, RPL_ISUPPORT,
-            "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it "
-            "NICKLEN=9 CHANNELLEN=50 TOPICLEN=390 "
-            "NETWORK=" +
-                _serverName +
-                " CASEMAPPING=ascii "
-                ":are supported by this server");
+  sendNumeric(client, RPL_ISUPPORT,
+              "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it "
+              "NICKLEN=9 CHANNELLEN=50 TOPICLEN=390 "
+              "NETWORK=" +
+                  _serverName +
+                  " CASEMAPPING=ascii "
+                  ":are supported by this server");
 
-  sendReply(client, ERR_NOMOTD, ":MOTD File is missing");
+  sendReply(client, ERR_NOMOTD);
 
   IrcTrace::sessionRegistered(client->getFd(), prefix);
   Log::success("registered " + nick + " (" + client->getUsername() + "@" + client->getHostname() + ")");

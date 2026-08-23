@@ -25,7 +25,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     std::string key = (i < keys.size()) ? keys[i] : "";
 
     if (!isValidChannelName(name)) {
-      sendReply(client, ERR_BADCHANMASK, name + " :Bad Channel Mask");
+      sendReply(client, ERR_BADCHANMASK, name);
       continue;
     }
 
@@ -34,17 +34,17 @@ void Server::cmdJoin(Client* client, const Message& msg) {
       if (chan->isMember(client)) continue;
 
       if (chan->isInviteOnly() && !chan->isInvited(client)) {
-        sendReply(client, ERR_INVITEONLYCHAN, name + " :Cannot join channel (+i)");
+        sendReply(client, ERR_INVITEONLYCHAN, name);
         continue;
       }
 
       if (!chan->getKey().empty() && (!isValidChannelKey(key) || chan->getKey() != key)) {
-        sendReply(client, ERR_BADCHANNELKEY, name + " :Cannot join channel (+k)");
+        sendReply(client, ERR_BADCHANNELKEY, name);
         continue;
       }
 
       if (chan->getUserLimit() > 0 && chan->getMemberCount() >= chan->getUserLimit()) {
-        sendReply(client, ERR_CHANNELISFULL, name + " :Cannot join channel (+l)");
+        sendReply(client, ERR_CHANNELISFULL, name);
         continue;
       }
 
@@ -53,7 +53,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     } else {
       chan = createChannel(name, client);
       if (!chan) {
-        sendReply(client, ERR_NOSUCHCHANNEL, name + " :Cannot create channel (server error)");
+        sendNumeric(client, ERR_NOSUCHCHANNEL, name + " :Cannot create channel (server error)");
         continue;
       }
     }
@@ -63,11 +63,10 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onJoin(*this, *client, *chan);
 
     if (!chan->getTopic().empty()) {
-      sendReply(client, RPL_TOPIC, name + " :" + chan->getTopic());
-      sendReply(client, RPL_TOPICWHOTIME,
-                name + " " + chan->getTopicSetter() + " " + libcpp::str::to_string(chan->getTopicTime()));
+      sendNumeric(client, RPL_TOPIC, name + " :" + chan->getTopic());
+      sendReply(client, RPL_TOPICWHOTIME, name, chan->getTopicSetter(), libcpp::str::to_string(chan->getTopicTime()));
     } else {
-      sendReply(client, RPL_NOTOPIC, name + " :No topic is set");
+      sendReply(client, RPL_NOTOPIC, name);
     }
 
     std::string namesHead = "= " + name + " :";
@@ -75,15 +74,15 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     size_t budget =
         (framing + 1 < static_cast<size_t>(MAX_MSGLEN) - 2) ? static_cast<size_t>(MAX_MSGLEN) - 2 - framing : 1;
     std::vector<std::string> chunks = chan->getNamesChunks(budget);
-    for (size_t c = 0; c < chunks.size(); ++c) sendReply(client, RPL_NAMREPLY, namesHead + chunks[c]);
-    sendReply(client, RPL_ENDOFNAMES, name + " :End of /NAMES list");
+    for (size_t c = 0; c < chunks.size(); ++c) sendNumeric(client, RPL_NAMREPLY, namesHead + chunks[c]);
+    sendReply(client, RPL_ENDOFNAMES, name);
 
     std::string modes = chan->getModeString();
     std::string modeParams = chan->getModeParams();
     std::string modeReply = name + " " + modes;
     if (!modeParams.empty()) modeReply += " " + modeParams;
-    sendReply(client, RPL_CHANNELMODEIS, modeReply);
-    sendReply(client, RPL_CREATIONTIME, name + " " + libcpp::str::to_string(chan->getCreationTime()));
+    sendNumeric(client, RPL_CHANNELMODEIS, modeReply);
+    sendReply(client, RPL_CREATIONTIME, name, libcpp::str::to_string(chan->getCreationTime()));
   }
 }
 

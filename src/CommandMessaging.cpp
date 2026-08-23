@@ -8,12 +8,12 @@
 
 void Server::cmdPrivmsg(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[0].empty()) {
-    sendReply(client, ERR_NORECIPIENT, ":No recipient given (PRIVMSG)");
+    sendReply(client, ERR_NORECIPIENT);
     return;
   }
 
   if (msg.params.size() < 2 || msg.params[1].empty()) {
-    sendReply(client, ERR_NOTEXTTOSEND, ":No text to send");
+    sendReply(client, ERR_NOTEXTTOSEND);
     return;
   }
 
@@ -28,7 +28,7 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
       Channel* chan = requireChannel(client, target);
       if (!chan) continue;
       if (!chan->isMember(client)) {
-        sendReply(client, ERR_CANNOTSENDTOCHAN, target + " :Cannot send to channel");
+        sendReply(client, ERR_CANNOTSENDTOCHAN, target);
         continue;
       }
       chan->broadcastMessage(":" + client->getPrefix() + " PRIVMSG " + target + " :" + text, client);
@@ -40,7 +40,7 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
 
       Client* dest = findClientByNick(target);
       if (!dest) {
-        sendReply(client, ERR_NOSUCHNICK, target + " :No such nick/channel");
+        sendReply(client, ERR_NOSUCHNICK, target);
         continue;
       }
       dest->queueMessage(":" + client->getPrefix() + " PRIVMSG " + target + " :" + text);
