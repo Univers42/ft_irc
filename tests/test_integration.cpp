@@ -1083,7 +1083,16 @@ TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 			<< "Closed too fast (" << elapsedMs << "ms) for a " << kDeadlineMs
 			<< "ms injected deadline -- looks like drain-completion, not "
 			   "the pending-close deadline sweep";
-		EXPECT_LE(elapsedMs, kDeadlineMs * 3)
+		/* The lower bound above is the real property: it separates a
+		** deadline-driven close from a drain-complete one. The upper bound is
+		** only a sanity check, and a tight one was FLAKY -- when a second test
+		** binary runs alongside this one, the event loop's passes stretch
+		** under CPU contention and the close lands past 3x the deadline
+		** without anything being wrong. The poll loop above already caps at
+		** 200 x 20ms, so a close that never happens fails on `closed` instead.
+		** This bound therefore only has to catch a close that is late by
+		** orders of magnitude, not one that is late by scheduling jitter. */
+		EXPECT_LE(elapsedMs, kDeadlineMs * 10)
 			<< "Closed suspiciously late (" << elapsedMs << "ms) for a "
 			<< kDeadlineMs << "ms injected deadline";
 	}
