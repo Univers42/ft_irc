@@ -1,5 +1,6 @@
 #include "grammar/Grammar.hpp"
 
+#include <ostream>
 #include <string>
 
 namespace Abnf {
@@ -25,6 +26,28 @@ const std::string& emptyString() {
 }  // namespace
 
 Grammar::Grammar() {}
+
+Grammar::Grammar(const Grammar& other)
+    : _nodes(other._nodes),
+      _children(other._children),
+      _literals(other._literals),
+      _captureNames(other._captureNames),
+      _ruleNames(other._ruleNames),
+      _ruleRoots(other._ruleRoots) {}
+
+Grammar& Grammar::operator=(const Grammar& other) {
+  if (this != &other) {
+    _nodes = other._nodes;
+    _children = other._children;
+    _literals = other._literals;
+    _captureNames = other._captureNames;
+    _ruleNames = other._ruleNames;
+    _ruleRoots = other._ruleRoots;
+  }
+  return *this;
+}
+
+Grammar::~Grammar() {}
 
 int Grammar::ruleIndex(const std::string& name) const {
   const std::string key = lowered(name);
@@ -73,6 +96,11 @@ void Grammar::clear() {
   _captureNames.clear();
   _ruleNames.clear();
   _ruleRoots.clear();
+}
+
+std::ostream& operator<<(std::ostream& os, const Grammar& grammar) {
+  os << "Grammar{rules=" << grammar.ruleCount() << ", captures=" << grammar.captureCount() << "}";
+  return os;
 }
 
 }  // namespace Abnf

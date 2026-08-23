@@ -11,6 +11,7 @@ namespace Abnf {
 class GrammarBuilder {
  public:
   GrammarBuilder();
+  ~GrammarBuilder();
 
   bool compile(const std::string& text, Grammar& out);
   const std::string& error() const;

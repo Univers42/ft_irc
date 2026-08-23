@@ -12,6 +12,7 @@ namespace Compiled {
 class ProgramCompiler {
  public:
   ProgramCompiler();
+  ~ProgramCompiler();
 
   bool compile(const Grammar& grammar, int rule, Program& out);
 

@@ -2,6 +2,7 @@
 #define MATCHRESULT_HPP
 
 #include <cstddef>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,9 @@ class Grammar;
 class MatchResult {
  public:
   MatchResult();
+  MatchResult(const MatchResult& other);
+  MatchResult& operator=(const MatchResult& other);
+  ~MatchResult();
 
   bool has(const std::string& name) const;
 
@@ -35,6 +39,8 @@ class MatchResult {
   int sequenceOwner(std::size_t index) const;
 
  private:
+  friend std::ostream& operator<<(std::ostream& os, const MatchResult& result);
+
   int slotOf(const std::string& name) const;
 
   const Grammar* _grammar;
@@ -42,6 +48,8 @@ class MatchResult {
   std::vector<std::string> _sequence;
   std::vector<int> _owners;
 };
+
+std::ostream& operator<<(std::ostream& os, const MatchResult& result);
 
 }  // namespace Abnf
 

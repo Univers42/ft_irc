@@ -9,6 +9,8 @@
 namespace Abnf {
 AbnfLineReader::AbnfLineReader() : _errorLine(0) {}
 
+AbnfLineReader::~AbnfLineReader() {}
+
 const std::string& AbnfLineReader::error() const { return _error; }
 
 std::size_t AbnfLineReader::errorLine() const { return _errorLine; }

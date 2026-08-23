@@ -2,6 +2,7 @@
 #define CLIENT_HPP
 
 #include <ctime>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -86,5 +87,7 @@ class Client {
   bool _invisible;
   bool _wallops;
 };
+
+std::ostream& operator<<(std::ostream& os, const Client& client);
 
 #endif

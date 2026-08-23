@@ -20,6 +20,9 @@ void setBit(unsigned char* bits, int c) { bits[c >> 3] |= static_cast<unsigned c
 }  // namespace
 
 ProgramCompiler::ProgramCompiler() : _grammar(NULL), _program(NULL) {}
+
+ProgramCompiler::~ProgramCompiler() {}
+
 const std::string& ProgramCompiler::error() const { return _error; }
 
 bool ProgramCompiler::fail(const std::string& message) {

@@ -15,6 +15,10 @@ class FileGrammarSource : public IGrammarSource {
   virtual bool read(std::string& out) const;
 
  private:
+  FileGrammarSource();
+  FileGrammarSource(const FileGrammarSource& other);
+  FileGrammarSource& operator=(const FileGrammarSource& other);
+
   std::string _path;
 };
 

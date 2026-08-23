@@ -8,6 +8,8 @@
 namespace Abnf {
 GrammarValidator::GrammarValidator() : _grammar(NULL) {}
 
+GrammarValidator::~GrammarValidator() {}
+
 const std::string& GrammarValidator::error() const { return _error; }
 
 bool GrammarValidator::validate(const Grammar& grammar) {

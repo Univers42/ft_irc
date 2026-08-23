@@ -27,6 +27,7 @@ class ProgramMatcher : public IMatcher {
   const std::string& error() const;
 
  private:
+  ProgramMatcher();
   ProgramMatcher(const ProgramMatcher& other);
   ProgramMatcher& operator=(const ProgramMatcher& other);
 

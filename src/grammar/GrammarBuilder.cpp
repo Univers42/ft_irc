@@ -19,6 +19,8 @@ using AbnfChars::skipBlanks;
 
 GrammarBuilder::GrammarBuilder() : _grammar(NULL), _lineNo(0) {}
 
+GrammarBuilder::~GrammarBuilder() {}
+
 const std::string& GrammarBuilder::error() const { return _error; }
 
 bool GrammarBuilder::fail(const std::string& message) {

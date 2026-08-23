@@ -15,6 +15,14 @@ class IMatcher {
   virtual const char* strategy() const = 0;
 
   virtual bool lastExhausted() const = 0;
+
+ protected:
+  IMatcher() {}
+  IMatcher(const IMatcher& other) { (void)other; }
+  IMatcher& operator=(const IMatcher& other) {
+    (void)other;
+    return *this;
+  }
 };
 
 }  // namespace Abnf

@@ -2,6 +2,7 @@
 #define GRAMMAR_HPP
 
 #include <cstddef>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,9 @@ namespace Abnf {
 class Grammar {
  public:
   Grammar();
+  Grammar(const Grammar& other);
+  Grammar& operator=(const Grammar& other);
+  ~Grammar();
 
   int ruleIndex(const std::string& name) const;
   static const int kNoRule;
@@ -40,6 +44,8 @@ class Grammar {
   std::vector<std::string> _ruleNames;
   std::vector<int> _ruleRoots;
 };
+
+std::ostream& operator<<(std::ostream& os, const Grammar& grammar);
 
 }  // namespace Abnf
 

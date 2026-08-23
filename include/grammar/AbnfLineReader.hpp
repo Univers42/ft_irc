@@ -14,6 +14,7 @@ class AbnfLineReader {
   };
 
   AbnfLineReader();
+  ~AbnfLineReader();
 
   bool read(const std::string& text, std::vector<Line>& out);
 
@@ -21,6 +22,9 @@ class AbnfLineReader {
   std::size_t errorLine() const;
 
  private:
+  AbnfLineReader(const AbnfLineReader& other);
+  AbnfLineReader& operator=(const AbnfLineReader& other);
+
   static std::string stripComment(const std::string& raw);
 
   std::string _error;

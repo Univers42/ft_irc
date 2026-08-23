@@ -2,6 +2,7 @@
 #define CHANNEL_HPP
 
 #include <ctime>
+#include <iosfwd>
 #include <map>
 #include <set>
 #include <string>
@@ -73,5 +74,7 @@ class Channel {
   std::set<int> _operators;
   std::set<int> _inviteList;
 };
+
+std::ostream& operator<<(std::ostream& os, const Channel& channel);
 
 #endif

@@ -1,5 +1,6 @@
 #include "Client.hpp"
 
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -119,3 +120,13 @@ void Client::clearSendBuffer(size_t bytesSent) { _io.consume(bytesSent); }
 bool Client::hasPendingData() const { return _io.hasPending(); }
 
 bool Client::isSendQExceeded() const { return _io.overflowed(); }
+
+std::ostream& operator<<(std::ostream& os, const Client& client) {
+  os << client.getPrefix() << " fd=" << client.getFd();
+  os << (client.isRegistered() ? " registered" : " unregistered");
+  const std::string modes = client.getUserModeString();
+  if (modes != "+") os << " " << modes;
+  if (client.isPendingClose()) os << " pending-close";
+  if (client.isTearingDown()) os << " tearing-down";
+  return os;
+}

@@ -2,6 +2,7 @@
 #define PROGRAM_HPP
 
 #include <cstddef>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -15,11 +16,19 @@ struct Instruction {
   int y;
 
   Instruction();
+  Instruction(const Instruction& other);
+  Instruction& operator=(const Instruction& other);
+  ~Instruction();
 };
+
+std::ostream& operator<<(std::ostream& os, const Instruction& ins);
 
 class Program {
  public:
   Program();
+  Program(const Program& other);
+  Program& operator=(const Program& other);
+  ~Program();
 
   std::size_t size() const;
   const Instruction& at(std::size_t pc) const;
@@ -39,6 +48,8 @@ class Program {
   std::vector<unsigned char> _classes;
   std::vector<int> _slotCapture;
 };
+
+std::ostream& operator<<(std::ostream& os, const Program& program);
 
 }  // namespace Compiled
 }  // namespace Abnf

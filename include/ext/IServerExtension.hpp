@@ -67,6 +67,14 @@ class IServerExtension {
     (void)actor;
     (void)detail;
   }
+
+ protected:
+  IServerExtension() {}
+  IServerExtension(const IServerExtension& other) { (void)other; }
+  IServerExtension& operator=(const IServerExtension& other) {
+    (void)other;
+    return *this;
+  }
 };
 
 #endif

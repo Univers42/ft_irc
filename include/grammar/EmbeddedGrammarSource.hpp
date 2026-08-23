@@ -13,6 +13,10 @@ class EmbeddedGrammarSource : public IGrammarSource {
 
   virtual const char* origin() const;
   virtual bool read(std::string& out) const;
+
+ private:
+  EmbeddedGrammarSource(const EmbeddedGrammarSource& other);
+  EmbeddedGrammarSource& operator=(const EmbeddedGrammarSource& other);
 };
 
 }  // namespace Abnf

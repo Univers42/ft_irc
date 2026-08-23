@@ -12,6 +12,14 @@ class ILogSink {
   virtual void write(char kind, const std::string& msg) = 0;
 
   virtual void protocol(char dir, int fd, const std::string& peer, const std::string& line, const std::string& note);
+
+ protected:
+  ILogSink() {}
+  ILogSink(const ILogSink& other) { (void)other; }
+  ILogSink& operator=(const ILogSink& other) {
+    (void)other;
+    return *this;
+  }
 };
 
 void setSink(ILogSink* sink);

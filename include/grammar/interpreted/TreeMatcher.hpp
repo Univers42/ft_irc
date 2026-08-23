@@ -17,6 +17,7 @@ class TreeMatcher : public IMatcher {
   static const int kMaxDepth;
 
   explicit TreeMatcher(const Grammar& grammar);
+  virtual ~TreeMatcher();
 
   virtual bool match(int rule, const std::string& line, MatchResult& out) const;
 
@@ -27,6 +28,7 @@ class TreeMatcher : public IMatcher {
   const Grammar& grammar() const;
 
  private:
+  TreeMatcher();
   TreeMatcher(const TreeMatcher& other);
   TreeMatcher& operator=(const TreeMatcher& other);
 

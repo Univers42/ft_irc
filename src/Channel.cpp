@@ -1,6 +1,7 @@
 #include "Channel.hpp"
 
 #include <map>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -122,4 +123,13 @@ std::vector<Client*> Channel::getMembers() const {
     result.push_back(it->second);
   }
   return result;
+}
+
+std::ostream& operator<<(std::ostream& os, const Channel& channel) {
+  os << channel.getName() << " " << channel.getModeString();
+  const std::string params = channel.getModeParams();
+  if (!params.empty()) os << " " << params;
+  os << " members=" << channel.getMemberCount();
+  if (!channel.getTopic().empty()) os << " topic=\"" << channel.getTopic() << "\"";
+  return os;
 }

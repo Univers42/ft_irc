@@ -18,6 +18,8 @@ char fold(char c) {
 
 TreeMatcher::TreeMatcher(const Grammar& grammar) : _grammar(grammar), _exhausted(false) {}
 
+TreeMatcher::~TreeMatcher() {}
+
 bool TreeMatcher::lastExhausted() const { return _exhausted; }
 
 const Grammar& TreeMatcher::grammar() const { return _grammar; }

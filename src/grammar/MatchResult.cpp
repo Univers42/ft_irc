@@ -1,5 +1,6 @@
 #include "grammar/MatchResult.hpp"
 
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,21 @@ const std::vector<std::string>& emptyList() {
 }  // namespace
 
 MatchResult::MatchResult() : _grammar(NULL) {}
+
+MatchResult::MatchResult(const MatchResult& other)
+    : _grammar(other._grammar), _values(other._values), _sequence(other._sequence), _owners(other._owners) {}
+
+MatchResult& MatchResult::operator=(const MatchResult& other) {
+  if (this != &other) {
+    _grammar = other._grammar;
+    _values = other._values;
+    _sequence = other._sequence;
+    _owners = other._owners;
+  }
+  return *this;
+}
+
+MatchResult::~MatchResult() {}
 
 int MatchResult::slotOf(const std::string& name) const {
   if (_grammar == NULL) return -1;
@@ -88,5 +104,24 @@ void MatchResult::reset(const Grammar& grammar) {
 }
 
 void MatchResult::adopt(std::vector<std::vector<std::string> >& values) { _values.swap(values); }
+
+std::ostream& operator<<(std::ostream& os, const MatchResult& result) {
+  if (result._grammar == NULL) {
+    os << "{unbound}";
+    return os;
+  }
+  os << "{";
+  bool first = true;
+  for (std::size_t slot = 0; slot < result._values.size(); ++slot) {
+    const std::vector<std::string>& values = result._values[slot];
+    for (std::size_t i = 0; i < values.size(); ++i) {
+      if (!first) os << ", ";
+      first = false;
+      os << result._grammar->captureName(static_cast<int>(slot)) << "=" << values[i];
+    }
+  }
+  os << "}";
+  return os;
+}
 
 }  // namespace Abnf

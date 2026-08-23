@@ -10,12 +10,16 @@ namespace Abnf {
 class GrammarValidator {
  public:
   GrammarValidator();
+  ~GrammarValidator();
 
   bool validate(const Grammar& grammar);
 
   const std::string& error() const;
 
  private:
+  GrammarValidator(const GrammarValidator& other);
+  GrammarValidator& operator=(const GrammarValidator& other);
+
   bool checkAllRulesDefined();
   bool checkNoLeftRecursion();
 

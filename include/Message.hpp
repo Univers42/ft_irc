@@ -2,6 +2,7 @@
 #define MESSAGE_HPP
 
 #include <cstddef>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,9 @@ struct Message {
   const Abnf::MatchResult* fields;
 
   Message();
+  Message(const Message& other);
+  Message& operator=(const Message& other);
+  ~Message();
 
   bool hasTrailing() const;
 
@@ -33,5 +37,7 @@ struct Message {
 
   std::vector<std::string> listKeepEmpty(const char* name, char separator) const;
 };
+
+std::ostream& operator<<(std::ostream& os, const Message& msg);
 
 #endif
