@@ -35,6 +35,7 @@
   X(ERR_NOSUCHNICK, "401", "No such nick/channel")                  \
   X(ERR_NOSUCHCHANNEL, "403", "No such channel")                    \
   X(ERR_CANNOTSENDTOCHAN, "404", "Cannot send to channel")          \
+  X(ERR_NOORIGIN, "409", "No origin specified")                     \
   X(ERR_NORECIPIENT, "411", "No recipient given (PRIVMSG)")         \
   X(ERR_NOTEXTTOSEND, "412", "No text to send")                     \
   X(ERR_UNKNOWNCOMMAND, "421", "Unknown command")                   \

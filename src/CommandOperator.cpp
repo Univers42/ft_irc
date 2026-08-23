@@ -213,7 +213,7 @@ void Server::handleUserMode(Client* client, const Message& msg) {
 
   const std::string& modeStr = msg.params[1];
 
-  if (modeStr.empty() || (modeStr[0] != '+' && modeStr[0] != '-')) return;
+  if (modeStr.empty() || (modeStr[0] != '+' && modeStr[0] != '-')) return;  //< "i" "it" "o bob" -> no sign, no reply
 
   bool adding = true;
   std::vector<ModeChange> applied;
@@ -222,16 +222,16 @@ void Server::handleUserMode(Client* client, const Message& msg) {
   for (size_t i = 0; i < modeStr.size(); ++i) {
     char c = modeStr[i];
 
-    if (c == '+') {
+    if (c == '+') {  //< USER mode sign · "MODE bob +i" · "+iw" both · "+o" parsed then IGNORED (RFC 3.1.5)
       adding = true;
       continue;
     }
-    if (c == '-') {
+    if (c == '-') {  //< "-i" clears · "-o" IS honoured (self-deop allowed) · "+i-w" flips mid-string
       adding = false;
       continue;
     }
 
-    if (c == 'i') {
+    if (c == 'i') {  //< invisible · "USER u 8 * :R" sets this too, via the 3.1.3 bitmask
       client->setInvisible(adding);
       applied.push_back(ModeChange(adding, 'i'));
     } else if (c == 'w') {
@@ -267,11 +267,11 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
   for (size_t i = 0; i < modeStr.size(); ++i) {
     char c = modeStr[i];
 
-    if (c == '+') {
+    if (c == '+') {  //< CHANNEL mode sign · "+it" · "-o+i" flips · "+-+-i" -> only the last sign counts
       adding = true;
       continue;
     }
-    if (c == '-') {
+    if (c == '-') {  //< "-k" takes the key only if later modes do not need it · "-k+o bob" gives bob to +o
       adding = false;
       continue;
     }

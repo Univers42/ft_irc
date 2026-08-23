@@ -79,8 +79,9 @@ CASES += [
        state=PREAUTH, fresh=True),
     _c("PASS", "PASS", "pass-cmd", "missing the required param",
        want="461", forbid=(), state=PREAUTH, fresh=True),
-    _c("PASS", "PASS a b", "pass-cmd", "extra token past the one param",
-       state=PREAUTH, fresh=True, strict=False),
+    _c("PASS", "PASS a b", "pass-cmd",
+       "an extra token past the one param is ignored, not an error",
+       expect_silence=True, state=PREAUTH, fresh=True),
 ]
 
 # ── NICK ─────────────────────────────────────────────────────────────────
@@ -153,13 +154,14 @@ CASES += [
     _c("PING", "PING tok", "ping-cmd", "token echoed back in a PONG"),
     _c("PING", "PING :tok", "ping-cmd", "colon form"),
     _c("PING", "PING :two words", "ping-cmd", "trailing absorbs spaces"),
-    _c("PING", "PING", "ping-cmd", "RFC 2812 says 409; token is optional here",
-       strict=False),
+    _c("PING", "PING", "ping-cmd", "no origin: RFC 2812 3.7.2 says 409",
+       want="409", forbid=()),
     _c("PONG", "PONG tok", "pong-cmd", "PONG draws no reply",
        expect_silence=True),
     _c("PONG", "PONG :tok", "pong-cmd", "colon form draws no reply",
        expect_silence=True),
-    _c("PONG", "PONG", "pong-cmd", "bare PONG", strict=False),
+    _c("PONG", "PONG", "pong-cmd", "bare PONG is still silent",
+       expect_silence=True),
 ]
 
 # ── JOIN ─────────────────────────────────────────────────────────────────
@@ -223,8 +225,9 @@ CASES += [
        expect_silence=True),
     _c("NOTICE", "NOTICE nosuchnick :hi", "notice-cmd",
        "no error reply, ever -- RFC 3.3.2", expect_silence=True),
-    _c("NOTICE", "NOTICE", "notice-cmd", "bare NOTICE draws no reply",
-       strict=False),
+    _c("NOTICE", "NOTICE", "notice-cmd",
+       "even a bare NOTICE draws no reply -- RFC 2812 3.3.2",
+       expect_silence=True),
 ]
 
 # ── KICK ─────────────────────────────────────────────────────────────────
@@ -260,8 +263,9 @@ CASES += [
     _c("TOPIC", "TOPIC #probe :", "topic-cmd", "empty topictext clears"),
     _c("TOPIC", "TOPIC", "topic-cmd", "missing topicchan",
        want="461", forbid=()),
-    _c("TOPIC", "TOPIC #probe bare", "topic-cmd",
-       "grammar requires ':' before topictext", strict=False),
+    _c("TOPIC", "TOPIC #probe bare", "topic-cmd", "colon is optional"),
+    _c("TOPIC", "TOPIC #probe one two three", "topic-cmd",
+       "a colon-less topic keeps every word, exactly as PART keeps its reason"),
 ]
 
 # ── MODE ─────────────────────────────────────────────────────────────────
@@ -280,7 +284,7 @@ CASES += [
        "several letters, one param between them"),
     _c("MODE", "MODE #probe +i-t", "mode-cmd", "sign flips inside modestring"),
     _c("MODE", "MODE #probe " + " ".join(["+o"] + ["bob"] * 13), "mode-cmd",
-       "*13 modeparam is the grammar's ceiling", strict=False),
+       "*13 modeparam is the grammar's ceiling"),
     _c("MODE", "MODE", "mode-cmd", "missing modetarget",
        want="461", forbid=()),
     _c("MODE", "MODE #probe +Z", "mode-cmd", "unknown mode letter",
@@ -336,8 +340,8 @@ CASES += [
     _c("<message>", "NOSUCHCOMMAND", "command", "unknown command",
        want="421", forbid=()),
     _c("<message>", "PRIVMSG #probe :" + "y" * 600, "message",
-       "over-long line must be cut, never split into a second command",
-       strict=False),
+       "over-long line is cut, never split into a second command",
+       expect_silence=True),
 ]
 
 

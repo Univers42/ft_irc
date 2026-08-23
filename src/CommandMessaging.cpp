@@ -73,7 +73,7 @@ void Server::cmdNotice(Client* client, const Message& msg) {
 
 void Server::cmdPing(Client* client, const Message& msg) {
   if (msg.params.empty()) {
-    replyNeedMoreParams(client, "PING");
+    sendReply(client, ERR_NOORIGIN);
     return;
   }
   client->queueMessage(":" + _serverName + " PONG " + _serverName + " :" + msg.params[0]);

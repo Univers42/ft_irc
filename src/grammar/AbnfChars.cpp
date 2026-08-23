@@ -38,7 +38,7 @@ void skipBlanks(const std::string& s, std::size_t& i) {
 std::string trimmed(const std::string& s) {
   std::string::size_type b = 0;
   std::string::size_type e = s.size();
-  while (b < e && isBlank(s[b])) ++b;      //< left edge · "   params = x" -> b at 'p'
+  while (b < e && isBlank(s[b])) ++b;      //<  left edge · "  params = x" -> b at 'p'
   while (e > b && isBlank(s[e - 1])) --e;  //< right edge · all-blank -> b==e -> ""
   return s.substr(b, e - b);
 }

@@ -18,3 +18,7 @@ ircserv
 .sim/
 
 CLAUDE/*
+
+# Python bytecode from the grammar test tooling
+__pycache__/
+*.pyc

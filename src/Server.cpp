@@ -695,17 +695,20 @@ static bool isAsciiDigit(char c) { return c >= '0' && c <= '9'; }
 
 static bool isNickSpecial(char c) {
   const unsigned char u = static_cast<unsigned char>(c);
-  return (u >= 0x5B && u <= 0x60) || (u >= 0x7B && u <= 0x7D);
+  return (u >= 0x5B && u <= 0x60) ||
+         (u >= 0x7B && u <= 0x7D);  //< RFC special · [ \\ ] ^ _ ` and { | } · NINE, ` was the D1 bug
 }
 
+//< nick first octet · "alice" "[bot]" "z`tick" ok · "1abc" "-x" "#c" no (no digit, no '-')
 static bool isNickLead(char c) { return isAsciiAlpha(c) || isNickSpecial(c); }
 
+//< nick tail · digits and '-' now allowed · "a1" "z-9" "n|ck" ok · "a.b" "a,b" no
 static bool isNickBody(char c) { return isAsciiAlpha(c) || isAsciiDigit(c) || isNickSpecial(c) || c == '-'; }
 
 bool Server::isValidNickname(const std::string& nick) const {
   if (nick.empty()) return false;
 
-  if (!isNickLead(nick[0])) return false;
+  if (!isNickLead(nick[0])) return false;  //< length is NOT checked here · cmdNick truncates to NICKLEN instead
   for (size_t i = 1; i < nick.size(); ++i)
     if (!isNickBody(nick[i])) return false;
   return true;
@@ -713,22 +716,23 @@ bool Server::isValidNickname(const std::string& nick) const {
 
 bool Server::isValidChannelName(const std::string& name) const {
   if (name.empty() || name.size() > Limits::kChannelLen) return false;
-  if (name[0] != '#') return false;
-  if (name.size() < 2) return false;
+  if (name[0] != '#') return false;   //< only '#' · RFC also allows & + ! but 005 CHANTYPES advertises just '#'
+  if (name.size() < 2) return false;  //< bare "#" has no chanstring after the prefix
 
   for (size_t i = 0; i < name.size(); ++i) {
-    if (name[i] == ' ' || name[i] == '\x07' || name[i] == ',') return false;
-    if (name[i] == ':') return false;
+    if (name[i] == ' ' || name[i] == '\x07' || name[i] == ',')
+      return false;                    //< SPACE ends a param · ',' splits JOIN lists
+    if (name[i] == ':') return false;  //< "#a:b" -> 476 · D4: stricter than RFC, which reads it as name:mask
   }
   return true;
 }
 
 bool Server::isValidChannelKey(const std::string& key) const {
-  if (key.empty() || key.size() > Limits::kKeyLen) return false;
+  if (key.empty() || key.size() > Limits::kKeyLen) return false;  //< "" · 24 octets · RFC key = 1*23(...)
   for (std::string::size_type i = 0; i < key.size(); ++i) {
     const unsigned char c = static_cast<unsigned char>(key[i]);
-    if (c <= ' ' || c == ',') return false;
-    if (c > 0x7F) return false;
+    if (c <= ' ' || c == ',') return false;  //< SPACE ends the param · ',' splits JOIN's key list
+    if (c > 0x7F) return false;              //< key is 7-bit · "sécret" -> 525 · D5 · shared with JOIN so both agree
   }
   return true;
 }
