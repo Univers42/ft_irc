@@ -30,7 +30,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd -r -u 10001 ircd
 WORKDIR /app
-COPY --from=build /src/ircserv /app/ircserv
+COPY --from=build /src/build/bin/ircserv /app/ircserv
 USER ircd
 EXPOSE 6667
 # Override the password at run time:  docker run ... ircserv 6667 <password>
