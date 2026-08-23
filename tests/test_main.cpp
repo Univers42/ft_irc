@@ -28,8 +28,26 @@ public:
 			std::cout << PM_PASS << PM_BOLD << "  [PASS] " << PM_RST
 					  << info.test_suite_name() << "." << label << "\n";
 		else
+		{
 			std::cerr << PM_FAIL << PM_BOLD << "  [FAIL] " << PM_RST
 					  << info.test_suite_name() << "." << label << "\n";
+
+			/* gtest's default printer is released in main() so PostMan owns
+			** the console, and with it went the only thing that printed WHY
+			** a test failed -- a red line with no expected/actual is not a
+			** diagnosis. Replay the failing parts here so the table still
+			** comes with the evidence behind it. */
+			const ::testing::TestResult *res = info.result();
+			for (int i = 0; i < res->total_part_count(); ++i)
+			{
+				const ::testing::TestPartResult &part = res->GetTestPartResult(i);
+				if (!part.failed())
+					continue;
+				std::cerr << "         " << (part.file_name() ? part.file_name() : "?")
+						  << ":" << part.line_number() << "\n"
+						  << part.message() << "\n";
+			}
+		}
 	}
 };
 
