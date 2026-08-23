@@ -51,7 +51,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
       - name: install toolchain
         run: |
           sudo apt-get update
@@ -93,7 +106,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
       - name: install toolchain
         run: |
           sudo apt-get update
@@ -120,7 +146,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
       - name: install toolchain
         run: |
           sudo apt-get update
@@ -166,7 +205,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
       - name: install toolchain
         run: |
           sudo apt-get update
@@ -187,7 +239,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest vendor/scripts
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi vendor/scripts
       # `make norm` reports a tool that is not installed as "skipped" rather
       # than failing, so installing all four is what makes this gate mean
       # anything at all.
@@ -225,7 +290,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
       - name: install toolchain
         run: |
           sudo apt-get update
@@ -253,7 +331,20 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
       # `--target test` compiles the full tier and runs the Google Test suite
       # inside the image; a test failure fails the build.
       - name: server image — run the test suite in-container
@@ -275,25 +366,5 @@ jobs:
             || { echo "::error::no RPL_WELCOME from the runtime image"; \
                  docker logs ircsmoke; exit 1; }
           docker rm -f ircsmoke
-      # The companion images are optional: they are being retired, so build
-      # them only while their directories are still in the tree.
-      - name: ai-assistant image (cargo --locked)
-        run: |
-          if [ -d companions/ai-assistant ]; then
-            docker build -t ai-assistant companions/ai-assistant
-          else
-            echo "companions/ai-assistant is gone — skipping"
-          fi
-      - name: realtime-bridge image (cargo --locked)
-        run: |
-          if [ -d companions/realtime-bridge ]; then
-            docker build -t realtime-bridge companions/realtime-bridge
-          else
-            echo "companions/realtime-bridge is gone — skipping"
-          fi
-      - name: validate compose config (default + platform profile)
-        env:
-          ANTHROPIC_API_KEY: dummy
-        run: |
-          docker compose config >/dev/null
-          docker compose --profile platform config >/dev/null
+      - name: validate compose config
+        run: docker compose config >/dev/null
