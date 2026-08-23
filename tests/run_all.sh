@@ -115,6 +115,12 @@ SERVER_PID=""
 trap - EXIT
 sleep 0.5
 
+# --- grammar conformance + fuzz (starts its own servers) -----------------
+# Deliberately outside the shared-server block: it drives malformed and
+# hostile input, so it gets servers of its own on their own ports rather
+# than leaving the long-lived one in a state the other suites did not expect.
+run_file ./13_command_grammar.sh
+
 # --- optional valgrind pass (starts its own server) ----------------------
 [ "$WITH_VALGRIND" -eq 1 ] && run_file ./11_memory_checks.sh
 

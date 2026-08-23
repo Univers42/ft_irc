@@ -195,6 +195,94 @@ jobs:
           [ -z "$kids" ] || { echo "::error::server forked a child"; exit 1; }
           [ "$threads" -eq 1 ] || { echo "::error::server is multi-threaded"; exit 1; }
 
+  grammar:
+    name: grammar — RFC 2812 per-command conformance + fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: fetch build submodules (public, over HTTPS)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          # A gitlink pointing at a commit that was never pushed fails as
+          # "upload-pack: not our ref <sha>", naming neither the submodule nor
+          # the cause. Diagnose AFTER the fetch rather than before: a valid
+          # gitlink is often a commit deep in history, which `git ls-remote`
+          # does not list, so a pre-check on ref tips reports false failures.
+          if ! git submodule update --init vendor/libcpp vendor/googletest; then
+            for sm in vendor/libcpp vendor/googletest; do
+              want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
+              url="$(git config -f .gitmodules --get submodule."$sm".url)"
+              echo "::error::$sm wants $want from $url"
+            done
+            echo "::error::if that commit is local-only, push it to its remote"
+            exit 1
+          fi
+      - name: install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3
+      - name: build
+        run: make all
+      # Every command production in RFC 2812, exercised deliberately: arity,
+      # optional elements, colon forms, repetition bounds. The corpus is
+      # authored from the RFC rather than generated from the server's own
+      # embedded ABNF -- generating from that grammar would make the suite
+      # circular, since the server parses with it.
+      - name: per-command conformance
+        run: python3 tests/grammar/conformance.py --verbose
+      # The same productions, mutated and replayed. Seeded, and the seed is
+      # printed: a CI failure reproduces exactly with --seed.
+      - name: structure-aware fuzz
+        run: python3 tests/grammar/fuzz.py --cases 1500
+      # A suite that cannot fail proves nothing. These two runs point the
+      # tools at deliberately broken stand-in servers and require them to
+      # report a failure; if either passes here, the gate is dead.
+      - name: self-check — the tools must fail on a broken server
+        run: |
+          cat > /tmp/badserv.py <<'EOF'
+          import socket, sys, threading
+          port, mode = int(sys.argv[1]), sys.argv[2]
+          srv = socket.socket()
+          srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+          srv.bind(("127.0.0.1", port)); srv.listen(16)
+          def handle(c):
+              buf = b""
+              try:
+                  while True:
+                      d = c.recv(65536)
+                      if not d: return
+                      buf += d
+                      while b"\r\n" in buf:
+                          line, buf = buf.split(b"\r\n", 1)
+                          up = line.upper()
+                          if up.startswith(b"USER"):
+                              c.sendall(b":bad 001 x :Welcome\r\n")
+                          elif up.startswith(b"PING"):
+                              if mode == "deaf": continue
+                              c.sendall(b":bad PONG :tok\r\n")
+                          elif mode == "overlong":
+                              c.sendall(b":bad NOTICE x :" + b"z"*600 + b"\r\n")
+              except Exception: pass
+              finally:
+                  try: c.close()
+                  except Exception: pass
+          while True:
+              conn, _ = srv.accept()
+              threading.Thread(target=handle, args=(conn,), daemon=True).start()
+          EOF
+          printf '#!/bin/sh\nexec python3 /tmp/badserv.py "$1" "$BADMODE"\n' > /tmp/badbin.sh
+          chmod +x /tmp/badbin.sh
+          BADMODE=overlong python3 tests/grammar/fuzz.py \
+            --binary /tmp/badbin.sh --port 7710 --cases 30 --seed 1 && {
+              echo "::error::fuzzer passed a server emitting 617-octet replies"; exit 1; }
+          BADMODE=deaf python3 tests/grammar/fuzz.py \
+            --binary /tmp/badbin.sh --port 7730 --cases 30 --seed 1 && {
+              echo "::error::fuzzer passed a server that ignores PING"; exit 1; }
+          echo "both tools correctly failed the broken servers"
+
   audit:
     name: audit — subject compliance + style
     runs-on: ubuntu-latest
