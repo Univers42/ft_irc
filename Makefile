@@ -343,11 +343,9 @@ test:
 #  are listed out rather than walked.
 NORM_SCRIPT		= vendor/scripts/norminette.sh
 NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
-NORM_FILES		= src include \
-			  $(addprefix $(LIBCPP)/src/,$(addsuffix .cpp,$(NORM_LIBCPP_NAMES))) \
-			  $(addprefix $(LIBCPP)/include/libcpp/,$(addsuffix .hpp,$(NORM_LIBCPP_NAMES))) \
-			  $(addprefix $(LIBCPP)/c98/src/,$(addsuffix .cpp,$(LIBCPP98_NAMES))) \
-			  $(addprefix $(LIBCPP)/c98/include/libcpp98/,$(addsuffix .hpp,$(LIBCPP98_NAMES)))
+#  Override to widen the scope for a one-off sweep:
+#      make norm NORM_FILES="src include $(LIBCPP)/src/str/case.cpp"
+NORM_FILES		= src include
 
 # Everything after `--` is what clang-tidy parses the sources with, so it has
 # to match the real build. -Werror is deliberately left out: clang's warning
@@ -365,7 +363,7 @@ norm:
 # Applies the mechanical half of `norm` in place (layout only — clang-format
 # never changes semantics). cpplint and the analyzer findings stay manual.
 norm-fix:
-	$(call act,$(C_MAG),FMT   ,clang-format -i over src/ include/ + linked libcpp)
+	$(call act,$(C_MAG),FMT   ,clang-format -i over src/ and include/)
 	@PATH="$$HOME/.local/bin:$$PATH" clang-format -i \
 		$$(find src include -name '*.cpp' -o -name '*.hpp') \
 		$(filter-out src include,$(NORM_FILES))
