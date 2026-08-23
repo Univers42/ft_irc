@@ -861,8 +861,9 @@ struct DeadlineRefillProbe : public IServerExtension
 {
 	int targetFd;
 	bool claimed; /* a subject was chosen once; never adopt another */
+	bool frozen;  /* the backlog stayed in userspace, as the test needs */
 
-	DeadlineRefillProbe() : targetFd(-1), claimed(false) {}
+	DeadlineRefillProbe() : targetFd(-1), claimed(false), frozen(false) {}
 
 	const char *name() const override { return "deadline-refill-probe"; }
 
@@ -921,6 +922,15 @@ struct DeadlineRefillProbe : public IServerExtension
 		setsockopt(targetFd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
 
 		queueBacklog(server, &client, 50000);
+
+		/* Did the backlog actually STAY queued? Both ends are clamped above,
+		** but a machine whose kernel absorbs 50 KB anyway (CI runners with a
+		** large default tcp_wmem do) leaves _out empty, and then
+		** drain-completion closes the connection long before any deadline.
+		** That is an environment this test cannot run in, not a bug in the
+		** deadline sweep -- recording it lets the test say which. */
+		frozen = client.hasPendingData();
+
 		server.disconnectClient(targetFd, "deadline test");
 	}
 
@@ -968,8 +978,11 @@ protected:
 
 	void onServerReady(Server &server) override
 	{
-		server.addExtension(new DeadlineRefillProbe());
+		probe = new DeadlineRefillProbe();
+		server.addExtension(probe);
 	}
+
+	DeadlineRefillProbe *probe;
 };
 
 TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
@@ -1087,6 +1100,18 @@ TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 		** happens to get cleaned up some other way) would land far outside
 		** this window. */
 		const long long kDeadlineMs = static_cast<long long>(kTestPendingCloseTimeoutSec) * 1000;
+
+		/* If the backlog never stayed in userspace, the peer was not frozen
+		** and drain-completion legitimately won the race. That is a property
+		** of the machine's socket buffers, not of the deadline sweep, so say
+		** so instead of reporting a failure the code cannot cause. */
+		if (!probe->frozen)
+			GTEST_SKIP() << "kernel absorbed the whole backlog (elapsed "
+						 << elapsedMs
+						 << "ms) -- this machine's socket buffers cannot hold "
+							"a frozen peer, so the deadline path is untestable "
+							"here";
+
 		EXPECT_GE(elapsedMs, kDeadlineMs / 2)
 			<< "Closed too fast (" << elapsedMs << "ms) for a " << kDeadlineMs
 			<< "ms injected deadline -- looks like drain-completion, not "
