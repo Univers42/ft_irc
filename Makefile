@@ -111,7 +111,7 @@ HINT = $(C_DIM)   make help  $(S_DOT)  targets, tiers and overridable flags$(C_R
 # ── Build tiers ────────────────────────────────────────────────────────────
 #  make mandatory  → strictly the subject's mandatory part (pure RFC kernel)
 #  make bonus      → mandatory + subject bonus (bot, file transfer)
-#  make / make all → full: bonus + optional platform extras (PlatformBus,
+#  make / make all → full: bonus + optional platform extras (
 #                    AuditLog, fancy console) — still runtime-gated by
 #                    FT_IRC_CONFIG, so without a config file the binary
 #                    behaves exactly like the bonus tier.
@@ -203,8 +203,7 @@ CORE_NAMES	= main \
 BONUS_NAMES	= Bot \
 			  bonus/FileTransferExt
 
-EXTRA_NAMES	= PlatformBus \
-			  AuditLog \
+EXTRA_NAMES	= AuditLog \
 			  extras/FancyLogSink
 
 SRC_NAMES	= $(CORE_NAMES)
@@ -386,7 +385,7 @@ help:
 	'  $(C_DIM)usage:$(C_RST) make $(C_DIM)[target] [VAR=value]$(C_RST)' \
 	'' \
 	'  $(C_YEL)BUILD TIERS$(C_RST) $(C_DIM)— same kernel sources; they differ only in what is linked.$(C_RST)' \
-	'    $(C_GRN)all$(C_RST)            $(C_DIM)(default)$(C_RST) full tier: bonus + platform extras (PlatformBus,' \
+	'    $(C_GRN)all$(C_RST)            $(C_DIM)(default)$(C_RST) full tier: bonus + platform extras (' \
 	'                   AuditLog, fancy console). The extras are runtime-gated by' \
 	'                   FT_IRC_CONFIG, so with no config file this binary behaves' \
 	'                   byte-identically to the bonus tier.' \
@@ -461,7 +460,7 @@ help:
 	'' \
 	'  $(C_YEL)RUNTIME ENVIRONMENT$(C_RST) $(C_DIM)— read by the binary, not by make$(C_RST)' \
 	'    $(C_CYA)FT_IRC_CONFIG$(C_RST)=<path.ini>' \
-	'                   enables the full-tier extras: [bus] PlatformBus, [audit]' \
+	'                   enables the full-tier extras: [audit]' \
 	'                   AuditLog. Unset, the full binary behaves like bonus.' \
 	'' \
 	'  $(C_YEL)NOT MAKE TARGETS$(C_RST) $(C_DIM)— out-of-band tooling, run them directly$(C_RST)' \

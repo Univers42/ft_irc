@@ -2,11 +2,13 @@ name: CI
 
 # Runs on every push to main and on every pull-request update. (A push to a
 # branch with an open PR triggers the pull_request event, so feature branches
-# are covered without double-running.)
+# are covered without double-running.) workflow_dispatch is there so a branch
+# without a PR yet can still be put through the whole suite on demand.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,17 +17,28 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every gate this repo has, one job each, so a red X names the thing that
+# broke instead of "CI failed":
+#
+#   build      three tiers compile under -Werror, and `make` does not relink
+#   unit       the Google Test suite (in-process, C++17)
+#   blackbox   the shell suite against a real ./ircserv over TCP
+#   audit      subject compliance (C++98, no fork/exec, one poll site) + style
+#   norm       clang-format / clang-tidy / cpplint / cppcheck
+#   valgrind   leak gate, scripted and under the functional load
+#   docker     the shipped images, plus the suite run inside one
+#
+# The four build submodules are public but .gitmodules spells their URLs as
+# SSH, so every job rewrites to HTTPS before fetching. Only the two the build
+# needs are initialised.
 jobs:
-  audit:
-    name: subject audit + style (native)
+  build:
+    name: build — 3 tiers, -Werror
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      # The build submodules are public but their .gitmodules URLs are SSH;
-      # rewrite to HTTPS so CI can fetch them without a deploy key. Only the
-      # two the build needs are initialised (skip the unrelated ircd repo).
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
@@ -33,14 +46,36 @@ jobs:
       - name: install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential python3 clang-format
-      - name: audit — builds mandatory + bonus + full, subject checks
-        run: bash scripts/audit.sh
-      - name: style — whitespace gate (clang-format advisory)
-        run: bash scripts/normalize.sh --check
+          sudo apt-get install -y --no-install-recommends build-essential
+      # Strictly sequential — never concurrent. Unbounded parallel tier builds
+      # are what swap-freeze low-headroom machines; verify-tiers serialises.
+      - name: mandatory + bonus + full, in sequence
+        run: make verify-tiers
+      # The subject forbids an unnecessary relink. Prove it directly rather
+      # than trusting the audit's grep: build twice, demand the second is a
+      # no-op. `make all`, never bare `make` — the default goal is `help`.
+      - name: a second `make all` must be a no-op
+        run: |
+          make all >/dev/null
+          out="$(make all 2>&1)"
+          printf '%s\n' "$out"
+          if printf '%s' "$out" | grep -qE '\.o$|LINK'; then
+            echo "::error::second 'make all' relinked"; exit 1
+          fi
+      - name: everything generated lives under build/
+        run: |
+          make fclean
+          make all >/dev/null
+          stray="$(find . -path ./vendor -prune -o -path ./build -prune -o \
+                   \( -name '*.o' -o -name '*.d' \) -print)"
+          if [ -n "$stray" ]; then
+            echo "::error::object files outside build/:"; echo "$stray"; exit 1
+          fi
+          test -x build/bin/ircserv || { echo "::error::no build/bin/ircserv"; exit 1; }
+          test -L ircserv || { echo "::error::./ircserv symlink missing"; exit 1; }
 
-  docker:
-    name: docker images + in-container tests
+  unit:
+    name: unit — Google Test suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,16 +85,206 @@ jobs:
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           git submodule update --init vendor/libcpp vendor/googletest
-      # `--target test` compiles the full tier and runs the 138-assertion
-      # Google Test suite inside the image; a test failure fails the build.
+      - name: install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+      # In-process protocol suites (MODE matrix, USER matrix, conformance,
+      # security, integration, extensions, file transfer, libcpp).
+      - name: make test
+        run: make test
+      # The suites that bind sockets are timing-sensitive; a single flake
+      # should not fail the build, but a REPEATABLE failure must. Re-run the
+      # runner once more with the shuffle on to catch order dependencies.
+      - name: re-run shuffled (order-dependence check)
+        run: |
+          make -C tests build
+          ./build/bin/test_runner --gtest_shuffle
+
+  blackbox:
+    name: blackbox — shell suite over TCP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: fetch build submodules (public, over HTTPS)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init vendor/libcpp vendor/googletest
+      - name: install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential netcat-openbsd procps strace
+      - name: build
+        run: make all
+      # run_all.sh starts one long-lived ./ircserv and drives every numbered
+      # suite against it: startup/argv, registration (incl. the USER matrix),
+      # TCP framing, disconnect, PRIVMSG, JOIN/PART, KICK/INVITE/TOPIC, the
+      # MODE matrix, malformed pre-registration input, and multi-client
+      # stress. --skip-build because 12_build_norm.sh runs its own `make re`,
+      # which the build job already covers.
+      - name: tests/run_all.sh
+        working-directory: tests
+        run: bash run_all.sh --skip-build
+      # 12_build_norm.sh on its own: make all/re/clean/fclean, a warning-free
+      # rebuild, and the no-fork/one-poll-site source checks.
+      - name: build + norm shell gate
+        working-directory: tests
+        run: bash 12_build_norm.sh
+      # The server must never fork or spawn a thread. Assert it on the live
+      # process rather than only by grepping the sources.
+      - name: no fork/exec/clone at runtime
+        run: |
+          ./build/bin/ircserv 6699 ci-pass >/tmp/srv.log 2>&1 &
+          srv=$!
+          sleep 1
+          kids="$(pgrep -P "$srv" || true)"
+          threads="$(ls /proc/$srv/task | wc -l)"
+          kill "$srv" 2>/dev/null || true
+          echo "children: [$kids]  threads: $threads"
+          [ -z "$kids" ] || { echo "::error::server forked a child"; exit 1; }
+          [ "$threads" -eq 1 ] || { echo "::error::server is multi-threaded"; exit 1; }
+
+  audit:
+    name: audit — subject compliance + style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: fetch build submodules (public, over HTTPS)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init vendor/libcpp vendor/googletest
+      - name: install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3 clang-format
+      - name: audit — builds mandatory + bonus + full, subject checks
+        run: bash scripts/audit.sh
+      - name: style — whitespace gate (clang-format advisory)
+        run: bash scripts/normalize.sh --check
+
+  norm:
+    name: norm — clang-tidy / cpplint / cppcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: fetch build submodules (public, over HTTPS)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init vendor/libcpp vendor/googletest
+      # `make norm` reports a tool that is not installed as "skipped" rather
+      # than failing, so installing all four is what makes this gate mean
+      # anything at all.
+      - name: install the four analysers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3 python3-pip clang-format clang-tidy cppcheck
+          pip3 install --user cpplint
+      # Scoped to our own code. `make norm` with no override also walks the
+      # vendored libcpp modules ircserv compiles in, and those carry four
+      # findings of their own (runtime/explicit, include_what_you_use) that
+      # belong to a different repository -- vendor/libcpp is a submodule, so
+      # CI re-inits it from the committed pointer and a local fix would never
+      # reach this job anyway. Gating on code this repo cannot change would
+      # make the job permanently red for a reason nobody here can act on.
+      - name: make norm (src + include)
+        run: make norm NORM_FILES="src include"
+      # clang-format is not merely advisory here: the whole tree is formatted
+      # at ColumnLimit 120, and a file that drifts out of it silently breaks
+      # the cpplint linelength gate that is pinned to the same number.
+      - name: formatting is already applied
+        run: |
+          make norm-fix >/dev/null
+          if ! git diff --quiet -- src include; then
+            echo "::error::run 'make norm-fix' and commit the result"
+            git diff --stat -- src include
+            exit 1
+          fi
+
+  valgrind:
+    name: valgrind — leak gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: fetch build submodules (public, over HTTPS)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init vendor/libcpp vendor/googletest
+      - name: install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential valgrind netcat-openbsd procps
+      - name: build
+        run: make all
+      # exit 0 clean / 97 leak / 90 setup-unverified. 90 is a broken gate, not
+      # a pass: the run did not prove anything, so it fails here too.
+      - name: scripted valgrind run
+        run: bash scripts/memcheck.sh --auto
+      # The allocation-heavy functional load under valgrind — a different
+      # shape of leak from the scripted run's.
+      - name: valgrind under the functional suite
+        working-directory: tests
+        run: bash 11_memory_checks.sh
+
+  docker:
+    name: docker — images + in-container suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: fetch build submodules (public, over HTTPS)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init vendor/libcpp vendor/googletest
+      # `--target test` compiles the full tier and runs the Google Test suite
+      # inside the image; a test failure fails the build.
       - name: server image — run the test suite in-container
         run: docker build --target test -t ircserv-test .
       - name: server runtime image
         run: docker build -t ircserv .
+      # The runtime image must actually serve, not merely build: the binary
+      # moved to build/bin/ircserv, and a stale COPY would only show up here.
+      - name: runtime image answers on the wire
+        run: |
+          docker run -d --name ircsmoke -p 6667:6667 ircserv 6667 ci-pass
+          for i in $(seq 1 30); do
+            if printf '' | nc -z 127.0.0.1 6667; then break; fi
+            sleep 1
+          done
+          printf 'PASS ci-pass\r\nNICK ci\r\nUSER ci 0 * :CI\r\nQUIT\r\n' \
+            | nc -q2 127.0.0.1 6667 | tee /tmp/out.txt
+          grep -q ' 001 ' /tmp/out.txt \
+            || { echo "::error::no RPL_WELCOME from the runtime image"; \
+                 docker logs ircsmoke; exit 1; }
+          docker rm -f ircsmoke
+      # The companion images are optional: they are being retired, so build
+      # them only while their directories are still in the tree.
       - name: ai-assistant image (cargo --locked)
-        run: docker build -t ai-assistant companions/ai-assistant
+        run: |
+          if [ -d companions/ai-assistant ]; then
+            docker build -t ai-assistant companions/ai-assistant
+          else
+            echo "companions/ai-assistant is gone — skipping"
+          fi
       - name: realtime-bridge image (cargo --locked)
-        run: docker build -t realtime-bridge companions/realtime-bridge
+        run: |
+          if [ -d companions/realtime-bridge ]; then
+            docker build -t realtime-bridge companions/realtime-bridge
+          else
+            echo "companions/realtime-bridge is gone — skipping"
+          fi
       - name: validate compose config (default + platform profile)
         env:
           ANTHROPIC_API_KEY: dummy

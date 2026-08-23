@@ -54,22 +54,18 @@ int GrammarBuilder::addNode(const GrammarNode& node) {
 
 int GrammarBuilder::addChildren(const std::vector<int>& children) {
   const int first = static_cast<int>(_grammar->_children.size());
-  for (std::size_t i = 0; i < children.size(); ++i)
-    _grammar->_children.push_back(children[i]);
+  for (std::size_t i = 0; i < children.size(); ++i) _grammar->_children.push_back(children[i]);
   return first;
 }
 
-bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i,
-                                     int& out) {
-  if (i >= s.size() || (s[i] != 'x' && s[i] != 'X'))
-    return fail("only the %x form of num-val is supported");
+bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i, int& out) {
+  if (i >= s.size() || (s[i] != 'x' && s[i] != 'X')) return fail("only the %x form of num-val is supported");
   ++i;
 
   std::vector<int> pieces;
   for (;;) {
     std::string hex;
-    while (i < s.size() && isHexDigit(s[i]))
-      hex += s[i++];
+    while (i < s.size() && isHexDigit(s[i])) hex += s[i++];
     if (hex.empty()) return fail("%x with no hex digits");
 
     const int low = static_cast<int>(std::strtol(hex.c_str(), NULL, 16));
@@ -78,8 +74,7 @@ bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i,
     if (i < s.size() && s[i] == '-') {
       ++i;
       std::string upper;
-      while (i < s.size() && isHexDigit(s[i]))
-        upper += s[i++];
+      while (i < s.size() && isHexDigit(s[i])) upper += s[i++];
       if (upper.empty()) return fail("%x range with no upper bound");
       high = static_cast<int>(std::strtol(upper.c_str(), NULL, 16));
       if (high < low) return fail("%x range runs backwards");
@@ -111,8 +106,7 @@ bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i,
-                                int& out) {
+bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i, int& out) {
   skipBlanks(s, i);
   if (i >= s.size()) return fail("expected an element, found end of rule");
 
@@ -172,8 +166,7 @@ bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i,
     capture = true;
     ++i;
     skipBlanks(s, i);
-    if (i >= s.size() || !isAlpha(s[i]))
-      return fail("'$' must be followed by a rule name");
+    if (i >= s.size() || !isAlpha(s[i])) return fail("'$' must be followed by a rule name");
     c = s[i];
   }
 
@@ -192,8 +185,7 @@ bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i,
   return fail(std::string("unexpected character '") + c + "' in rule body");
 }
 
-bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i,
-                                   int& out) {
+bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i, int& out) {
   skipBlanks(s, i);
 
   int low = 1;
@@ -207,20 +199,15 @@ bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i,
 
     if (i < s.size() && s[i] == '*') {
       ++i;
-      low = before.empty()
-                ? 0
-                : static_cast<int>(std::strtol(before.c_str(), NULL, 10));
+      low = before.empty() ? 0 : static_cast<int>(std::strtol(before.c_str(), NULL, 10));
       std::string after;
       while (i < s.size() && isDigit(s[i])) after += s[i++];
-      high = after.empty()
-                 ? GrammarNode::kUnbounded
-                 : static_cast<int>(std::strtol(after.c_str(), NULL, 10));
+      high = after.empty() ? GrammarNode::kUnbounded : static_cast<int>(std::strtol(after.c_str(), NULL, 10));
     } else {
       low = high = static_cast<int>(std::strtol(before.c_str(), NULL, 10));
     }
 
-    if (high != GrammarNode::kUnbounded && high < low)
-      return fail("repetition range runs backwards");
+    if (high != GrammarNode::kUnbounded && high < low) return fail("repetition range runs backwards");
   }
 
   int child = 0;
@@ -243,8 +230,7 @@ bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool GrammarBuilder::parseConcatenation(const std::string& s, std::size_t& i,
-                                      int& out) {
+bool GrammarBuilder::parseConcatenation(const std::string& s, std::size_t& i, int& out) {
   std::vector<int> parts;
 
   for (;;) {
@@ -272,8 +258,7 @@ bool GrammarBuilder::parseConcatenation(const std::string& s, std::size_t& i,
   return true;
 }
 
-bool GrammarBuilder::parseAlternation(const std::string& s, std::size_t& i,
-                                    int& out) {
+bool GrammarBuilder::parseAlternation(const std::string& s, std::size_t& i, int& out) {
   std::vector<int> branches;
 
   int first = 0;
@@ -314,8 +299,7 @@ bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
   while (i < line.size() && isRuleChar(line[i])) name += line[i++];
 
   skipBlanks(line, i);
-  if (i >= line.size() || line[i] != '=')
-    return fail("expected '=' or '=/' after rule name '" + name + "'");
+  if (i >= line.size() || line[i] != '=') return fail("expected '=' or '=/' after rule name '" + name + "'");
   ++i;
 
   bool incremental = false;

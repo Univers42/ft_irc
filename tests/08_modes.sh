@@ -131,4 +131,118 @@ else
     t_fail "unknown mode letter took the server down"
 fi
 
+# --- the mode string must open with a sign --------------------------------
+# wiki/FT_IRC_CLIENT_PROTOCOL/signatures.md: "+i", "-o", "-o+i-t" are mode
+# strings; "i", "it", "o mu1" are not. There is no implicit "+", so an
+# unsigned string applies nothing and answers nothing at all.
+irc_clear op
+irc_send op "MODE #modetest i"
+expect_none op "MODE #modetest" 1.5 "unsigned 'i' is not applied"
+
+irc_clear op
+irc_send op "MODE #modetest it"
+expect_none op "MODE #modetest" 1.5 "unsigned 'it' is not applied"
+
+irc_clear op
+irc_send op "MODE #modetest o mu1"
+expect_none op "MODE #modetest" 1.5 "unsigned 'o <nick>' is not applied"
+
+irc_clear op
+irc_send op "MODE #modetest xyz"
+expect_none op "472" 1.5 "unsigned junk is not answered 472 either"
+
+# The channel must be untouched by all of the above.
+irc_clear op
+irc_send op "MODE #modetest"
+expect_ok op "324 mop #modetest \+" 2.0 "no unsigned MODE leaked a flag onto the channel"
+
+# --- cumulative mode strings ----------------------------------------------
+irc_clear op
+irc_send op "MODE #modetest +ii"
+expect_ok op "MODE #modetest \+ii" 2.0 "'+ii' applies twice and echoes both"
+
+irc_clear op
+irc_send op "MODE #modetest -ii"
+expect_ok op "MODE #modetest -ii" 2.0 "'-ii' is the reverse of the same shape"
+
+irc_clear op
+irc_send op "MODE #modetest -oo mu1 mu2"
+expect_ok op "MODE #modetest -oo mu1 mu2" 2.0 "'-oo' draws one parameter per o"
+
+irc_clear op
+irc_send op "MODE #modetest -oi mu1"
+expect_ok op "MODE #modetest -oi mu1" 2.0 "'-oi' mixes a parameterised and a flag mode"
+
+# --- the sign may flip mid-string -----------------------------------------
+irc_clear op
+irc_send op "MODE #modetest -o+i-t mu1"
+expect_ok op "MODE #modetest -o\+i-t mu1" 2.0 "'-o+i-t' applies each letter under the sign in force"
+
+irc_clear op
+irc_send op "MODE #modetest -i+t"
+expect_ok op "MODE #modetest -i\+t" 2.0 "a mid-string flip is echoed back as written"
+
+irc_clear op
+irc_send op "MODE #modetest +t+t"
+expect_ok op "MODE #modetest \+tt" 2.0 "a redundant sign is not restated in the echo"
+
+irc_clear op
+irc_send op "MODE #modetest +-i"
+expect_ok op "MODE #modetest -i" 2.0 "the last sign before a letter is the one that applies"
+
+irc_clear op
+irc_send op "MODE #modetest +"
+expect_none op "MODE #modetest" 1.5 "a lone sign applies nothing and stays silent"
+
+# --- '-k' must not eat the parameter a following mode needs ---------------
+irc_clear op
+irc_send op "MODE #modetest +k eatenkey"
+sleep 0.5
+irc_clear op
+irc_send op "MODE #modetest -k+o mu1"
+expect_ok op "MODE #modetest -k\+o mu1" 2.0 "'-k+o <nick>' leaves the parameter to +o"
+expect_none op "461" 1.0 "...and does not starve +o into a 461"
+
+irc_clear op
+irc_send op "MODE #modetest -o mu1"
+sleep 0.5
+
+# --- a dense mode string stays inside the 512-byte line limit -------------
+# 481 mode characters: every one applies, and the echo carries a prefix the
+# request did not, so on one line it would overrun 512 and be cut. It has to
+# be split into whole lines instead.
+irc_clear op
+_dense="+"
+_n=0
+while [ "$_n" -lt 240 ]; do
+    _dense="${_dense}it"
+    _n=$((_n + 1))
+done
+irc_send op "MODE #modetest $_dense"
+sleep 1
+# irc_buf splits on LF, so each line still carries its CR but has lost the LF:
+# an on-the-wire line of the maximum legal 512 bytes measures 511 here.
+_worst=$(irc_buf op | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
+_worst=$((_worst + 1))
+if [ "$_worst" -le 512 ]; then
+    t_ok "a 481-character mode string echoes in lines within 512 (longest: $_worst)"
+else
+    t_fail "a dense MODE echo overran the line limit ($_worst bytes)"
+fi
+
+# Split, not truncated: every one of the 480 letters has to survive somewhere
+# in the echo, or the server quietly dropped changes it had already applied.
+# A small overcount is fine and unavoidable — "#modetest" contributes an i
+# and two t's per echo line. The property under test is that none of the 480
+# go missing, so a floor is the right shape of assertion.
+_letters=$(irc_buf op | tr -cd 'it' | wc -c | tr -d ' ')
+if [ "$_letters" -ge 480 ]; then
+    t_ok "all 480 mode letters survive the split ($_letters seen)"
+else
+    t_fail "the dense echo lost letters — truncated, not split ($_letters of 480)"
+fi
+
+irc_send op "MODE #modetest -it"
+sleep 0.5
+
 report_summary

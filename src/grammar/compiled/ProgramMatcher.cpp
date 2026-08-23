@@ -7,24 +7,18 @@
 
 namespace Abnf {
 namespace Compiled {
-ProgramMatcher::ProgramMatcher(const Grammar& grammar)
-    : _grammar(grammar), _arenaUsed(0), _generation(0) {
+ProgramMatcher::ProgramMatcher(const Grammar& grammar) : _grammar(grammar), _arenaUsed(0), _generation(0) {
   _programs.assign(grammar.ruleCount(), static_cast<Program*>(NULL));
 }
-
 ProgramMatcher::~ProgramMatcher() {
   for (std::size_t i = 0; i < _programs.size(); ++i) delete _programs[i];
 }
-
 const char* ProgramMatcher::strategy() const { return "compiled/pike"; }
-
 bool ProgramMatcher::lastExhausted() const { return false; }
-
 const std::string& ProgramMatcher::error() const { return _error; }
 
 const Program* ProgramMatcher::programFor(int rule) const {
-  if (rule < 0 || static_cast<std::size_t>(rule) >= _programs.size())
-    return NULL;
+  if (rule < 0 || static_cast<std::size_t>(rule) >= _programs.size()) return NULL;
 
   const std::size_t index = static_cast<std::size_t>(rule);
   if (_programs[index] != NULL) return _programs[index];
@@ -56,8 +50,7 @@ int ProgramMatcher::cloneSlots(int slots, int index, int value) const {
   return static_cast<int>(fresh);
 }
 
-void ProgramMatcher::addThread(std::vector<Thread>& list, int pc, int slots,
-                               std::size_t pos, std::vector<int>& seen,
+void ProgramMatcher::addThread(std::vector<Thread>& list, int pc, int slots, std::size_t pos, std::vector<int>& seen,
                                int generation, const Program& program) const {
   const std::size_t index = static_cast<std::size_t>(pc);
   if (seen[index] == generation) return;
@@ -92,8 +85,7 @@ void ProgramMatcher::addThread(std::vector<Thread>& list, int pc, int slots,
   }
 }
 
-bool ProgramMatcher::match(int rule, const std::string& line,
-                           MatchResult& out) const {
+bool ProgramMatcher::match(int rule, const std::string& line, MatchResult& out) const {
   out.reset(_grammar);
 
   const Program* program = programFor(rule);
@@ -128,20 +120,16 @@ bool ProgramMatcher::match(int rule, const std::string& line,
       if (ins.op == Instruction::Match) {
         if (pos != length) continue;
 
-        std::vector<std::vector<std::string> > values(
-            _grammar.captureCount(), std::vector<std::string>());
+        std::vector<std::vector<std::string> > values(_grammar.captureCount(), std::vector<std::string>());
         std::vector<std::string> sequence;
         std::vector<int> owners;
         for (std::size_t slot = 0; slot < program->slotCount(); ++slot) {
-          const std::vector<int>& saved =
-              _arena[static_cast<std::size_t>(thread.slots)];
+          const std::vector<int>& saved = _arena[static_cast<std::size_t>(thread.slots)];
           const int start = saved[slot * 2];
           const int end = saved[slot * 2 + 1];
           if (start < 0 || end < 0 || end < start) continue;
           const int capture = program->captureOfSlot(slot);
-          const std::string text =
-              line.substr(static_cast<std::size_t>(start),
-                          static_cast<std::size_t>(end - start));
+          const std::string text = line.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
           values[static_cast<std::size_t>(capture)].push_back(text);
           sequence.push_back(text);
           owners.push_back(capture);
@@ -155,8 +143,7 @@ bool ProgramMatcher::match(int rule, const std::string& line,
       if (ins.op == Instruction::Class && pos < length) {
         const unsigned char c = static_cast<unsigned char>(line[pos]);
         if (program->inClass(ins.x, c))
-          addThread(next, thread.pc + 1, thread.slots, pos + 1, seen,
-                    generation, *program);
+          addThread(next, thread.pc + 1, thread.slots, pos + 1, seen, generation, *program);
       }
     }
 

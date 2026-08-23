@@ -17,12 +17,10 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
     return;
   }
 
-  const std::string text =
-      msg.matched() ? msg.field("msgtext") : msg.params[1];
+  const std::string text = msg.matched() ? msg.field("msgtext") : msg.params[1];
 
   std::vector<std::string> targets =
-      msg.matched() ? msg.list("msgtarget", ',')
-                    : libcpp::str::split_nonempty(msg.params[0], ',');
+      msg.matched() ? msg.list("msgtarget", ',') : libcpp::str::split_nonempty(msg.params[0], ',');
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& target = targets[t];
 
@@ -33,13 +31,10 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
         continue;
       }
       if (!chan->isMember(client)) {
-        sendReply(client, ERR_CANNOTSENDTOCHAN,
-                  target + " :Cannot send to channel");
+        sendReply(client, ERR_CANNOTSENDTOCHAN, target + " :Cannot send to channel");
         continue;
       }
-      chan->broadcastMessage(
-          ":" + client->getPrefix() + " PRIVMSG " + target + " :" + text,
-          client);
+      chan->broadcastMessage(":" + client->getPrefix() + " PRIVMSG " + target + " :" + text, client);
     } else {
       bool handled = false;
       for (size_t k = 0; k < _extensions.size() && !handled; ++k)
@@ -51,36 +46,29 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
         sendReply(client, ERR_NOSUCHNICK, target + " :No such nick/channel");
         continue;
       }
-      dest->queueMessage(":" + client->getPrefix() + " PRIVMSG " + target +
-                         " :" + text);
+      dest->queueMessage(":" + client->getPrefix() + " PRIVMSG " + target + " :" + text);
     }
   }
 }
 
 void Server::cmdNotice(Client* client, const Message& msg) {
-  if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty())
-    return;
+  if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty()) return;
 
-  const std::string text =
-      msg.matched() ? msg.field("msgtext") : msg.params[1];
+  const std::string text = msg.matched() ? msg.field("msgtext") : msg.params[1];
 
   std::vector<std::string> targets =
-      msg.matched() ? msg.list("msgtarget", ',')
-                    : libcpp::str::split_nonempty(msg.params[0], ',');
+      msg.matched() ? msg.list("msgtarget", ',') : libcpp::str::split_nonempty(msg.params[0], ',');
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& target = targets[t];
 
     if (target[0] == '#') {
       Channel* chan = findChannel(target);
       if (!chan || !chan->isMember(client)) continue;
-      chan->broadcastMessage(
-          ":" + client->getPrefix() + " NOTICE " + target + " :" + text,
-          client);
+      chan->broadcastMessage(":" + client->getPrefix() + " NOTICE " + target + " :" + text, client);
     } else {
       Client* dest = findClientByNick(target);
       if (!dest) continue;
-      dest->queueMessage(":" + client->getPrefix() + " NOTICE " + target +
-                         " :" + text);
+      dest->queueMessage(":" + client->getPrefix() + " NOTICE " + target + " :" + text);
     }
   }
 }
@@ -90,8 +78,7 @@ void Server::cmdPing(Client* client, const Message& msg) {
     sendReply(client, ERR_NEEDMOREPARAMS, "PING :Not enough parameters");
     return;
   }
-  client->queueMessage(":" + _serverName + " PONG " + _serverName + " :" +
-                       msg.params[0]);
+  client->queueMessage(":" + _serverName + " PONG " + _serverName + " :" + msg.params[0]);
 }
 
 void Server::cmdPong(Client* client, const Message& msg) {

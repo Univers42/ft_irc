@@ -3,11 +3,8 @@
 # the build compiles them from source.
 **/.git
 **/.gitignore
-obj/
+build/
 ircserv
-tests/obj/
-tests/test_runner
-companions/ai-assistant/target/
 *.o
 *.d
 *.csv

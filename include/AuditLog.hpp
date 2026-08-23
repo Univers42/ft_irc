@@ -12,11 +12,9 @@ class AuditLog : public IServerExtension {
   ~AuditLog();
 
   const char* name() const;
-  void onAudit(const std::string& event, const std::string& actor,
-               const std::string& detail);
+  void onAudit(const std::string& event, const std::string& actor, const std::string& detail);
   bool ok() const;
-  void log(const std::string& event, const std::string& actor,
-           const std::string& detail);
+  void log(const std::string& event, const std::string& actor, const std::string& detail);
 
  private:
   AuditLog();

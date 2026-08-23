@@ -20,16 +20,67 @@ protected:
  * Suite: LineInjection — CR/LF/NUL can never smuggle extra IRC lines
  * ════════════════════════════════════════════════════════════════════ */
 
-TEST(LineInjection, EmbeddedCRStrippedFromLine)
+TEST(LineInjection, EmbeddedCRTerminatesTheLine)
 {
 	Client c(60, "127.0.0.1");
 	/* A stray \r mid-line must not survive into the parsed message — a
-	 * relayed "text\rQUIT" would let peers' parsers see a forged line. */
+	 * relayed "text\rQUIT" would let peers' parsers see a forged line.
+	 *
+	 * This used to be enforced by DELETING the CR, which held that property
+	 * but had a cost of its own: the two halves were then run together, so
+	 * "…:real\rJOIN #x" produced the single realname "realJOIN #x" — a value
+	 * the client never sent, invented by the server. CR now terminates the
+	 * message exactly as LF does (RFC 2812 §2.3 terminates on CR-LF and
+	 * excludes both octets from every parameter production;
+	 * wiki/FT_IRC_CLIENT_PROTOCOL/signatures.md spells this out as "CR
+	 * terminates IRC message").
+	 *
+	 * The security property is unchanged, and in fact stronger: the CR
+	 * cannot appear in the parsed message at all, so nothing relayed to a
+	 * peer can carry it. What the second half becomes is a command from the
+	 * SENDER, executed on the sender's own connection — which is exactly
+	 * what the identical LF form already did, and what the sender could
+	 * have written with a plain CRLF anyway. */
 	c.appendToRecvBuffer("PRIVMSG #chan :hello\rQUIT :bye\r\n");
 	std::vector<std::string> msgs = c.extractMessages();
-	ASSERT_EQ(msgs.size(), 1u);
-	EXPECT_EQ(msgs[0], "PRIVMSG #chan :helloQUIT :bye");
+	ASSERT_EQ(msgs.size(), 2u);
+	EXPECT_EQ(msgs[0], "PRIVMSG #chan :hello");
+	EXPECT_EQ(msgs[1], "QUIT :bye");
 	EXPECT_EQ(msgs[0].find('\r'), std::string::npos);
+	EXPECT_EQ(msgs[1].find('\r'), std::string::npos);
+}
+
+TEST(LineInjection, CrAndLfFrameIdentically)
+{
+	/* The two terminators must not disagree: whichever one a client uses,
+	 * and in whatever mixture, the resulting message list is the same. */
+	const char *variants[] = {
+		"A :1\rB :2\r\n",
+		"A :1\nB :2\r\n",
+		"A :1\r\nB :2\r\n",
+		"A :1\r\r\nB :2\r\n",
+		"A :1\n\rB :2\r\n",
+	};
+	for (size_t i = 0; i < sizeof(variants) / sizeof(variants[0]); ++i)
+	{
+		Client c(static_cast<int>(65 + i), "127.0.0.1");
+		c.appendToRecvBuffer(variants[i]);
+		std::vector<std::string> msgs = c.extractMessages();
+		ASSERT_EQ(msgs.size(), 2u) << "variant " << i;
+		EXPECT_EQ(msgs[0], "A :1") << "variant " << i;
+		EXPECT_EQ(msgs[1], "B :2") << "variant " << i;
+	}
+}
+
+TEST(LineInjection, EmptyFragmentsBetweenTerminatorsAreDropped)
+{
+	/* A run of terminators yields no empty messages — an empty line is not
+	 * a command, and pushing one would make every consumer check for it. */
+	Client c(80, "127.0.0.1");
+	c.appendToRecvBuffer("\r\n\r\nPING :x\r\n\r\r\n\n\r\n");
+	std::vector<std::string> msgs = c.extractMessages();
+	ASSERT_EQ(msgs.size(), 1u);
+	EXPECT_EQ(msgs[0], "PING :x");
 }
 
 TEST(LineInjection, NulByteStripped)

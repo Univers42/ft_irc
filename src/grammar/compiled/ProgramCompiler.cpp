@@ -16,14 +16,10 @@ char fold(char c) {
   return c;
 }
 
-void setBit(unsigned char* bits, int c) {
-  bits[c >> 3] |= static_cast<unsigned char>(1u << (c & 7));
-}
-
+void setBit(unsigned char* bits, int c) { bits[c >> 3] |= static_cast<unsigned char>(1u << (c & 7)); }
 }  // namespace
 
 ProgramCompiler::ProgramCompiler() : _grammar(NULL), _program(NULL) {}
-
 const std::string& ProgramCompiler::error() const { return _error; }
 
 bool ProgramCompiler::fail(const std::string& message) {
@@ -43,8 +39,7 @@ int ProgramCompiler::emit(Instruction::Op op, int x, int y) {
 int ProgramCompiler::addClass(const unsigned char* bits) {
   const std::size_t existing = _program->_classes.size() / 32;
   for (std::size_t i = 0; i < existing; ++i)
-    if (std::memcmp(&_program->_classes[i * 32], bits, 32) == 0)
-      return static_cast<int>(i);
+    if (std::memcmp(&_program->_classes[i * 32], bits, 32) == 0) return static_cast<int>(i);
 
   for (int i = 0; i < 32; ++i) _program->_classes.push_back(bits[i]);
   return static_cast<int>(existing);
@@ -52,8 +47,7 @@ int ProgramCompiler::addClass(const unsigned char* bits) {
 
 bool ProgramCompiler::isSingleOctet(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
-  if (_octetMemo.size() < index + 1)
-    const_cast<std::vector<char>&>(_octetMemo).resize(index + 1, 0);
+  if (_octetMemo.size() < index + 1) const_cast<std::vector<char>&>(_octetMemo).resize(index + 1, 0);
   if (_octetMemo[index] != 0) return _octetMemo[index] == 1;
 
   const_cast<std::vector<char>&>(_octetMemo)[index] = 2;
@@ -70,8 +64,7 @@ bool ProgramCompiler::isSingleOctet(int node) const {
       break;
     case GrammarNode::Reference: {
       const int root = _grammar->ruleRoot(n.lo);
-      yes = (n.capture == GrammarNode::kNoCapture) &&
-            root != Grammar::kNoRule && isSingleOctet(root);
+      yes = (n.capture == GrammarNode::kNoCapture) && root != Grammar::kNoRule && isSingleOctet(root);
       break;
     }
     case GrammarNode::Alternation: {
@@ -101,9 +94,7 @@ bool ProgramCompiler::buildClass(int node, unsigned char* bits) const {
       if (text.size() != 1) return false;
       setBit(bits, static_cast<unsigned char>(text[0]));
       const char lower = fold(text[0]);
-      const char upper = (lower >= 'a' && lower <= 'z')
-                             ? static_cast<char>(lower - 'a' + 'A')
-                             : lower;
+      const char upper = (lower >= 'a' && lower <= 'z') ? static_cast<char>(lower - 'a' + 'A') : lower;
       setBit(bits, static_cast<unsigned char>(lower));
       setBit(bits, static_cast<unsigned char>(upper));
       return true;
@@ -155,31 +146,26 @@ bool ProgramCompiler::emitRepetition(int node) {
           "Give the repetition an upper bound so it can be unrolled.");
 
     const int loop = emit(Instruction::Split, 0, 0);
-    _program->_code[static_cast<std::size_t>(loop)].x =
-        static_cast<int>(_program->_code.size());
+    _program->_code[static_cast<std::size_t>(loop)].x = static_cast<int>(_program->_code.size());
     if (!emitNode(child)) return false;
     emit(Instruction::Jump, loop, 0);
-    _program->_code[static_cast<std::size_t>(loop)].y =
-        static_cast<int>(_program->_code.size());
+    _program->_code[static_cast<std::size_t>(loop)].y = static_cast<int>(_program->_code.size());
     return true;
   }
 
   const int optional = n.hi - least;
   if (optional < 0) return fail("repetition range runs backwards");
-  if (optional > kUnrollLimit)
-    return fail("bounded repetition too large to unroll");
+  if (optional > kUnrollLimit) return fail("bounded repetition too large to unroll");
 
   std::vector<int> exits;
   for (int i = 0; i < optional; ++i) {
     const int split = emit(Instruction::Split, 0, 0);
-    _program->_code[static_cast<std::size_t>(split)].x =
-        static_cast<int>(_program->_code.size());
+    _program->_code[static_cast<std::size_t>(split)].x = static_cast<int>(_program->_code.size());
     exits.push_back(split);
     if (!emitNode(child)) return false;
   }
   for (std::size_t i = 0; i < exits.size(); ++i)
-    _program->_code[static_cast<std::size_t>(exits[i])].y =
-        static_cast<int>(_program->_code.size());
+    _program->_code[static_cast<std::size_t>(exits[i])].y = static_cast<int>(_program->_code.size());
   return true;
 }
 
@@ -210,9 +196,7 @@ bool ProgramCompiler::emitNode(int node) {
         unsigned char bits[32];
         std::memset(bits, 0, sizeof(bits));
         const char lower = fold(text[i]);
-        const char upper = (lower >= 'a' && lower <= 'z')
-                               ? static_cast<char>(lower - 'a' + 'A')
-                               : lower;
+        const char upper = (lower >= 'a' && lower <= 'z') ? static_cast<char>(lower - 'a' + 'A') : lower;
         setBit(bits, static_cast<unsigned char>(lower));
         setBit(bits, static_cast<unsigned char>(upper));
         emit(Instruction::Class, addClass(bits), 0);
@@ -261,19 +245,16 @@ bool ProgramCompiler::emitNode(int node) {
         int split = -1;
         if (!last) {
           split = emit(Instruction::Split, 0, 0);
-          _program->_code[static_cast<std::size_t>(split)].x =
-              static_cast<int>(_program->_code.size());
+          _program->_code[static_cast<std::size_t>(split)].x = static_cast<int>(_program->_code.size());
         }
         if (!emitNode(_grammar->child(n.first + i))) return false;
         if (!last) {
           jumps.push_back(emit(Instruction::Jump, 0, 0));
-          _program->_code[static_cast<std::size_t>(split)].y =
-              static_cast<int>(_program->_code.size());
+          _program->_code[static_cast<std::size_t>(split)].y = static_cast<int>(_program->_code.size());
         }
       }
       for (std::size_t i = 0; i < jumps.size(); ++i)
-        _program->_code[static_cast<std::size_t>(jumps[i])].x =
-            static_cast<int>(_program->_code.size());
+        _program->_code[static_cast<std::size_t>(jumps[i])].x = static_cast<int>(_program->_code.size());
       return true;
     }
 

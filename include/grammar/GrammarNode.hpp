@@ -3,14 +3,7 @@
 
 namespace Abnf {
 struct GrammarNode {
-  enum Kind {
-    Reference,
-    Literal,
-    OctetRange,
-    Sequence,
-    Alternation,
-    Repetition
-  };
+  enum Kind { Reference, Literal, OctetRange, Sequence, Alternation, Repetition };
 
   static const int kUnbounded;
 

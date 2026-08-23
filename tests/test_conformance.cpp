@@ -23,8 +23,11 @@
  *                            replies -- measured at 495 lines / 46 KB from
  *                            a single 507-octet request (91x), all charged
  *                            to the sender's own 64 KiB SENDQ.
- *                            "MODE #c jfsadfsahf" answered 472 ten times,
- *                            repeating f, s and a.
+ *                            "MODE #c +jfsadfsahf" answered 472 ten times,
+ *                            repeating f, s and a. (The case was written
+ *                            unsigned; it carries a sign now that an
+ *                            unsigned mode string applies and answers
+ *                            nothing -- see test_modes.cpp.)
  *   - ModeKeyParamTheft.*  : "-k" consumed the next positional parameter
  *                            unconditionally and never echoed it, so
  *                            "MODE #c -k+o nick" ate `nick` as a key it
@@ -1008,13 +1011,28 @@ TEST_F(ConformanceTest, ModeReplyStormUnknownCharAnsweredOncePerDistinctChar)
 	std::this_thread::sleep_for(std::chrono::milliseconds(200));
 	op.recvAll(200);
 
-	op.sendCmd("MODE #storm jfsadfsahf");
+	/* Signed, because an unsigned mode string is not a mode string at all
+	** and is answered with nothing (see ModeMatrixTest.UnsignedModeStringIsInert
+	** in test_modes.cpp). The storm this test guards against is the dedup of
+	** 472, which is unrelated to the sign — so the sign is supplied and the
+	** ten-characters-six-distinct property is preserved exactly. */
+	op.sendCmd("MODE #storm +jfsadfsahf");
 	std::this_thread::sleep_for(std::chrono::milliseconds(300));
 	std::string got = op.recvAll(400);
 
 	EXPECT_EQ(countOccurrences(got, ERR_UNKNOWNMODE), 6u)
 		<< "expected one 472 per DISTINCT unknown mode char (j f s a d h), got:\n"
 		<< got;
+
+	/* And the unsigned form of the very same string answers nothing, so it
+	** cannot storm either. */
+	op.sendCmd("MODE #storm jfsadfsahf");
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	std::string unsignedGot = op.recvAll(400);
+
+	EXPECT_EQ(countOccurrences(unsignedGot, ERR_UNKNOWNMODE), 0u)
+		<< "an unsigned mode string must be inert, not answered, got:\n"
+		<< unsignedGot;
 
 	op.sendCmd("QUIT");
 }

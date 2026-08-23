@@ -43,7 +43,6 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/Server.cpp \
 			  ../src/Log.cpp \
 			  ../src/extras/FancyLogSink.cpp \
-			  ../src/PlatformBus.cpp \
 			  ../src/AuditLog.cpp \
 			  ../src/Client.cpp \
 			  ../src/Channel.cpp \
@@ -89,7 +88,8 @@ TEST_SRCS	= test_main.cpp \
 			  test_conformance.cpp \
 			  test_libcpp_str.cpp \
 			  test_postman.cpp \
-			  test_modes.cpp
+			  test_modes.cpp \
+			  test_user.cpp
 
 # ── Vendor sources ────────────────────────────────────────────
 GTEST_SRC	= ../vendor/googletest/googletest/src/gtest-all.cc

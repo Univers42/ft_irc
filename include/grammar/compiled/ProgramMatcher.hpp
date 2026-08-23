@@ -16,8 +16,7 @@ class ProgramMatcher : public IMatcher {
   explicit ProgramMatcher(const Grammar& grammar);
   virtual ~ProgramMatcher();
 
-  virtual bool match(int rule, const std::string& line,
-                     MatchResult& out) const;
+  virtual bool match(int rule, const std::string& line, MatchResult& out) const;
 
   virtual const char* strategy() const;
 
@@ -38,8 +37,7 @@ class ProgramMatcher : public IMatcher {
 
   const Program* programFor(int rule) const;
 
-  void addThread(std::vector<Thread>& list, int pc, int slots,
-                 std::size_t pos, std::vector<int>& seen, int generation,
+  void addThread(std::vector<Thread>& list, int pc, int slots, std::size_t pos, std::vector<int>& seen, int generation,
                  const Program& program) const;
 
   int cloneSlots(int slots, int index, int value) const;

@@ -5,16 +5,14 @@
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
 
-static bool alreadyReported(std::vector<std::string>& seen,
-                            const std::string& what) {
+static bool alreadyReported(std::vector<std::string>& seen, const std::string& what) {
   for (size_t i = 0; i < seen.size(); ++i)
     if (seen[i] == what) return true;
   seen.push_back(what);
   return false;
 }
 
-static size_t paramsRequiredFrom(const std::string& modeStr, size_t from,
-                                 bool sign) {
+static size_t paramsRequiredFrom(const std::string& modeStr, size_t from, bool sign) {
   size_t need = 0;
   bool adding = sign;
   for (size_t i = from; i < modeStr.size(); ++i) {
@@ -32,6 +30,68 @@ static size_t paramsRequiredFrom(const std::string& modeStr, size_t from,
   return need;
 }
 
+namespace {
+struct ModeChange {
+  bool adding;
+  char letter;
+  std::string param;
+
+  ModeChange(bool add, char c) : adding(add), letter(c), param() {}
+  ModeChange(bool add, char c, const std::string& p) : adding(add), letter(c), param(p) {}
+};
+}  // namespace
+
+static std::vector<std::string> renderModeLines(const std::string& head, const std::vector<ModeChange>& applied) {
+  std::vector<std::string> lines;
+  const size_t budget = static_cast<size_t>(MAX_MSGLEN) - 2;
+
+  size_t i = 0;
+  while (i < applied.size()) {
+    std::string modes;
+    std::string params;
+    bool haveSign = false;
+    bool sign = true;
+    size_t taken = 0;
+
+    while (i < applied.size()) {
+      const ModeChange& mc = applied[i];
+
+      std::string nextModes = modes;
+      if (!haveSign || mc.adding != sign) nextModes += (mc.adding ? '+' : '-');
+      nextModes += mc.letter;
+
+      std::string nextParams = params;
+      if (!mc.param.empty()) {
+        if (!nextParams.empty()) nextParams += " ";
+        nextParams += mc.param;
+      }
+
+      size_t len = head.size() + nextModes.size();
+      if (!nextParams.empty()) len += 1 + nextParams.size();
+
+      if (taken > 0 && len > budget) break;
+
+      modes = nextModes;
+      params = nextParams;
+      haveSign = true;
+      sign = mc.adding;
+      ++taken;
+      ++i;
+    }
+
+    std::string line = head + modes;
+    if (!params.empty()) line += " " + params;
+    lines.push_back(line);
+  }
+  return lines;
+}
+
+static void broadcastModeChanges(Channel* channel, const std::string& prefix, const std::vector<ModeChange>& applied) {
+  const std::string head = ":" + prefix + " MODE " + channel->getName() + " ";
+  const std::vector<std::string> lines = renderModeLines(head, applied);
+  for (size_t i = 0; i < lines.size(); ++i) channel->broadcastMessage(lines[i], NULL);
+}
+
 static bool isValidChannelKey(const std::string& key) {
   if (key.empty() || key.size() > MAX_KEYLEN) return false;
   for (std::string::size_type i = 0; i < key.size(); ++i) {
@@ -42,15 +102,15 @@ static bool isValidChannelKey(const std::string& key) {
 }
 
 void Server::cmdKick(Client* client, const Message& msg) {
-  if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty()) {
+  if (!msg.matched()) {
     sendReply(client, ERR_NEEDMOREPARAMS, "KICK :Not enough parameters");
     return;
   }
 
-  const std::string& chanName = msg.params[0];
-  const std::string& target = msg.params[1];
+  const std::string& chanName = msg.field("kickchans");
+  const std::string& target = msg.field("kickusers");
   std::string reason = client->getNickname();
-  if (msg.params.size() > 2) reason = msg.params[2];
+  if (msg.has("kickreason")) reason = msg.field("kickreason");
 
   Channel* chan = findChannel(chanName);
   if (!chan) {
@@ -59,26 +119,23 @@ void Server::cmdKick(Client* client, const Message& msg) {
   }
 
   if (!chan->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL,
-              chanName + " :You're not on that channel");
+    sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
     return;
   }
 
   if (!chan->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED,
-              chanName + " :You're not channel operator");
+    sendReply(client, ERR_CHANOPRIVSNEEDED, chanName + " :You're not channel operator");
     return;
   }
 
   Client* targetClient = chan->findMember(target);
   if (!targetClient) {
-    sendReply(client, ERR_USERNOTINCHANNEL,
-              target + " " + chanName + " :They aren't on that channel");
+    sendReply(client, ERR_USERNOTINCHANNEL, target + " " + chanName + " :They aren't on that channel");
     return;
   }
 
-  std::string kickMsg = ":" + client->getPrefix() + " KICK " + chan->getName() +
-                        " " + targetClient->getNickname() + " :" + reason;
+  std::string kickMsg =
+      ":" + client->getPrefix() + " KICK " + chan->getName() + " " + targetClient->getNickname() + " :" + reason;
   chan->broadcastMessage(kickMsg, NULL);
   chan->removeMember(targetClient);
 
@@ -86,13 +143,13 @@ void Server::cmdKick(Client* client, const Message& msg) {
 }
 
 void Server::cmdInvite(Client* client, const Message& msg) {
-  if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty()) {
+  if (!msg.matched()) {
     sendReply(client, ERR_NEEDMOREPARAMS, "INVITE :Not enough parameters");
     return;
   }
 
-  const std::string& target = msg.params[0];
-  const std::string& chanName = msg.params[1];
+  const std::string& target = msg.field("invnick");
+  const std::string& chanName = msg.field("invchan");
 
   Channel* chan = findChannel(chanName);
   if (!chan) {
@@ -101,14 +158,12 @@ void Server::cmdInvite(Client* client, const Message& msg) {
   }
 
   if (!chan->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL,
-              chanName + " :You're not on that channel");
+    sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
     return;
   }
 
   if (chan->isInviteOnly() && !chan->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED,
-              chanName + " :You're not channel operator");
+    sendReply(client, ERR_CHANOPRIVSNEEDED, chanName + " :You're not channel operator");
     return;
   }
 
@@ -119,8 +174,7 @@ void Server::cmdInvite(Client* client, const Message& msg) {
   }
 
   if (chan->isMember(targetClient)) {
-    sendReply(client, ERR_USERONCHANNEL,
-              target + " " + chanName + " :is already on channel");
+    sendReply(client, ERR_USERONCHANNEL, target + " " + chanName + " :is already on channel");
     return;
   }
 
@@ -128,8 +182,7 @@ void Server::cmdInvite(Client* client, const Message& msg) {
 
   sendReply(client, RPL_INVITING, target + " " + chanName);
 
-  targetClient->queueMessage(":" + client->getPrefix() + " INVITE " + target +
-                             " :" + chanName);
+  targetClient->queueMessage(":" + client->getPrefix() + " INVITE " + target + " :" + chanName);
 }
 
 void Server::cmdTopic(Client* client, const Message& msg) {
@@ -147,8 +200,7 @@ void Server::cmdTopic(Client* client, const Message& msg) {
   }
 
   if (!chan->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL,
-              chanName + " :You're not on that channel");
+    sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
     return;
   }
 
@@ -158,25 +210,21 @@ void Server::cmdTopic(Client* client, const Message& msg) {
     } else {
       sendReply(client, RPL_TOPIC, chanName + " :" + chan->getTopic());
       sendReply(client, RPL_TOPICWHOTIME,
-                chanName + " " + chan->getTopicSetter() + " " +
-                    libcpp::str::to_string(chan->getTopicTime()));
+                chanName + " " + chan->getTopicSetter() + " " + libcpp::str::to_string(chan->getTopicTime()));
     }
     return;
   }
 
   if (chan->isTopicRestricted() && !chan->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED,
-              chanName + " :You're not channel operator");
+    sendReply(client, ERR_CHANOPRIVSNEEDED, chanName + " :You're not channel operator");
     return;
   }
 
-  std::string newTopic = msg.params[1];
+  std::string newTopic = msg.matched() ? msg.field("topictext") : msg.params[1];
   if (newTopic.size() > MAX_TOPICLEN) newTopic.erase(MAX_TOPICLEN);
   chan->setTopic(newTopic, client->getNickname());
 
-  chan->broadcastMessage(
-      ":" + client->getPrefix() + " TOPIC " + chan->getName() + " :" + newTopic,
-      NULL);
+  chan->broadcastMessage(":" + client->getPrefix() + " TOPIC " + chan->getName() + " :" + newTopic, NULL);
 }
 
 void Server::cmdMode(Client* client, const Message& msg) {
@@ -195,8 +243,7 @@ void Server::cmdMode(Client* client, const Message& msg) {
     }
     if (msg.params.size() == 1) {
       if (!chan->isMember(client)) {
-        sendReply(client, ERR_NOTONCHANNEL,
-                  target + " :You're not on that channel");
+        sendReply(client, ERR_NOTONCHANNEL, target + " :You're not on that channel");
         return;
       }
       std::string modes = chan->getModeString();
@@ -205,8 +252,7 @@ void Server::cmdMode(Client* client, const Message& msg) {
       if (!params.empty()) reply += " " + params;
       sendReply(client, RPL_CHANNELMODEIS, reply);
 
-      sendReply(client, RPL_CREATIONTIME,
-                target + " " + libcpp::str::to_string(chan->getCreationTime()));
+      sendReply(client, RPL_CREATIONTIME, target + " " + libcpp::str::to_string(chan->getCreationTime()));
       return;
     }
     handleChannelMode(client, chan, msg);
@@ -224,33 +270,69 @@ void Server::handleUserMode(Client* client, const Message& msg) {
   }
 
   if (msg.params.size() == 1) {
-    sendReply(client, RPL_UMODEIS, "+");
-    return;
-  }
-}
-
-void Server::handleChannelMode(Client* client, Channel* channel,
-                               const Message& msg) {
-  if (!channel->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL,
-              channel->getName() + " :You're not on that channel");
-    return;
-  }
-
-  if (!channel->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED,
-              channel->getName() + " :You're not channel operator");
+    sendReply(client, RPL_UMODEIS, client->getUserModeString());
     return;
   }
 
   const std::string& modeStr = msg.params[1];
+
+  if (modeStr.empty() || (modeStr[0] != '+' && modeStr[0] != '-')) return;
+
+  bool adding = true;
+  std::vector<ModeChange> applied;
+  std::vector<std::string> reported;
+
+  for (size_t i = 0; i < modeStr.size(); ++i) {
+    char c = modeStr[i];
+
+    if (c == '+') {
+      adding = true;
+      continue;
+    }
+    if (c == '-') {
+      adding = false;
+      continue;
+    }
+
+    if (c == 'i') {
+      client->setInvisible(adding);
+      applied.push_back(ModeChange(adding, 'i'));
+    } else if (c == 'w') {
+      client->setWallops(adding);
+      applied.push_back(ModeChange(adding, 'w'));
+    } else {
+      std::string s(1, c);
+      if (!alreadyReported(reported, "501:" + s))
+        sendReply(client, ERR_UMODEUNKNOWNFLAG, s + " :is unknown mode char to me");
+    }
+  }
+
+  if (!applied.empty()) {
+    const std::string head = ":" + client->getPrefix() + " MODE " + client->getNickname() + " ";
+    const std::vector<std::string> lines = renderModeLines(head, applied);
+    for (size_t i = 0; i < lines.size(); ++i) client->queueMessage(lines[i]);
+  }
+}
+
+void Server::handleChannelMode(Client* client, Channel* channel, const Message& msg) {
+  if (!channel->isMember(client)) {
+    sendReply(client, ERR_NOTONCHANNEL, channel->getName() + " :You're not on that channel");
+    return;
+  }
+
+  if (!channel->isOperator(client)) {
+    sendReply(client, ERR_CHANOPRIVSNEEDED, channel->getName() + " :You're not channel operator");
+    return;
+  }
+
+  const std::string& modeStr = msg.params[1];
+
+  if (modeStr.empty() || (modeStr[0] != '+' && modeStr[0] != '-')) return;
+
   bool adding = true;
   size_t paramIdx = 2;
 
-  std::string appliedModes;
-  std::string appliedParams;
-  bool currentSign = true;
-
+  std::vector<ModeChange> applied;
   std::vector<std::string> reported;
 
   for (size_t i = 0; i < modeStr.size(); ++i) {
@@ -268,96 +350,60 @@ void Server::handleChannelMode(Client* client, Channel* channel,
     switch (c) {
       case 'i': {
         channel->setInviteOnly(adding);
-        if (adding != currentSign || appliedModes.empty()) {
-          appliedModes += (adding ? "+" : "-");
-          currentSign = adding;
-        }
-        appliedModes += "i";
+        applied.push_back(ModeChange(adding, 'i'));
         break;
       }
       case 't': {
         channel->setTopicRestricted(adding);
-        if (adding != currentSign || appliedModes.empty()) {
-          appliedModes += (adding ? "+" : "-");
-          currentSign = adding;
-        }
-        appliedModes += "t";
+        applied.push_back(ModeChange(adding, 't'));
         break;
       }
       case 'k': {
         if (adding) {
           if (paramIdx >= msg.params.size()) {
-            if (!alreadyReported(reported, "461"))
-              sendReply(client, ERR_NEEDMOREPARAMS,
-                        "MODE :Not enough parameters");
+            if (!alreadyReported(reported, "461")) sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
             continue;
           }
           std::string key = msg.params[paramIdx++];
           if (!isValidChannelKey(key)) {
             if (!alreadyReported(reported, "525:" + key))
-              sendReply(client, ERR_INVALIDKEY,
-                        channel->getName() + " :Key is not well-formed");
+              sendReply(client, ERR_INVALIDKEY, channel->getName() + " :Key is not well-formed");
             continue;
           }
           channel->setKey(key);
-          if (adding != currentSign || appliedModes.empty()) {
-            appliedModes += "+";
-            currentSign = true;
-          }
-          appliedModes += "k";
-          if (!appliedParams.empty()) appliedParams += " ";
-          appliedParams += key;
+          applied.push_back(ModeChange(true, 'k', key));
         } else {
           channel->removeKey();
-          if (adding != currentSign || appliedModes.empty()) {
-            appliedModes += "-";
-            currentSign = false;
-          }
-          appliedModes += "k";
 
+          std::string oldKey;
           size_t stillNeeded = paramsRequiredFrom(modeStr, i + 1, adding);
-          if (paramIdx < msg.params.size() &&
-              msg.params.size() - paramIdx > stillNeeded) {
-            std::string oldKey = msg.params[paramIdx++];
-            if (!appliedParams.empty()) appliedParams += " ";
-            appliedParams += oldKey;
-          }
+          if (paramIdx < msg.params.size() && msg.params.size() - paramIdx > stillNeeded)
+            oldKey = msg.params[paramIdx++];
+
+          applied.push_back(ModeChange(false, 'k', oldKey));
         }
         break;
       }
       case 'o': {
         if (paramIdx >= msg.params.size()) {
-          if (!alreadyReported(reported, "461"))
-            sendReply(client, ERR_NEEDMOREPARAMS,
-                      "MODE :Not enough parameters");
+          if (!alreadyReported(reported, "461")) sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
           continue;
         }
         std::string nick = msg.params[paramIdx++];
         Client* target = channel->findMember(nick);
         if (!target) {
           if (!alreadyReported(reported, "441:" + ircToLower(nick)))
-            sendReply(client, ERR_USERNOTINCHANNEL,
-                      nick + " " + channel->getName() +
-                          " :They aren't on that channel");
+            sendReply(client, ERR_USERNOTINCHANNEL, nick + " " + channel->getName() + " :They aren't on that channel");
           continue;
         }
         channel->setOperator(target, adding);
-        if (adding != currentSign || appliedModes.empty()) {
-          appliedModes += (adding ? "+" : "-");
-          currentSign = adding;
-        }
-        appliedModes += "o";
-        if (!appliedParams.empty()) appliedParams += " ";
-
-        appliedParams += target->getNickname();
+        applied.push_back(ModeChange(adding, 'o', target->getNickname()));
         break;
       }
       case 'l': {
         if (adding) {
           if (paramIdx >= msg.params.size()) {
-            if (!alreadyReported(reported, "461"))
-              sendReply(client, ERR_NEEDMOREPARAMS,
-                        "MODE :Not enough parameters");
+            if (!alreadyReported(reported, "461")) sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
             continue;
           }
           std::string limitStr = msg.params[paramIdx++];
@@ -366,43 +412,25 @@ void Server::handleChannelMode(Client* client, Channel* channel,
           if (!libcpp::str::parse_long(limitStr, 1, MAX_USERLIMIT, limit)) {
             if (!alreadyReported(reported, "696:" + limitStr))
               sendReply(client, ERR_INVALIDMODEPARAM,
-                        channel->getName() + " l " + limitStr +
-                            " :Invalid channel limit");
+                        channel->getName() + " l " + limitStr + " :Invalid channel limit");
             continue;
           }
           channel->setUserLimit(static_cast<size_t>(limit));
-          if (adding != currentSign || appliedModes.empty()) {
-            appliedModes += "+";
-            currentSign = true;
-          }
-          appliedModes += "l";
-          if (!appliedParams.empty()) appliedParams += " ";
-
-          appliedParams += libcpp::str::to_string(limit);
+          applied.push_back(ModeChange(true, 'l', libcpp::str::to_string(limit)));
         } else {
           channel->removeUserLimit();
-          if (adding != currentSign || appliedModes.empty()) {
-            appliedModes += "-";
-            currentSign = false;
-          }
-          appliedModes += "l";
+          applied.push_back(ModeChange(false, 'l'));
         }
         break;
       }
       default: {
         std::string s(1, c);
         if (!alreadyReported(reported, "472:" + s))
-          sendReply(client, ERR_UNKNOWNMODE,
-                    s + " :is unknown mode char to me");
+          sendReply(client, ERR_UNKNOWNMODE, s + " :is unknown mode char to me");
         break;
       }
     }
   }
 
-  if (!appliedModes.empty()) {
-    std::string modeMsg = ":" + client->getPrefix() + " MODE " +
-                          channel->getName() + " " + appliedModes;
-    if (!appliedParams.empty()) modeMsg += " " + appliedParams;
-    channel->broadcastMessage(modeMsg, NULL);
-  }
+  if (!applied.empty()) broadcastModeChanges(channel, client->getPrefix(), applied);
 }

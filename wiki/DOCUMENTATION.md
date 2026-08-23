@@ -130,14 +130,15 @@ ft_irc/
 | `mandatory` | Strictly the subject's mandatory sources (pure RFC kernel)        |
 | `bonus`     | Mandatory + subject bonus (Bot, server-mediated FILE transfer)    |
 | `all`       | **Default.** Bonus + optional platform extras (PlatformBus, AuditLog, fancy console) |
-| `clean`     | Remove `obj/` directory (all tiers)                               |
-| `fclean`    | Remove `obj/` directory and `ircserv` binary                      |
+| `clean`     | Remove `build/obj/` (all tiers, test objects included)            |
+| `fclean`    | Remove `build/` and the `./ircserv` symlink                       |
 | `re`        | `fclean` + `all` (full rebuild)                                   |
 | `test`      | Build & run the Google Test suite                                 |
 
 The tiers share the kernel sources and differ **only at link time**:
-per-tier object dirs (`obj/mandatory`, `obj/bonus`, `obj/full`) prevent any
-stale-object mixing, a marker file (`obj/.tier_*`) forces a relink when
+per-tier object dirs (`build/obj/mandatory`, `build/obj/bonus`,
+`build/obj/full`) prevent any stale-object mixing, a marker file
+(`build/obj/.tier_*`) forces a relink when
 switching tiers while a same-tier repeat stays a no-op, and exactly one
 `src/tiers/tier_<name>.cpp` (defining `registerExtensions(Server&)`) is
 linked per tier. There is no `#ifdef` anywhere in the kernel.

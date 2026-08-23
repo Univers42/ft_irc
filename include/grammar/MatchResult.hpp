@@ -28,8 +28,7 @@ class MatchResult {
 
   void adopt(std::vector<std::vector<std::string> >& values);
 
-  void adoptSequence(std::vector<std::string>& sequence,
-                     std::vector<int>& owners);
+  void adoptSequence(std::vector<std::string>& sequence, std::vector<int>& owners);
 
   std::size_t sequenceSize() const;
   const std::string& sequenceAt(std::size_t index) const;

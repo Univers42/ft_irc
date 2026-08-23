@@ -20,28 +20,23 @@ libcpp::Srgb noteCol() { return libcpp::Srgb(150, 130, 200); }
 
 const char* kReset = "\033[0m";
 
-std::string paint(const libcpp::Srgb& c, const std::string& text) {
-  return c.to_ansi_fg() + text + kReset;
-}
+std::string paint(const libcpp::Srgb& c, const std::string& text) { return c.to_ansi_fg() + text + kReset; }
 
 std::string stamp() {
   std::time_t now = std::time(NULL);
   std::tm* lt = std::localtime(&now);
   char buf[16];
-  if (!lt || std::strftime(buf, sizeof(buf), "%H:%M:%S", lt) == 0)
-    return "--:--:--";
+  if (!lt || std::strftime(buf, sizeof(buf), "%H:%M:%S", lt) == 0) return "--:--:--";
   return std::string(buf);
 }
 
 bool isErrorNumeric(const std::string& note) {
   if (note.size() < 3) return false;
   char c = note[0];
-  return (c == '4' || c == '5' || c == '6') &&
-         note[1] >= '0' && note[1] <= '9' && note[2] >= '0' && note[2] <= '9';
+  return (c == '4' || c == '5' || c == '6') && note[1] >= '0' && note[1] <= '9' && note[2] >= '0' && note[2] <= '9';
 }
 
-void splitTrailing(const std::string& line, std::string& head,
-                   std::string& trail) {
+void splitTrailing(const std::string& line, std::string& head, std::string& trail) {
   std::string::size_type from = 0;
   if (!line.empty() && line[0] == ':') {
     std::string::size_type sp = line.find(' ');
@@ -98,8 +93,8 @@ void FancyLogSink::write(char kind, const std::string& msg) {
   w.flush();
 }
 
-void FancyLogSink::protocol(char dir, int fd, const std::string& peer,
-                            const std::string& line, const std::string& note) {
+void FancyLogSink::protocol(char dir, int fd, const std::string& peer, const std::string& line,
+                            const std::string& note) {
   bool inbound = (dir == '<');
   libcpp::Srgb arrowCol = inbound ? dirIn() : dirOut();
   std::string arrow = inbound ? "<<" : ">>";
@@ -113,13 +108,11 @@ void FancyLogSink::protocol(char dir, int fd, const std::string& peer,
   std::string out;
   out += paint(dimGrey(), stamp());
   out += "  ";
-  out += paint(dimGrey(), "fd " + libcpp::str::pad_left(
-                              libcpp::str::to_string(fd), 3, ' '));
+  out += paint(dimGrey(), "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' '));
   out += "  ";
   out += paint(arrowCol, arrow);
   out += "  ";
-  out += paint(peerCol(),
-               libcpp::str::pad_right(peer.empty() ? "*" : peer, 9, ' '));
+  out += paint(peerCol(), libcpp::str::pad_right(peer.empty() ? "*" : peer, 9, ' '));
   out += "  ";
   out += paint(bodyCol, head);
   if (!trail.empty()) out += paint(dimGrey(), trail);

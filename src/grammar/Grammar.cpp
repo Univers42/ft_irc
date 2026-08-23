@@ -13,8 +13,7 @@ char asciiLower(char c) {
 
 std::string lowered(const std::string& s) {
   std::string out(s);
-  for (std::string::size_type i = 0; i < out.size(); ++i)
-    out[i] = asciiLower(out[i]);
+  for (std::string::size_type i = 0; i < out.size(); ++i) out[i] = asciiLower(out[i]);
   return out;
 }
 
@@ -35,34 +34,25 @@ int Grammar::ruleIndex(const std::string& name) const {
 }
 
 int Grammar::ruleRoot(int rule) const {
-  if (rule < 0 || static_cast<std::size_t>(rule) >= _ruleRoots.size())
-    return kNoRule;
+  if (rule < 0 || static_cast<std::size_t>(rule) >= _ruleRoots.size()) return kNoRule;
   return _ruleRoots[static_cast<std::size_t>(rule)];
 }
 
 const std::string& Grammar::ruleName(int rule) const {
-  if (rule < 0 || static_cast<std::size_t>(rule) >= _ruleNames.size())
-    return emptyString();
+  if (rule < 0 || static_cast<std::size_t>(rule) >= _ruleNames.size()) return emptyString();
   return _ruleNames[static_cast<std::size_t>(rule)];
 }
 
 std::size_t Grammar::ruleCount() const { return _ruleNames.size(); }
 
-const GrammarNode& Grammar::node(int index) const {
-  return _nodes[static_cast<std::size_t>(index)];
-}
+const GrammarNode& Grammar::node(int index) const { return _nodes[static_cast<std::size_t>(index)]; }
 
-int Grammar::child(int index) const {
-  return _children[static_cast<std::size_t>(index)];
-}
+int Grammar::child(int index) const { return _children[static_cast<std::size_t>(index)]; }
 
-const std::string& Grammar::literal(int index) const {
-  return _literals[static_cast<std::size_t>(index)];
-}
+const std::string& Grammar::literal(int index) const { return _literals[static_cast<std::size_t>(index)]; }
 
 const std::string& Grammar::captureName(int index) const {
-  if (index < 0 || static_cast<std::size_t>(index) >= _captureNames.size())
-    return emptyString();
+  if (index < 0 || static_cast<std::size_t>(index) >= _captureNames.size()) return emptyString();
   return _captureNames[static_cast<std::size_t>(index)];
 }
 

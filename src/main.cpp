@@ -51,7 +51,6 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  Log::setSink(
-      NULL);
+  Log::setSink(NULL);
   return 0;
 }

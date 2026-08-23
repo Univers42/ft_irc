@@ -96,4 +96,97 @@ else
 fi
 irc_close frank
 
+# --- USER: the four-parameter form -----------------------------------------
+# signatures.md: USER <user> <mode> <unused> :<realname>. Exactly four
+# parameters, the fourth of which must be the TRAILING one -- the colon is
+# part of the grammar. Everything else is 461.
+_u=0
+try_user() {
+    # try_user <user-line-tail> <expect: ok|461> <description>
+    _u=$((_u + 1))
+    _n="uf$_u"
+    irc_connect "$_n"
+    irc_send "$_n" "PASS $IRC_PASSWORD"
+    irc_send "$_n" "NICK $_n"
+    sleep 0.2
+    irc_clear "$_n"
+    irc_send "$_n" "USER $1"
+    sleep 0.6
+    if [ "$2" = "ok" ]; then
+        expect_ok "$_n" "001|Welcome" 1.5 "$3"
+    else
+        expect_ok "$_n" "461" 1.5 "$3"
+    fi
+    irc_close "$_n"
+}
+
+try_user "u 0 * :Real Name"  ok  "the canonical four-parameter form registers"
+try_user "u 0 * :"           ok  "an empty trailing realname is still a trailing one"
+try_user "u 0 * Real"        461 "four parameters but no trailing colon is refused"
+try_user "u 0 * Real Name"   461 "...and a multi-word realname without the colon too"
+try_user "u 0 * x :y"        461 "five parameters: the trailing is not the realname slot"
+try_user "u 0 *"             461 "three parameters: the realname is missing"
+try_user "u 0"               461 "two parameters"
+try_user "u"                 461 "one parameter"
+
+# --- USER: <user> follows the RFC 2812 'user' production -------------------
+# 'user' excludes '@' (0x40). It has to: the prefix is nick!user@host, so an
+# '@' inside the username makes the host boundary ambiguous.
+try_user "a:b 0 * :R"        ok  "':' is inside the user production and allowed"
+try_user "~alice 0 * :R"     ok  "'~' likewise"
+try_user "a@b 0 * :R"        461 "'@' is excluded -- it would fork the prefix"
+try_user "@lead 0 * :R"      461 "...at the start too"
+try_user "trail@ 0 * :R"     461 "...and at the end"
+
+# --- USER: <mode> is a bitmask ---------------------------------------------
+# RFC 2812 s3.1.3: bit 2 (value 4) sets user mode w, bit 3 (value 8) sets i.
+# A non-numeric mode carries no bits and is ignored, never refused.
+check_umode() {
+    # check_umode <mode-value> <expected 221 modes> <description>
+    _u=$((_u + 1))
+    _n="um$_u"
+    irc_connect "$_n"
+    irc_register "$_n" "$_n" >/dev/null
+    irc_clear "$_n"
+    irc_send "$_n" "MODE $_n"
+    expect_ok "$_n" "221 $_n \\$2" 1.5 "$3"
+    irc_close "$_n"
+}
+
+_u=$((_u + 1)); _n="bm$_u"
+irc_connect "$_n"
+irc_send "$_n" "PASS $IRC_PASSWORD"; irc_send "$_n" "NICK $_n"
+sleep 0.2; irc_send "$_n" "USER u 12 * :R"; sleep 0.6
+irc_clear "$_n"; irc_send "$_n" "MODE $_n"
+expect_ok "$_n" "221 $_n \+iw" 1.5 "USER <mode>=12 sets both +i and +w"
+irc_close "$_n"
+
+_u=$((_u + 1)); _n="bm$_u"
+irc_connect "$_n"
+irc_send "$_n" "PASS $IRC_PASSWORD"; irc_send "$_n" "NICK $_n"
+sleep 0.2; irc_send "$_n" "USER u 8 * :R"; sleep 0.6
+irc_clear "$_n"; irc_send "$_n" "MODE $_n"
+expect_ok "$_n" "221 $_n \+i" 1.5 "USER <mode>=8 sets +i only"
+irc_close "$_n"
+
+_u=$((_u + 1)); _n="bm$_u"
+irc_connect "$_n"
+irc_send "$_n" "PASS $IRC_PASSWORD"; irc_send "$_n" "NICK $_n"
+sleep 0.2; irc_send "$_n" "USER u abc * :R"; sleep 0.6
+irc_clear "$_n"; irc_send "$_n" "MODE $_n"
+expect_ok "$_n" "221 $_n \+" 1.5 "a non-numeric <mode> is ignored, not refused"
+expect_none "$_n" "221 $_n \+[iw]" 0.5 "...and sets no user mode bits"
+irc_close "$_n"
+
+# --- the prefix keeps exactly one '@' --------------------------------------
+_u=$((_u + 1)); _n="pfx$_u"
+irc_connect "$_n"
+irc_register "$_n" "$_n" >/dev/null
+if [ "$(irc_buf "$_n" | grep -c '001.*@.*@')" -eq 0 ]; then
+    t_ok "the welcome prefix carries exactly one '@'"
+else
+    t_fail "the welcome prefix has more than one '@' -- the host boundary is ambiguous"
+fi
+irc_close "$_n"
+
 report_summary

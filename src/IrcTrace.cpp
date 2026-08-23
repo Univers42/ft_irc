@@ -16,55 +16,55 @@ struct NumericEntry {
   const char* name;
 };
 
-const NumericEntry kNumerics[] = {
-    {RPL_WELCOME, "RPL_WELCOME"},
-    {RPL_YOURHOST, "RPL_YOURHOST"},
-    {RPL_CREATED, "RPL_CREATED"},
-    {RPL_MYINFO, "RPL_MYINFO"},
-    {RPL_ISUPPORT, "RPL_ISUPPORT"},
-    {RPL_UMODEIS, "RPL_UMODEIS"},
-    {RPL_USERHOST, "RPL_USERHOST"},
-    {RPL_WHOISUSER, "RPL_WHOISUSER"},
-    {RPL_WHOISSERVER, "RPL_WHOISSERVER"},
-    {RPL_ENDOFWHOIS, "RPL_ENDOFWHOIS"},
-    {RPL_WHOISCHANNELS, "RPL_WHOISCHANNELS"},
-    {RPL_CHANNELMODEIS, "RPL_CHANNELMODEIS"},
-    {RPL_CREATIONTIME, "RPL_CREATIONTIME"},
-    {RPL_NOTOPIC, "RPL_NOTOPIC"},
-    {RPL_TOPIC, "RPL_TOPIC"},
-    {RPL_TOPICWHOTIME, "RPL_TOPICWHOTIME"},
-    {RPL_INVITING, "RPL_INVITING"},
-    {RPL_WHOREPLY, "RPL_WHOREPLY"},
-    {RPL_ENDOFWHO, "RPL_ENDOFWHO"},
-    {RPL_NAMREPLY, "RPL_NAMREPLY"},
-    {RPL_ENDOFNAMES, "RPL_ENDOFNAMES"},
-    {ERR_NOSUCHNICK, "ERR_NOSUCHNICK"},
-    {ERR_NOSUCHCHANNEL, "ERR_NOSUCHCHANNEL"},
-    {ERR_CANNOTSENDTOCHAN, "ERR_CANNOTSENDTOCHAN"},
-    {ERR_NORECIPIENT, "ERR_NORECIPIENT"},
-    {ERR_NOTEXTTOSEND, "ERR_NOTEXTTOSEND"},
-    {ERR_UNKNOWNCOMMAND, "ERR_UNKNOWNCOMMAND"},
-    {ERR_NOMOTD, "ERR_NOMOTD"},
-    {ERR_NONICKNAMEGIVEN, "ERR_NONICKNAMEGIVEN"},
-    {ERR_ERRONEUSNICKNAME, "ERR_ERRONEUSNICKNAME"},
-    {ERR_NICKNAMEINUSE, "ERR_NICKNAMEINUSE"},
-    {ERR_USERNOTINCHANNEL, "ERR_USERNOTINCHANNEL"},
-    {ERR_NOTONCHANNEL, "ERR_NOTONCHANNEL"},
-    {ERR_USERONCHANNEL, "ERR_USERONCHANNEL"},
-    {ERR_NOTREGISTERED, "ERR_NOTREGISTERED"},
-    {ERR_NEEDMOREPARAMS, "ERR_NEEDMOREPARAMS"},
-    {ERR_ALREADYREGISTRED, "ERR_ALREADYREGISTRED"},
-    {ERR_PASSWDMISMATCH, "ERR_PASSWDMISMATCH"},
-    {ERR_CHANNELISFULL, "ERR_CHANNELISFULL"},
-    {ERR_UNKNOWNMODE, "ERR_UNKNOWNMODE"},
-    {ERR_INVITEONLYCHAN, "ERR_INVITEONLYCHAN"},
-    {ERR_BADCHANNELKEY, "ERR_BADCHANNELKEY"},
-    {ERR_BADCHANMASK, "ERR_BADCHANMASK"},
-    {ERR_CHANOPRIVSNEEDED, "ERR_CHANOPRIVSNEEDED"},
-    {ERR_USERSDONTMATCH, "ERR_USERSDONTMATCH"},
-    {ERR_INVALIDKEY, "ERR_INVALIDKEY"},
-    {ERR_INVALIDMODEPARAM, "ERR_INVALIDMODEPARAM"},
-    {0, 0}};
+const NumericEntry kNumerics[] = {{RPL_WELCOME, "RPL_WELCOME"},
+                                  {RPL_YOURHOST, "RPL_YOURHOST"},
+                                  {RPL_CREATED, "RPL_CREATED"},
+                                  {RPL_MYINFO, "RPL_MYINFO"},
+                                  {RPL_ISUPPORT, "RPL_ISUPPORT"},
+                                  {RPL_UMODEIS, "RPL_UMODEIS"},
+                                  {RPL_USERHOST, "RPL_USERHOST"},
+                                  {RPL_WHOISUSER, "RPL_WHOISUSER"},
+                                  {RPL_WHOISSERVER, "RPL_WHOISSERVER"},
+                                  {RPL_ENDOFWHOIS, "RPL_ENDOFWHOIS"},
+                                  {RPL_WHOISCHANNELS, "RPL_WHOISCHANNELS"},
+                                  {RPL_CHANNELMODEIS, "RPL_CHANNELMODEIS"},
+                                  {RPL_CREATIONTIME, "RPL_CREATIONTIME"},
+                                  {RPL_NOTOPIC, "RPL_NOTOPIC"},
+                                  {RPL_TOPIC, "RPL_TOPIC"},
+                                  {RPL_TOPICWHOTIME, "RPL_TOPICWHOTIME"},
+                                  {RPL_INVITING, "RPL_INVITING"},
+                                  {RPL_WHOREPLY, "RPL_WHOREPLY"},
+                                  {RPL_ENDOFWHO, "RPL_ENDOFWHO"},
+                                  {RPL_NAMREPLY, "RPL_NAMREPLY"},
+                                  {RPL_ENDOFNAMES, "RPL_ENDOFNAMES"},
+                                  {ERR_NOSUCHNICK, "ERR_NOSUCHNICK"},
+                                  {ERR_NOSUCHCHANNEL, "ERR_NOSUCHCHANNEL"},
+                                  {ERR_CANNOTSENDTOCHAN, "ERR_CANNOTSENDTOCHAN"},
+                                  {ERR_NORECIPIENT, "ERR_NORECIPIENT"},
+                                  {ERR_NOTEXTTOSEND, "ERR_NOTEXTTOSEND"},
+                                  {ERR_UNKNOWNCOMMAND, "ERR_UNKNOWNCOMMAND"},
+                                  {ERR_NOMOTD, "ERR_NOMOTD"},
+                                  {ERR_NONICKNAMEGIVEN, "ERR_NONICKNAMEGIVEN"},
+                                  {ERR_ERRONEUSNICKNAME, "ERR_ERRONEUSNICKNAME"},
+                                  {ERR_NICKNAMEINUSE, "ERR_NICKNAMEINUSE"},
+                                  {ERR_USERNOTINCHANNEL, "ERR_USERNOTINCHANNEL"},
+                                  {ERR_NOTONCHANNEL, "ERR_NOTONCHANNEL"},
+                                  {ERR_USERONCHANNEL, "ERR_USERONCHANNEL"},
+                                  {ERR_NOTREGISTERED, "ERR_NOTREGISTERED"},
+                                  {ERR_NEEDMOREPARAMS, "ERR_NEEDMOREPARAMS"},
+                                  {ERR_ALREADYREGISTRED, "ERR_ALREADYREGISTRED"},
+                                  {ERR_PASSWDMISMATCH, "ERR_PASSWDMISMATCH"},
+                                  {ERR_CHANNELISFULL, "ERR_CHANNELISFULL"},
+                                  {ERR_UNKNOWNMODE, "ERR_UNKNOWNMODE"},
+                                  {ERR_INVITEONLYCHAN, "ERR_INVITEONLYCHAN"},
+                                  {ERR_BADCHANNELKEY, "ERR_BADCHANNELKEY"},
+                                  {ERR_BADCHANMASK, "ERR_BADCHANMASK"},
+                                  {ERR_CHANOPRIVSNEEDED, "ERR_CHANOPRIVSNEEDED"},
+                                  {ERR_UMODEUNKNOWNFLAG, "ERR_UMODEUNKNOWNFLAG"},
+                                  {ERR_USERSDONTMATCH, "ERR_USERSDONTMATCH"},
+                                  {ERR_INVALIDKEY, "ERR_INVALIDKEY"},
+                                  {ERR_INVALIDMODEPARAM, "ERR_INVALIDMODEPARAM"},
+                                  {0, 0}};
 
 struct Stats {
   unsigned long linesIn;
@@ -112,9 +112,7 @@ std::string redactParam(const std::string& line, size_t idx) {
 
   while (pos <= line.size()) {
     std::string::size_type sp = line.find(' ', pos);
-    std::string tok = (sp == std::string::npos)
-                          ? line.substr(pos)
-                          : line.substr(pos, sp - pos);
+    std::string tok = (sp == std::string::npos) ? line.substr(pos) : line.substr(pos, sp - pos);
 
     if (!tok.empty()) {
       if (!sawPrefix && !sawCommand && tok[0] == ':') {
@@ -216,9 +214,7 @@ std::string redact(const std::string& line) {
   return line;
 }
 
-std::string fdField(int fd) {
-  return "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' ');
-}
+std::string fdField(int fd) { return "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' '); }
 
 std::string annotate(const std::string& line) {
   std::string cmd = commandOf(line);
@@ -237,8 +233,7 @@ std::string IrcTrace::numericName(const std::string& numeric) {
   return "";
 }
 
-void IrcTrace::inbound(int fd, const std::string& peer,
-                       const std::string& line) {
+void IrcTrace::inbound(int fd, const std::string& peer, const std::string& line) {
   Stats& s = sessions()[fd];
   ++s.linesIn;
   s.bytesIn += line.size() + 2;
@@ -249,8 +244,7 @@ void IrcTrace::inbound(int fd, const std::string& peer,
   Log::protocol('<', fd, peer, redact(line), annotate(line));
 }
 
-void IrcTrace::outbound(int fd, const std::string& peer,
-                        const std::string& line) {
+void IrcTrace::outbound(int fd, const std::string& peer, const std::string& line) {
   Stats& s = sessions()[fd];
   ++s.linesOut;
   s.bytesOut += line.size() + 2;
@@ -273,18 +267,14 @@ void IrcTrace::sessionRegistered(int fd, const std::string& prefix) {
   Log::debug(fdField(fd) + "  ==  registered as " + prefix);
 }
 
-void IrcTrace::sessionClose(int fd, const std::string& peer,
-                            const std::string& reason) {
+void IrcTrace::sessionClose(int fd, const std::string& peer, const std::string& reason) {
   std::map<int, Stats>::iterator it = sessions().find(fd);
   if (it != sessions().end()) {
     if (Log::enabled(Log::LOG_DEBUG)) {
       const Stats& s = it->second;
-      Log::debug(fdField(fd) + "  --  " + (peer.empty() ? "*" : peer) +
-                 " left (" + reason + ") — " +
-                 libcpp::str::to_string(s.linesIn) + " in / " +
-                 libcpp::str::to_string(s.linesOut) + " out, " +
-                 libcpp::str::to_string(s.bytesIn) + " B / " +
-                 libcpp::str::to_string(s.bytesOut) + " B");
+      Log::debug(fdField(fd) + "  --  " + (peer.empty() ? "*" : peer) + " left (" + reason + ") — " +
+                 libcpp::str::to_string(s.linesIn) + " in / " + libcpp::str::to_string(s.linesOut) + " out, " +
+                 libcpp::str::to_string(s.bytesIn) + " B / " + libcpp::str::to_string(s.bytesOut) + " B");
     }
 
     sessions().erase(it);
@@ -293,9 +283,7 @@ void IrcTrace::sessionClose(int fd, const std::string& peer,
 
 std::string IrcTrace::summary() {
   const Stats& t = total();
-  return libcpp::str::to_string(sessionCount()) + " session(s), " +
-         libcpp::str::to_string(t.linesIn) + " lines in / " +
-         libcpp::str::to_string(t.linesOut) + " out, " +
-         libcpp::str::to_string(t.bytesIn) + " B in / " +
+  return libcpp::str::to_string(sessionCount()) + " session(s), " + libcpp::str::to_string(t.linesIn) + " lines in / " +
+         libcpp::str::to_string(t.linesOut) + " out, " + libcpp::str::to_string(t.bytesIn) + " B in / " +
          libcpp::str::to_string(t.bytesOut) + " B out";
 }

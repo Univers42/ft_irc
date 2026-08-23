@@ -12,8 +12,7 @@ class FancyLogSink : public Log::ILogSink {
 
   void write(char kind, const std::string& msg);
 
-  void protocol(char dir, int fd, const std::string& peer,
-                const std::string& line, const std::string& note);
+  void protocol(char dir, int fd, const std::string& peer, const std::string& line, const std::string& note);
 };
 
 #endif

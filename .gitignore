@@ -1,10 +1,8 @@
-# Build artifacts
-obj/
+# Build artifacts — the build writes everything under build/ (objects, deps
+# and binaries, server and test suite alike); ./ircserv is the root symlink
+# onto build/bin/ircserv that the subject's run line needs.
+build/
 ircserv
-
-# Test build artifacts
-tests/obj/
-tests/test_runner
 
 # Editor/OS noise
 *.o

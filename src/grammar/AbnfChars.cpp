@@ -4,15 +4,11 @@
 
 namespace Abnf {
 namespace AbnfChars {
-bool isAlpha(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-}
+bool isAlpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
 
 bool isDigit(char c) { return c >= '0' && c <= '9'; }
 
-bool isHexDigit(char c) {
-  return isDigit(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-}
+bool isHexDigit(char c) { return isDigit(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'); }
 
 bool isRuleChar(char c) { return isAlpha(c) || isDigit(c) || c == '-'; }
 
@@ -25,8 +21,7 @@ char toLower(char c) {
 
 std::string lowered(const std::string& s) {
   std::string out(s);
-  for (std::string::size_type i = 0; i < out.size(); ++i)
-    out[i] = toLower(out[i]);
+  for (std::string::size_type i = 0; i < out.size(); ++i) out[i] = toLower(out[i]);
   return out;
 }
 

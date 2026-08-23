@@ -16,8 +16,7 @@ std::string stamp() {
   std::time_t now = std::time(NULL);
   std::tm* lt = std::localtime(&now);
   char buf[16];
-  if (!lt || std::strftime(buf, sizeof(buf), "%H:%M:%S", lt) == 0)
-    return "--:--:--";
+  if (!lt || std::strftime(buf, sizeof(buf), "%H:%M:%S", lt) == 0) return "--:--:--";
   return std::string(buf);
 }
 
@@ -55,14 +54,12 @@ void render(char kind, const std::string& msg) {
 }
 }  // namespace
 
-void Log::ILogSink::protocol(char dir, int fd, const std::string& peer,
-                             const std::string& line, const std::string& note) {
+void Log::ILogSink::protocol(char dir, int fd, const std::string& peer, const std::string& line,
+                             const std::string& note) {
   std::string arrow = (dir == '<') ? "<<" : ">>";
   std::string who = peer.empty() ? "*" : peer;
 
-  std::string out = "fd " +
-                    libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' ') +
-                    "  " + arrow + "  " +
+  std::string out = "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' ') + "  " + arrow + "  " +
                     libcpp::str::pad_right(who, 9, ' ') + "  " + line;
   if (!note.empty()) out += "   [" + note + "]";
   write('t', out);
@@ -125,8 +122,7 @@ void Log::trace(const std::string& msg) {
   if (enabled(LOG_TRACE)) render('t', msg);
 }
 
-void Log::protocol(char dir, int fd, const std::string& peer,
-                   const std::string& line, const std::string& note) {
+void Log::protocol(char dir, int fd, const std::string& peer, const std::string& line, const std::string& note) {
   if (!enabled(LOG_TRACE)) return;
   if (g_sink) {
     g_sink->protocol(dir, fd, peer, line, note);
