@@ -12,11 +12,11 @@ struct ProbeExt : public IServerExtension
 	static std::atomic<int> destroyed;
 
 	std::atomic<int> started, registered, disconnected, joins, parts;
-	std::atomic<int> commands, privmsgs, audits, ticks;
+	std::atomic<int> commands, privmsgs, ticks;
 
 	ProbeExt()
 		: started(0), registered(0), disconnected(0), joins(0), parts(0),
-		  commands(0), privmsgs(0), audits(0), ticks(0) {}
+		  commands(0), privmsgs(0), ticks(0) {}
 	~ProbeExt() { ++destroyed; }
 
 	const char *name() const override { return "probe"; }
@@ -53,9 +53,6 @@ struct ProbeExt : public IServerExtension
 		return nick == "probe";
 	}
 
-	void onAudit(const std::string &, const std::string &,
-				 const std::string &) override
-	{ ++audits; }
 };
 
 std::atomic<int> ProbeExt::destroyed(0);
@@ -97,7 +94,6 @@ TEST_F(ExtensionTest, LifecycleAndChannelHooksFire)
 	EXPECT_EQ(probe->joins.load(), 1);
 	EXPECT_EQ(probe->parts.load(), 1);
 	EXPECT_EQ(probe->disconnected.load(), 1);
-	EXPECT_GE(probe->audits.load(), 3) << "register+join+part audited";
 	EXPECT_GE(probe->ticks.load(), 1) << "onTick fires each loop pass";
 }
 

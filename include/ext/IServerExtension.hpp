@@ -62,12 +62,6 @@ class IServerExtension {
     return false;
   }
 
-  virtual void onAudit(const std::string& event, const std::string& actor, const std::string& detail) {
-    (void)event;
-    (void)actor;
-    (void)detail;
-  }
-
  protected:
   IServerExtension() {}
   IServerExtension(const IServerExtension& other) { (void)other; }

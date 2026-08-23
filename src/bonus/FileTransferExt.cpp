@@ -198,7 +198,6 @@ void FileTransferExt::cmdSend(Server& server, Client& client, const Message& msg
       IrcMessage::relay(client.getPrefix(), "FILE",
                         "OFFER " + libcpp::str::to_string(id) + " " + filename + " " + libcpp::str::to_string(size)));
   notice(server, client, "FILE " + libcpp::str::to_string(id) + " offered to " + nick);
-  server.audit("file-offer", client.getNickname(), nick + " " + filename + " " + libcpp::str::to_string(size));
 }
 
 void FileTransferExt::cmdAnswer(Server& server, Client& client, const Message& msg, bool accept) {
@@ -224,10 +223,8 @@ void FileTransferExt::cmdAnswer(Server& server, Client& client, const Message& m
   if (accept) {
     t->accepted = true;
     sender->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "OK " + libcpp::str::to_string(id)));
-    server.audit("file-accept", client.getNickname(), t->filename);
   } else {
     sender->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "NO " + libcpp::str::to_string(id)));
-    server.audit("file-reject", client.getNickname(), t->filename);
     _transfers.erase(id);
   }
 }
@@ -295,7 +292,6 @@ void FileTransferExt::cmdEnd(Server& server, Client& client, const Message& msg)
   if (recipient)
     recipient->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE",
                                               "END " + msg.params[1] + " " + libcpp::str::to_string(t->relayedBytes)));
-  server.audit("file-end", client.getNickname(), t->filename + " " + libcpp::str::to_string(t->relayedBytes));
   _transfers.erase(id);
 }
 

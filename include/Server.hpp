@@ -46,8 +46,6 @@ class Server {
   void sendReply(Client* client, const std::string& numeric, const std::string& p0, const std::string& p1,
                  const std::string& p2);
 
-  void audit(const std::string& event, const std::string& actor, const std::string& detail);
-
   void addExtension(IServerExtension* ext);
 
   bool registerExternalFd(int fd, uint32_t events);

@@ -159,7 +159,6 @@ void Server::completeRegistration(Client* client) {
 
   IrcTrace::sessionRegistered(client->getFd(), prefix);
   Log::success("registered " + nick + " (" + client->getUsername() + "@" + client->getHostname() + ")");
-  audit("register", nick, client->getUsername() + "@" + client->getHostname());
 
   for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onClientRegistered(*this, *client);
 }

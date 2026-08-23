@@ -61,7 +61,6 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     }
 
     chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "JOIN", chan->getName()), NULL);
-    audit("join", client->getNickname(), name);
     for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onJoin(*this, *client, *chan);
 
     if (!chan->getTopic().empty()) {
@@ -108,7 +107,6 @@ void Server::cmdPart(Client* client, const Message& msg) {
                                     : IrcMessage::relay(client->getPrefix(), "PART", chan->getName(), reason);
 
     chan->broadcastMessage(partMsg, NULL);
-    audit("part", client->getNickname(), chanName);
     for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onPart(*this, *client, *chan);
     chan->removeMember(client);
 
@@ -128,7 +126,6 @@ void Server::partAllChannels(Client* client) {
     const std::string partMsg = IrcMessage::relay(client->getPrefix(), "PART", chan->getName());
 
     chan->broadcastMessage(partMsg, NULL);
-    audit("part", client->getNickname(), names[i]);
     for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onPart(*this, *client, *chan);
     chan->removeMember(client);
 

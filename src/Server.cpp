@@ -55,9 +55,6 @@ Server::Server(int port, const std::string& password, time_t pendingCloseTimeout
   addToEpoll(_listenFd, EPOLLIN);
 }
 
-void Server::audit(const std::string& event, const std::string& actor, const std::string& detail) {
-  for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onAudit(event, actor, detail);
-}
 void Server::addExtension(IServerExtension* ext) {
   if (ext) _extensions.push_back(ext);
 }
@@ -625,7 +622,6 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
 
   IrcTrace::sessionClose(fd, client->getNickname(), reason);
   Log::info() << "client disconnected: " << *client << " (" << reason << ")";
-  audit("disconnect", client->getNickname(), reason);
 }
 
 void Server::finalizeDisconnect(int fd) {
