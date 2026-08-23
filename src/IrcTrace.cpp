@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "ChannelModes.hpp"
 #include "IrcCase.hpp"
 #include "Log.hpp"
 #include "Replies.hpp"
@@ -157,27 +158,8 @@ std::string redact(const std::string& line) {
     if (params.size() < 2) return line;
 
     const std::string& modeStr = params[1];
-    bool adding = true;
-    size_t paramNo = 0;
     size_t keyParam = 0;
-    bool found = false;
-    for (size_t i = 0; i < modeStr.size(); ++i) {
-      char c = modeStr[i];
-      if (c == '+') {
-        adding = true;
-      } else if (c == '-') {
-        adding = false;
-      } else if (c == 'k') {
-        if (adding && !found) {
-          keyParam = paramNo;
-          found = true;
-        }
-        ++paramNo;
-      } else if (c == 'o' || (c == 'l' && adding)) {
-        ++paramNo;
-      }
-    }
-    if (!found) return line;
+    if (!ChannelModes::firstKeyParam(modeStr, params.size() - 2, &keyParam)) return line;
 
     return redactParam(line, 2 + keyParam);
   }
@@ -186,28 +168,9 @@ std::string redact(const std::string& line) {
     std::vector<std::string> params = paramsOf(line);
     if (params.size() < 3) return line;
     const std::string& modeStr = params[2];
-
-    bool adding = true;
-    size_t paramNo = 0;
     size_t keyParam = 0;
-    bool found = false;
-    for (size_t i = 0; i < modeStr.size(); ++i) {
-      char c = modeStr[i];
-      if (c == '+') {
-        adding = true;
-      } else if (c == '-') {
-        adding = false;
-      } else if (c == 'k') {
-        if (adding && !found) {
-          keyParam = paramNo;
-          found = true;
-        }
-        ++paramNo;
-      } else if (c == 'o' || (c == 'l' && adding)) {
-        ++paramNo;
-      }
-    }
-    if (!found) return line;
+    if (!ChannelModes::firstKeyParam(modeStr, params.size() - 3, &keyParam)) return line;
+
     return redactParam(line, 3 + keyParam);
   }
 

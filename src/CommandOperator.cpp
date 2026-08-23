@@ -1,6 +1,7 @@
 #include <string>
 #include <vector>
 
+#include "ChannelModes.hpp"
 #include "IrcCase.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
@@ -10,24 +11,6 @@ static bool alreadyReported(std::vector<std::string>& seen, const std::string& w
     if (seen[i] == what) return true;
   seen.push_back(what);
   return false;
-}
-
-static size_t paramsRequiredFrom(const std::string& modeStr, size_t from, bool sign) {
-  size_t need = 0;
-  bool adding = sign;
-  for (size_t i = from; i < modeStr.size(); ++i) {
-    char c = modeStr[i];
-    if (c == '+') {
-      adding = true;
-    } else if (c == '-') {
-      adding = false;
-    } else if (c == 'o') {
-      ++need;
-    } else if ((c == 'k' || c == 'l') && adding) {
-      ++need;
-    }
-  }
-  return need;
 }
 
 namespace {
@@ -330,7 +313,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
           channel->removeKey();
 
           std::string oldKey;
-          size_t stillNeeded = paramsRequiredFrom(modeStr, i + 1, adding);
+          size_t stillNeeded = ChannelModes::mandatoryParams(modeStr, i + 1, adding);
           if (paramIdx < msg.params.size() && msg.params.size() - paramIdx > stillNeeded)
             oldKey = msg.params[paramIdx++];
 
