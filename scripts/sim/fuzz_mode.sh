@@ -137,13 +137,26 @@ check_replies() {  # check_replies <case>
     _bc="$(grep -a " MODE $CHAN " "$WORK/reply.txt" | tail -1)"
     _numerics="$(grep -aoE ' (4[0-9][0-9]|5[0-9][0-9]|6[0-9][0-9]) ' "$WORK/reply.txt" | tr -d ' ' | tr '\n' ',')"
 
-    # I3 — a case naming a real mode letter must say something.
+    # I3 — a case naming a real mode letter must say something, PROVIDED the
+    # mode string opens with a sign. Without one it is not a mode string at
+    # all: "+i" and "-o" carry an instruction, "i" and "o alice" do not, there
+    # is no implicit '+', and the documented behaviour is to apply nothing and
+    # answer nothing -- not even 472, because those characters were never mode
+    # characters. See the MODE section of
+    # wiki/FT_IRC_CLIENT_PROTOCOL/signatures.md.
+    #
+    # This check predated that rule and reported every unsigned case as a
+    # violation: 119 of 227 on a plain run, which buried anything real.
     _modefield="$(printf '%s' "$_case" | cut -d' ' -f1)"
-    if printf '%s' "$_modefield" | grep -q '[itklo]'; then
-        if [ -z "$_bc" ] && [ -z "$_numerics" ]; then
-            fail I3 "$_case" "named a real mode letter but the server said nothing"
-        fi
-    fi
+    case "$_modefield" in
+        [+-]*)
+            if printf '%s' "$_modefield" | grep -q '[itklo]'; then
+                if [ -z "$_bc" ] && [ -z "$_numerics" ]; then
+                    fail I3 "$_case" "named a real mode letter but the server said nothing"
+                fi
+            fi
+            ;;
+    esac
 
     [ -n "$_bc" ] || return 0
 

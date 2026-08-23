@@ -1049,7 +1049,15 @@ TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 	** Self-terminating (stops as soon as tc looks closed), capped so a
 	** missed detection fails fast rather than hanging. */
 	const int kGraceIterations = 15; // ~300ms at 20ms/iteration
-	for (int poll = 0; poll < 200 && !closed; ++poll)
+	/* 200 iterations x 20ms = 4s was a fixed cap against a 1s deadline, and
+	** it expired first when the whole suite ran and the event loop's passes
+	** stretched under CPU contention -- the close had simply not happened
+	** YET, and the test reported it as never happening. Scaled to the
+	** deadline (30x, floor 200) so a loaded machine still observes it; a
+	** genuinely broken sweep still fails, just later. */
+	const int kMaxPolls =
+		std::max(200, static_cast<int>(kTestPendingCloseTimeoutSec) * 30 * 50);
+	for (int poll = 0; poll < kMaxPolls && !closed; ++poll)
 	{
 		if (!hbStarted && poll >= kGraceIterations)
 		{

@@ -174,10 +174,18 @@ printf '%s' "$out" | grep -aqF ' 412 ' \
 # RFC: params is at most 14 middles plus one trailing = 15.
 _p16=''; for i in $(seq 1 16); do _p16="$_p16 p$i"; done
 out="$(reg_raw gd "PRIVMSG${_p16} :body\r\nQUIT\r\n")"
+# 2.3.1 caps params at 15 by ABSORPTION, not by error: the
+#   =/ 14( SPACE middle ) [ SPACE [ ":" ] trailing ]
+# alternative folds everything past the 14th middle into the trailing. A
+# conformant server does not refuse the line, it declines to produce a 16th
+# parameter -- here p1 becomes the target and the rest becomes text. This
+# probe used to demand a 417/461 the RFC never asks for.
 if printf '%s' "$out" | grep -aqE ' (417|461) '; then
-    row_pass 'more than 15 params'  'refused'
+    row_pass 'more than 15 params'  'refused outright'
+elif printf '%s' "$out" | grep -aqF ' 401 gd p1 '; then
+    row_pass 'more than 15 params'  'capped at 15; surplus folds into the trailing'
 else
-    row_div  'more than 15 params'  'RFC caps params at 15; extra middles are parsed anyway'
+    row_div  'more than 15 params'  'a 16th parameter was produced'
 fi
 
 # middle may contain ':' after its first octet — but RFC's chanstring excludes
@@ -205,12 +213,30 @@ else
     row_fail 'NUL inside a parameter' 'line was lost entirely'
 fi
 
-# A stray CR must not let a client forge a second line (IRC line injection).
-out="$(reg_raw gg 'PRIVMSG gg :x\rQUIT\r\nPRIVMSG gg :still here\r\nQUIT\r\n')"
-if printf '%s' "$out" | grep -aqF 'still here'; then
-    row_pass 'stray CR'  'sanitised; the connection was not torn down by a forged QUIT'
+# A stray CR must not let a client forge a line in somebody ELSE'S stream.
+#
+# This probe used to assert that the sender's own session survived, which
+# tested the wrong invariant. CR now terminates a message exactly as LF
+# already did (RFC 2812 §2.3 excludes both octets from every parameter
+# production), so the tail runs as a command from the SENDER, on the SENDER'S
+# own connection -- something they could have sent with a plain CRLF anyway.
+# That is not injection; it is self-inflicted and carries no privilege.
+#
+# The property that DOES matter is that no CR survives into a parameter and
+# gets relayed, because a peer's client would then parse the tail as a forged
+# line. The target here is the sender's own nick, so the relayed PRIVMSG comes
+# straight back and can be inspected.
+# Every relayed line legitimately ENDS in CRLF, so the check has to look for a
+# CR left INSIDE the line -- tr -d removes the terminator first.
+out="$(reg_raw gg 'PRIVMSG gg :x\rQUIT\r\n')"
+relayed="$(printf '%s' "$out" | grep -a 'PRIVMSG gg' | tr -d '\n' || true)"
+inner="$(printf '%s' "$relayed" | sed 's/\r$//')"
+if printf '%s' "$inner" | grep -aq $'\r'; then
+    row_fail 'stray CR'  'a CR survived inside a relayed parameter — a peer would parse a forged line'
+elif printf '%s' "$relayed" | grep -aqF 'QUIT'; then
+    row_fail 'stray CR'  'the forged tail was relayed as text'
 else
-    row_fail 'stray CR'  'a stray CR ended the session — line injection is possible'
+    row_pass 'stray CR'  'CR consumed as a terminator; nothing relayed carries it'
 fi
 
 # --- length ----------------------------------------------------------------

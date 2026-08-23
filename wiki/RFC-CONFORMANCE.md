@@ -12,10 +12,19 @@ make                                    # C++98, -Wall -Wextra -Werror
 scripts/simulation.sh                   # a populated server in the background
 scripts/simulation.sh --verify-grammar  # §2.3.1 message grammar
 scripts/simulation.sh --verify-names    # §2.3.1 nickname / channel productions
+scripts/simulation.sh --fuzz-mode       # MODE parser invariants
 scripts/shutdown_simulation.sh
 ```
 
-**Result: 64 pass · 5 documented divergences · 0 failures.**
+**Result: 68 pass · 1 documented divergence · 0 failures.**
+
+Measured on the current build:
+
+| probe | pass | diverge | fail |
+| --- | --- | --- | --- |
+| `--verify-grammar` | 22 | 1 | 0 |
+| `--verify-names` | 46 | 0 | 0 |
+| `--fuzz-mode` (227 cases) | — | — | 0 violations |
 
 A *failure* means the server contradicts the RFC or its own `005` tokens. A
 *divergence* means it is deliberately stricter or looser, and there is a
@@ -72,8 +81,14 @@ verified here in exactly that shape.
 
 `Message` has no `prefix` field on purpose — §2.3 says clients SHOULD NOT send
 one, and this server has no server-to-server link that would make one
-meaningful. `Message::parse` (`src/Message.cpp:19`) still *steps over* it so it
-cannot be mistaken for the command.
+meaningful. The `message` production captures `$prefix` and the server drops
+it when building parameters, so it cannot be mistaken for the command.
+
+There is no hand-written parser to point at any more: `Message::parse` was
+deleted once the grammar took over `Server::handleMessage`. Every row on this
+page is now produced by the same engine the server runs on, which is the point
+of the exercise — the document and the implementation cannot drift apart
+without a probe going red.
 
 ### `command = 1*letter / 3digit`
 
@@ -199,69 +214,74 @@ the wire.
 
 ---
 
-## Part 2 — the five divergences
+## Part 2 — the one remaining divergence
 
-### D1 · `` ` `` is a legal nickname character and this server refuses it
+Four of the five divergences this page used to list are closed. They are kept
+here with what closed them, because "we used to differ and here is the commit"
+is more useful than silence.
 
-`special = %x5B-60 / %x7B-7D`. The range `%x5B-60` is `[ \ ] ^ _` **and
-backtick** (%x60) — the RFC even spells all nine out in its comment.
-`Server::isValidNickname` (`src/Server.cpp:705`) enumerates them by hand and
-lists eight, omitting `` ` ``.
-
-Measured: `NICK z\`tick` → `432 :Erroneous nickname`.
-
-Impact: nil in practice — no mainstream client offers a backtick nickname by
-default — but it is a real departure from the grammar, and a one-character fix
-if you want it gone.
-
-### D2 · a bare LF is accepted as a terminator
+### D2 · a bare LF is accepted as a terminator — OPEN, deliberate
 
 `crlf = %x0D %x0A`. A message ending in LF alone is not a message.
 
 Measured: a full `PASS`/`NICK`/`USER`/`JOIN` session using only `\n` registers
 and joins.
 
-Deliberate. `nc` without `-C` sends bare LF, and the subject's own test command
-is `nc -C 127.0.0.1 6667` typed by hand — being strict here would make the
-server unusable from the very tool the subject tells you to test with. Real
-ircds are lenient in exactly the same way.
+Deliberate, and the only one left. `nc` without `-C` sends bare LF, and the
+subject's own test command is `nc -C 127.0.0.1 6667` typed by hand — being
+strict here would make the server unusable from the very tool the subject
+tells you to test with. Real ircds are lenient in exactly the same way.
 
-### D3 · more than 15 parameters are parsed
+### D1 · `` ` `` in a nickname — CLOSED
 
-`params = *14( SPACE middle ) [ SPACE ":" trailing ]` — at most fourteen
-middles plus one trailing, fifteen in all.
+`special = %x5B-60 / %x7B-7D`. The range `%x5B-60` is nine characters —
+`[ \ ] ^ _` **and backtick** (%x60). `Server::isValidNickname` enumerated them
+by hand and listed eight.
 
-Measured: `PRIVMSG p1 p2 … p16 :body` is parsed with every middle kept;
-nothing answers `461` or `417`.
+Now checked against the RFC's ranges directly rather than a hand-written list,
+which is what made the omission possible. The locale-sensitive `std::isalpha` /
+`std::isalnum` went with it: under a non-C locale they would have admitted
+8-bit octets into a nickname.
 
-`Message::parse` (`src/Message.cpp:43`) loops until the line ends and has no
-counter. It is benign because every command handler indexes the parameters it
-needs and ignores the rest, and because the 512-octet line cap already bounds
-how many can arrive. Worth knowing before someone asks.
+Measured: `NICK z\`tick` registers. `--verify-names` is 46 pass · 0 diverge.
 
-### D4 · `:` is accepted inside a channel name
+### D3 · more than 15 parameters — CLOSED
 
-`chanstring` excludes `:` — the RFC reserves it as the channel-mask separator,
-`channel = ( "#" / … ) chanstring [ ":" chanstring ]`.
+`params = *14( SPACE middle ) [ SPACE ":" trailing ]`, with the `=/`
+alternative folding everything past the fourteenth middle into the trailing.
+The old hand-written parser looped to end-of-line with no counter.
 
-Measured: `JOIN #gre:mask` creates a channel literally named `#gre:mask`.
+The grammar implements both alternatives, so the cap is structural rather than
+a check that could be forgotten. Note the RFC caps by ABSORPTION, not by
+error — a conformant server does not refuse the line, it declines to produce a
+sixteenth parameter. `--verify-grammar` asserted a 417/461 the RFC never asks
+for and reported conformant behaviour as a divergence; that probe is fixed.
 
-`Server::isValidChannelName` (`src/Server.cpp:720`) rejects only space, BEL and
-comma. Channel masks are a server-to-server feature this project does not
-implement — the subject forbids server-to-server — so nothing here would ever
-consume the mask half.
+Measured: `PRIVMSG p1 … p16 :body` → `401` for `p1`, the surplus folded into
+the message text.
 
-### D5 · 8-bit octets are accepted in a channel key
+### D4 · `:` inside a channel name — CLOSED
 
-`key` is restricted to 7-bit US-ASCII (`%x21-7F`).
+`Server::isValidChannelName` now rejects `:`, drawing the existing
+`476 ERR_BADCHANMASK`.
 
-Measured: `MODE #k +k aéb` is accepted, and `MODE #k` reports `+k aéb`.
+Worth stating plainly: this makes the server **stricter than the RFC**, not
+merely conformant. `channel = ( "#" / … ) chanstring [ ":" chanstring ]` means
+`#a:b` is syntactically valid as name-plus-mask. Rejecting it is safe only
+because masks are a server-to-server feature, which the subject forbids.
 
-`isValidChannelKey` (`src/CommandOperator.cpp:10`) rejects `<= 0x20` and `,`,
-which lets anything above `0x7F` through. Harmless — the key is compared
-byte-for-byte and never case-folded — but it is looser than the grammar.
+Measured: `JOIN #ok,#ba:d` joins `#ok` and answers `476` for `#ba:d`.
 
----
+### D5 · 8-bit octets in a channel key — CLOSED
+
+`key = 1*23( %x01-05 / %x07-08 / %x0C / %x0E-1F / %x21-7F )` is 7-bit ASCII.
+The validator rejected `<= 0x20` and `,` but let anything above `0x7F` through.
+
+It also lived as a `static` in `CommandOperator.cpp`, so `cmdJoin` could not
+reach it and compared keys as raw strings — `MODE +k` and `JOIN` disagreed
+about what a key even was. It is now a `Server` member used by both.
+
+Measured: `MODE #k +k s<0xC3><0xA9>cret` → `525 :Key is not well-formed`.
 
 ## Part 3 — subject requirements, and the command that proves each
 
