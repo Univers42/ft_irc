@@ -111,10 +111,10 @@ HINT = $(C_DIM)   make help  $(S_DOT)  targets, tiers and overridable flags$(C_R
 # ── Build tiers ────────────────────────────────────────────────────────────
 #  make mandatory  → strictly the subject's mandatory part (pure RFC kernel)
 #  make bonus      → mandatory + subject bonus (bot, file transfer)
-#  make / make all → full: bonus + optional platform extras (
-#                    AuditLog, fancy console) — still runtime-gated by
-#                    FT_IRC_CONFIG, so without a config file the binary
-#                    behaves exactly like the bonus tier.
+#  make / make all → full: bonus + optional platform extras (fancy console,
+#                    and the FT_IRC_CONFIG settings override). Without a
+#                    config file the binary behaves exactly like the bonus
+#                    tier apart from the console sink.
 #
 #  Tiers differ ONLY in which sources are linked (per-tier object dirs, one
 #  registerExtensions() TU each); the kernel sources are identical.
@@ -203,8 +203,7 @@ CORE_NAMES	= main \
 BONUS_NAMES	= Bot \
 			  bonus/FileTransferExt
 
-EXTRA_NAMES	= AuditLog \
-			  extras/FancyLogSink
+EXTRA_NAMES	= extras/FancyLogSink
 
 SRC_NAMES	= $(CORE_NAMES)
 ifneq ($(TIER),mandatory)
@@ -217,8 +216,11 @@ endif
 SRCS		= $(addprefix $(SRCDIR)/,$(addsuffix .cpp,$(SRC_NAMES)))
 
 # str/* is used by the kernel (casemapped parsing, to_string, consttime
-# compare); util/config + term/* only by the full tier (config, console).
-LIBCPP_CORE_NAMES	= str/format str/case str/utf8 str/secure
+# compare, base64 relay validation, safe filename components); data/date for
+# the one wall-clock timestamp helper every log line goes through;
+# util/config + term/* only by the full tier (config, console).
+LIBCPP_CORE_NAMES	= str/format str/case str/utf8 str/secure str/base64 \
+					  data/date
 LIBCPP_FULL_NAMES	= util/config term/color term/style term/table \
 					  term/stylesheet term/writer
 
@@ -230,8 +232,11 @@ endif
 LIBCPP_SRCS		= $(addprefix $(LIBCPP)/src/,$(addsuffix .cpp,$(LIBCPP_NAMES)))
 
 # libcpp C++98 tier (vendor/libcpp/c98): generic building blocks promoted
-# out of this project — line framing, streaming CSV, epoll registration.
-LIBCPP98_NAMES	= line_buffer csv_writer reactor buffered_socket
+# out of this project — line framing, streaming CSV, epoll registration,
+# per-descriptor traffic counters. expiring_registry.hpp comes from the same
+# tier but is a class template, so there is no object to list.
+LIBCPP98_NAMES	= line_buffer csv_writer reactor buffered_socket \
+				  traffic_stats
 LIBCPP98_SRCS	= $(addprefix $(LIBCPP)/c98/src/,$(addsuffix .cpp,$(LIBCPP98_NAMES)))
 
 OBJS			= $(SRCS:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
@@ -391,7 +396,7 @@ help:
 	'' \
 	'  $(C_YEL)BUILD TIERS$(C_RST) $(C_DIM)— same kernel sources; they differ only in what is linked.$(C_RST)' \
 	'    $(C_GRN)all$(C_RST)            $(C_DIM)(default)$(C_RST) full tier: bonus + platform extras (' \
-	'                   AuditLog, fancy console). The extras are runtime-gated by' \
+	'                   fancy console). The extras are runtime-gated by' \
 	'                   FT_IRC_CONFIG, so with no config file this binary behaves' \
 	'                   byte-identically to the bonus tier.' \
 	'    $(C_GRN)bonus$(C_RST)          mandatory + the subject bonus: Bot (ircbot) and FILE transfer.' \
@@ -466,7 +471,8 @@ help:
 	'  $(C_YEL)RUNTIME ENVIRONMENT$(C_RST) $(C_DIM)— read by the binary, not by make$(C_RST)' \
 	'    $(C_CYA)FT_IRC_CONFIG$(C_RST)=<path.ini>' \
 	'                   enables the full-tier extras: [audit]' \
-	'                   AuditLog. Unset, the full binary behaves like bonus.' \
+	'                   the settings override. Unset, the full binary behaves' \
+	'                   like bonus apart from the console sink.' \
 	'' \
 	'  $(C_YEL)NOT MAKE TARGETS$(C_RST) $(C_DIM)— out-of-band tooling, run them directly$(C_RST)' \
 	'    bash scripts/audit.hellish             $(C_DIM)subject-compliance audit (3 tiers, C++98 scan)$(C_RST)' \

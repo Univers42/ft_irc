@@ -13,6 +13,6 @@ void registerExtensions(Server& server) {
     server.addExtension(new Bot(&server));
     server.addExtension(new FileTransferExt());
   } catch (const std::bad_alloc&) {
-    Log::warn("could not create bonus extensions (out of memory)");
+    Log::warn(kBonusExtensionsFailed);
   }
 }

@@ -32,6 +32,11 @@
 #include "grammar/interpreted/TreeMatcher.hpp"
 #include "libcpp/str/format.hpp"
 
+/* Reaches the wire as the QUIT reason every other member of the channel sees,
+** so the three sites that close a backed-up connection have to word it the
+** same way. One name, three uses. */
+const char* const kReasonSendQ = "SendQ exceeded";
+
 bool Server::isRunning = true;
 
 Server::Server(int port, const std::string& password, time_t pendingCloseTimeoutSec)
@@ -361,7 +366,7 @@ void Server::handleClientInput(int fd) {
     if (cit == _clients.end() || cit->second->isPendingClose()) return;
   }
 
-  if (client->isSendQExceeded()) disconnectClientNow(fd, "SendQ exceeded");
+  if (client->isSendQExceeded()) disconnectClientNow(fd, kReasonSendQ);
 }
 
 void Server::handleClientOutput(int fd) {
@@ -381,7 +386,7 @@ void Server::handleClientOutput(int fd) {
     return;
   }
 
-  if (client->isSendQExceeded()) disconnectClientNow(fd, "SendQ exceeded");
+  if (client->isSendQExceeded()) disconnectClientNow(fd, kReasonSendQ);
 }
 
 void Server::handleMessage(Client* client, const std::string& raw) {
@@ -440,7 +445,7 @@ void Server::checkTimeouts() {
     }
   }
 
-  for (size_t i = 0; i < sendQNow.size(); ++i) disconnectClientNow(sendQNow[i], "SendQ exceeded");
+  for (size_t i = 0; i < sendQNow.size(); ++i) disconnectClientNow(sendQNow[i], kReasonSendQ);
   for (size_t i = 0; i < pingTimeoutDeferred.size(); ++i) disconnectClient(pingTimeoutDeferred[i], "Ping timeout");
 }
 

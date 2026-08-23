@@ -129,7 +129,7 @@ ft_irc/
 |-------------|-------------------------------------------------------------------|
 | `mandatory` | Strictly the subject's mandatory sources (pure RFC kernel)        |
 | `bonus`     | Mandatory + subject bonus (Bot, server-mediated FILE transfer)    |
-| `all`       | **Default.** Bonus + optional platform extras (PlatformBus, AuditLog, fancy console) |
+| `all`       | **Default.** Bonus + optional platform extras (fancy console, `FT_IRC_CONFIG` settings override) |
 | `clean`     | Remove `build/obj/` (all tiers, test objects included)            |
 | `fclean`    | Remove `build/` and the `./ircserv` symlink                       |
 | `re`        | `fclean` + `all` (full rebuild)                                   |
@@ -214,7 +214,7 @@ owns registered extensions (deletes them in reverse order) and fires:
 | `onPrivmsg(sender, target, text) → bool` | per non-channel target, before nick lookup | Bot |
 | `reservesNick(nick) → bool` | during NICK validation | Bot |
 | `ownsFd(fd)` / `onFdEvent` | unrecognized epoll events | PlatformBus |
-| `onAudit(event, actor, detail)` | every `Server::audit()` call | AuditLog |
+| `onAudit(event, actor, detail)` | every `Server::audit()` call | *(no extension consumes it since AuditLog was removed — the hook and its nine call sites remain for extensions that want them)* |
 
 Extensions with their own sockets register them into the **same epoll** via
 the public `Server::registerExternalFd` / `unregisterExternalFd` (single

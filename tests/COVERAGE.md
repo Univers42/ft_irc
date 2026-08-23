@@ -6,7 +6,7 @@ actually proves today. Built from a scan of `tests/`, `scripts/audit.sh`, and
 
 **Legend:** ✅ covered · 🟡 partial · 🔴 gap / risk · 🧭 manual-only (not automatable)
 
-Defend on the **`make mandatory`** binary — it excludes PlatformBus / AuditLog /
+Defend on the **`make mandatory`** binary — it excludes PlatformBus and
 FancyLogSink, shrinking the surface an evaluator can question.
 
 ---

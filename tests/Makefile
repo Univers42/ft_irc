@@ -25,6 +25,8 @@ LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
 			  $(LIBCPP)/src/str/case.cpp \
 			  $(LIBCPP)/src/str/utf8.cpp \
 			  $(LIBCPP)/src/str/secure.cpp \
+			  $(LIBCPP)/src/str/base64.cpp \
+			  $(LIBCPP)/src/data/date.cpp \
 			  $(LIBCPP)/src/util/config.cpp \
 			  $(LIBCPP)/src/term/color.cpp \
 			  $(LIBCPP)/src/term/style.cpp \
@@ -36,14 +38,14 @@ LIBCPP_SRCS	= $(LIBCPP)/src/str/format.cpp \
 LIBCPP98_SRCS	= $(LIBCPP)/c98/src/line_buffer.cpp \
 				  $(LIBCPP)/c98/src/csv_writer.cpp \
 				  $(LIBCPP)/c98/src/reactor.cpp \
-				  $(LIBCPP)/c98/src/buffered_socket.cpp
+				  $(LIBCPP)/c98/src/buffered_socket.cpp \
+				  $(LIBCPP)/c98/src/traffic_stats.cpp
 
 # ── Project sources (everything except main.cpp) ──────────────
 PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/Server.cpp \
 			  ../src/Log.cpp \
 			  ../src/extras/FancyLogSink.cpp \
-			  ../src/AuditLog.cpp \
 			  ../src/Client.cpp \
 			  ../src/Channel.cpp \
 			  ../src/Message.cpp \
