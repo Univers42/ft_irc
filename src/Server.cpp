@@ -22,6 +22,7 @@
 #include "IrcTrace.hpp"
 #include "Limits.hpp"
 #include "Log.hpp"
+#include "Settings.hpp"
 #include "ext/IServerExtension.hpp"
 #include "grammar/EmbeddedGrammarSource.hpp"
 #include "grammar/FileGrammarSource.hpp"
@@ -35,13 +36,13 @@ bool Server::isRunning = true;
 Server::Server(int port, const std::string& password, time_t pendingCloseTimeoutSec)
     : _port(port),
       _password(password),
-      _serverName(Limits::kServerName),
+      _serverName(settings().serverName),
       _listenFd(-1),
       _reactor(),
       _lastPingCheck(std::time(NULL)),
       _matcher(NULL),
       _messageRule(Abnf::Grammar::kNoRule),
-      _pendingCloseTimeoutSec(pendingCloseTimeoutSec) {
+      _pendingCloseTimeoutSec(pendingCloseTimeoutSec < 0 ? settings().pendingCloseTimeout : pendingCloseTimeoutSec) {
   initGrammar();
   createListenSocket();
   createEpoll();
@@ -95,6 +96,8 @@ void Server::initGrammar() {
   }
   _messageRule = _grammar.ruleIndex("message");
   if (_messageRule == Abnf::Grammar::kNoRule) throw std::runtime_error("grammar defines no 'message' rule");
+
+  Log::debug() << "settings: " << settings();
 
   bindCommandRules();
   verifyCommandTable(source.origin());
@@ -302,7 +305,7 @@ void Server::acceptClient() {
   int clientFd = accept(_listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
   if (clientFd < 0) return;
 
-  if (_clients.size() >= Limits::kMaxClients) {
+  if (_clients.size() >= settings().maxClients) {
     close(clientFd);
     Log::warn("connection rejected: client limit reached");
     return;
@@ -415,7 +418,7 @@ void Server::updateEpollInterest(Client* client) {
 
 void Server::checkTimeouts() {
   time_t now = std::time(NULL);
-  if (now - _lastPingCheck < 30) return;
+  if (now - _lastPingCheck < settings().pingSweepInterval) return;
   _lastPingCheck = now;
 
   std::vector<int> sendQNow;
@@ -428,9 +431,9 @@ void Server::checkTimeouts() {
 
     if (client->isSendQExceeded()) {
       sendQNow.push_back(it->first);
-    } else if (client->isPingSent() && idle > Limits::kPingInterval + Limits::kPingTimeout) {
+    } else if (client->isPingSent() && idle > settings().pingInterval + settings().pingTimeout) {
       pingTimeoutDeferred.push_back(it->first);
-    } else if (!client->isPingSent() && idle > Limits::kPingInterval) {
+    } else if (!client->isPingSent() && idle > settings().pingInterval) {
       sendToClient(client, "PING :" + _serverName);
       client->setPingSent(true);
     }
