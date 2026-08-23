@@ -923,14 +923,6 @@ struct DeadlineRefillProbe : public IServerExtension
 
 		queueBacklog(server, &client, 50000);
 
-		/* Did the backlog actually STAY queued? Both ends are clamped above,
-		** but a machine whose kernel absorbs 50 KB anyway (CI runners with a
-		** large default tcp_wmem do) leaves _out empty, and then
-		** drain-completion closes the connection long before any deadline.
-		** That is an environment this test cannot run in, not a bug in the
-		** deadline sweep -- recording it lets the test say which. */
-		frozen = client.hasPendingData();
-
 		server.disconnectClient(targetFd, "deadline test");
 	}
 
@@ -949,6 +941,23 @@ struct DeadlineRefillProbe : public IServerExtension
 			targetFd = -1;
 			return;
 		}
+
+		/* Was the peer ever actually frozen?
+		**
+		** Sampled HERE, on a tick, not right after queueBacklog(): at that
+		** point nothing has been written yet, so the queue is always non-empty
+		** and the flag would always read true -- which is exactly why the
+		** first version of this guard never fired. By the time a tick runs the
+		** server has had a chance to flush, so a queue that is STILL backed up
+		** means the peer really cannot absorb it.
+		**
+		** A machine whose kernel swallows the whole 50 KB despite both ends
+		** clamping their socket buffers (a CI runner or container with a large
+		** default tcp_wmem) drains instantly, and drain-completion closes the
+		** connection long before any deadline. That is an environment this
+		** test cannot run in, not a bug in the deadline sweep. */
+		if (client->hasPendingData())
+			frozen = true;
 		/* Top back up, staying clear of MAX_SENDQ (64 KiB): the ceiling
 		** here is 50000 + 10240 ~= 60 KB, so the refill never trips
 		** isSendQExceeded() and turns this into a SendQ close instead. */
