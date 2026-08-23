@@ -103,43 +103,47 @@ characters.
 NICK alice
 ```
 
-**Over-long nicks are truncated, not rejected.** If you send a nick longer
-than 9 characters, the server shortens it to 9 rather than refusing it —
-exactly as real ircds do.
+**Over-long nicks are rejected, not truncated.** A nickname may be at most 9
+characters. Send a longer one and the server answers `432
+ERR_ERRONEUSNICKNAME` and leaves your nick alone — it will not quietly
+register you under a shortened name you did not choose.
 
-During registration the truncation is silent: you're registered under the
-shortened nick and the welcome burst reflects it. There's no `NICK` line,
-because you had no previous nick to change from:
+During registration a refused nick means registration does not complete. Send
+a nick that fits and carry on:
 
 ```
 NICK abcdefghijklmno
 USER x 0 * :X
 ```
 ```
-:ft_irc 001 abcdefghi :Welcome to the ft_irc Network abcdefghi!x@127.0.0.1
+:ft_irc 432 * abcdefghijklmno :Erroneous nickname
 ```
 
-After registration, changing to an over-long nick echoes a `NICK` line carrying
-the truncated result. Note the prefix holds your **old** nick — that's how other
-clients know who changed:
+After registration the refusal changes nothing: no `NICK` line is echoed to
+you, nothing is broadcast to your channels, and you keep the nick you already
+had.
 
 ```
 NICK qwertyuiopasd
 ```
 ```
-:short!z@127.0.0.1 NICK :qwertyuio
+:ft_irc 432 short qwertyuiopasd :Erroneous nickname
 ```
 
-If the truncated result is already taken, you get `433` instead and keep your
-current nick.
+The limit is advertised in the `005` burst as `NICKLEN=9`, so a client can
+read it rather than guess.
 
-> **Why truncate instead of reject?** RFC 2812 defines 9 as the maximum nick
-> length, but it asks *clients* to tolerate longer strings and doesn't tell the
-> server to reject them — real servers truncate to the length they advertise
-> (`NICKLEN=9`). Rejecting would also break clients like HexChat: its
-> reconnect-retry appends suffixes that make the nick *longer*, so a rejected
-> over-long nick would fail every retry and never connect. Truncation is both
-> more correct and more compatible.
+> **Why reject instead of truncate?** This server used to truncate, and the
+> change is deliberate. RFC 2812 §3.1.2 answers `432`, and the grammar's own
+> `nickname` production — `( letter / special ) *8( letter / digit / special
+> / "-" )` — allows 9 characters and no more. Truncating meant registering
+> someone under a name they never asked for, which then shows up in every
+> prefix they send.
+>
+> **The cost is real.** A client whose collision retry *appends* to the nick —
+> HexChat's `_`, `_1` — only makes an over-long nick longer, so it cannot
+> recover from a `432` on its own. If you use such a client, choose a nick of
+> 9 characters or fewer to begin with.
 
 Invalid *characters* are still rejected (this is a different problem from
 length):
@@ -151,8 +155,7 @@ NICK ab#cd
 :ft_irc 432 bob ab#cd :Erroneous nickname
 ```
 
-A nick that's already taken — including one that collides only after
-truncation — gets `433`:
+A nick that's already taken gets `433`:
 
 ```
 NICK alice

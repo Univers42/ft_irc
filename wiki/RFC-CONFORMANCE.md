@@ -161,7 +161,7 @@ Length and collisions, against the advertised `NICKLEN=9` and
 | `abcdefghij` (10) | **truncated** to `abcdefghi` |
 | `probeclient` (11) | truncated to `probeclie` |
 | `casetestx` held, then `CASETESTX` | `433` |
-| `casetestxZZ` (11, truncates onto the held 9-char nick) | `433` |
+| `casetestxZZ` (11, past NICKLEN) | `432` |
 
 The last row is the one worth keeping: it proves truncation happens *before*
 the in-use check. Reverse those two steps and two different over-long nicks

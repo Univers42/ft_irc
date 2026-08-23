@@ -104,8 +104,11 @@ CASES += [
     _c("NICK", "NICK -bad", "nickname", "'-' may not lead",
        want="432", forbid=(), fresh=True),
     _c("NICK", "NICK abcdefghijklmno", "nickname",
-       "over NICKLEN: RFC says 432, this server truncates",
-       fresh=True, strict=False),
+       "past the 9-char bound of the nickname production: RFC 2812 3.1.2",
+       want="432", forbid=(), fresh=True),
+    _c("NICK", "NICK abcdefghij", "nickname",
+       "one character over the bound is already over it",
+       want="432", forbid=(), fresh=True),
     _c("NICK", "NICK freshnick   ", "nick-cmd", "trailing *SPACE", fresh=True),
 ]
 

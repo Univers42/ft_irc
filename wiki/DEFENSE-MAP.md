@@ -138,10 +138,14 @@ almost one-to-one onto our robustness suite (T6) and the deferred-teardown work 
 ### 3.1 Authenticate, set nick, username, join — via nc and HexChat
 - **Sheet**: full registration works in both clients.
 - **What proves it**: `test_integration.cpp` registration + `test_conformance.cpp`.
-  Includes our **NICK truncation** behaviour (T1): over-long nicks truncate to
-  `NICKLEN=9`, not rejected — `test_conformance.cpp::NickTruncation`
-  (`OverlongNickTruncatesInsteadOfRejecting`, `...CollideWith433`, etc.).
-  This matters for HexChat: a rejected long nick would break its reconnect retry.
+  T1 reversed: an over-long nick now draws 432 rather than being truncated to
+  `NICKLEN=9` — RFC 2812 §3.1.2, and the grammar's own `nickname` production
+  caps at 9. Covered by `test_conformance.cpp::NickLength`
+  (`OverlongNickIsRejectedNotTruncated`, `NickOfExactlyNicklenIsAccepted`,
+  `OverlongNicksCannotCollideByTruncation`, and the post-registration case).
+  Known cost, accepted deliberately: HexChat's collision retry appends to the
+  nick (`_`, `_1`), which only makes an over-long nick longer, so such a
+  client cannot recover from a 432 on its own.
 
 ### 3.2 PRIVMSG fully functional with different parameters
 - **Sheet**: PRIVMSG works with various parameters.

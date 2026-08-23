@@ -97,7 +97,7 @@ make verify-tiers   # build all three in strict sequence
 **Modes** — `+i` invite-only · `+t` topic locked to operators · `+k` key ·
 `+o` operator · `+l` member limit
 
-**Limits** — nick 9 (truncated) · channel 50 · key 23 · topic 390 · line 512 ·
+**Limits** — nick 9 (over-length → 432) · channel 50 · key 23 · topic 390 · line 512 ·
 sendq 64 KiB · clients 1024 · ping 120 s + 120 s
 
 ---

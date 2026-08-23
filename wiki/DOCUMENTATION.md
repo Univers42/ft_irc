@@ -397,7 +397,7 @@ Result:
 |---------|--------|-------------|
 | `CAP` | `CAP LS` / `CAP END` | Capability negotiation (empty list — no caps supported) |
 | `PASS` | `PASS <password>` | Set connection password (must match server password) |
-| `NICK` | `NICK <nickname>` | Set or change nickname. Validated: first char alpha/special, rest alnum/special/dash. Over-length nicks are truncated to `MAX_NICKLEN` (9), not rejected (T1) — invalid *characters* still get 432, but excess *length* is silently truncated, matching real ircds. Collision is checked on the truncated form (433) |
+| `NICK` | `NICK <nickname>` | Set or change nickname. Validated: first char alpha/special, rest alnum/special/dash. Over-length nicks draw 432, the same as invalid characters: RFC 2812 §3.1.2, and the grammar's own `nickname` production caps at 9. The bound lives in `isValidNickname()` beside the character rules. This reverses T1, which truncated instead — the cost is that a client whose collision retry appends to the nick (HexChat's `_`, `_1`) cannot recover from an over-long nick on its own |
 | `USER` | `USER <user> <mode> <unused> :<realname>` | Set username and real name |
 
 #### Registration Flow
@@ -519,7 +519,7 @@ Unknown mode characters return `ERR_UNKNOWNMODE` (472).
 | 412 | `ERR_NOTEXTTOSEND` | PRIVMSG with no text |
 | 421 | `ERR_UNKNOWNCOMMAND` | Unrecognized command |
 | 431 | `ERR_NONICKNAMEGIVEN` | NICK with no parameter |
-| 432 | `ERR_ERRONEUSNICKNAME` | Invalid nickname *characters* (over-length is truncated, not 432 — see T1) |
+| 432 | `ERR_ERRONEUSNICKNAME` | Invalid nickname characters, **or** a nickname past `MAX_NICKLEN` |
 | 433 | `ERR_NICKNAMEINUSE` | Nickname already taken |
 | 441 | `ERR_USERNOTINCHANNEL` | Target not in channel |
 | 442 | `ERR_NOTONCHANNEL` | You're not in that channel |

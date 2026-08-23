@@ -121,24 +121,41 @@ else
     row_fail 'NICKLEN' "005 advertises '${_adv:-nothing}'"
 fi
 
-len_case() {  # <nick> <expected>
-    if reg "$1" | grep -aqF " 001 $2 "; then
-        row_pass "$1" "${#1} chars -> '$2'"
+# A nick of exactly NICKLEN registers; anything past it draws 432. The server
+# used to truncate here instead -- see the NickLength note in
+# tests/test_conformance.cpp for why that was reversed.
+len_ok() {  # <nick> — must register under its own name
+    if reg "$1" | grep -aqF " 001 $1 "; then
+        row_pass "$1" "${#1} chars -> registers"
     else
-        row_fail "$1" "${#1} chars -> expected '$2'"
+        row_fail "$1" "${#1} chars -> expected to register as '$1'"
     fi
 }
-len_case 'abcdefghi'   'abcdefghi'   # exactly 9
-len_case 'abcdefghij'  'abcdefghi'   # 10, truncated
-len_case 'probeclient' 'probeclie'   # 11, the classic
+len_refused() {  # <nick> — must draw 432 and register nothing
+    _r="$(reg "$1")"
+    if ! printf '%s' "$_r" | grep -aq ' 432 '; then
+        row_fail "$1" "${#1} chars -> expected 432 ERR_ERRONEUSNICKNAME"
+    elif printf '%s' "$_r" | grep -aq ' 001 '; then
+        row_fail "$1" "${#1} chars -> refused but still registered"
+    else
+        row_pass "$1" "${#1} chars -> 432, nothing registered"
+    fi
+}
+len_ok      'abcdefghi'                 # exactly 9, the bound itself
+len_refused 'abcdefghij'                # 10, one over
+len_refused 'probeclient'               # 11, the classic
 
-# Truncation must happen BEFORE the in-use check, or two different over-long
-# nicks collapse onto one name and both register.
-_a="$(probe "PASS $IRC_PASSWORD" "NICK trunctestAA" "USER u 0 * :U" "QUIT")"
-if printf '%s' "$_a" | grep -aqF " 001 trunctest "; then
-    row_pass 'trunctestAA' '11 chars -> trunctest'
+# While the server truncated, two different over-long nicks could shorten onto
+# the same name; whether they collided depended on truncation running before
+# the in-use check. Refusing removes the hazard -- neither name is created, so
+# a 433 here would mean truncation had come back.
+_a="$(reg 'trunctestAA')"
+if printf '%s' "$_a" | grep -aq ' 433 '; then
+    row_fail 'trunctestAA' '433 means an over-long nick was truncated, not refused'
+elif printf '%s' "$_a" | grep -aq ' 432 '; then
+    row_pass 'trunctestAA' '11 chars -> 432, no truncated name to collide over'
 else
-    row_fail 'trunctestAA' 'expected registration as trunctest'
+    row_fail 'trunctestAA' 'expected 432 ERR_ERRONEUSNICKNAME'
 fi
 
 # --- collisions and casemapping --------------------------------------------
