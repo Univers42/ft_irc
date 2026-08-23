@@ -51,6 +51,7 @@ void Channel::setOperator(Client* client, bool op) {
   else
     _operators.erase(client->getFd());
 }
+
 void Channel::removeInvite(Client* client) { _inviteList.erase(client->getFd()); }
 
 std::string Channel::getModeString() const {
