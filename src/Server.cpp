@@ -11,28 +11,27 @@
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
-#include <stdexcept>
 #include <map>
 #include <new>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "IrcCase.hpp"
+#include "IrcTrace.hpp"
+#include "Log.hpp"
+#include "ext/IServerExtension.hpp"
 #include "grammar/EmbeddedGrammarSource.hpp"
 #include "grammar/FileGrammarSource.hpp"
 #include "grammar/GrammarBuilder.hpp"
 #include "grammar/compiled/ProgramMatcher.hpp"
 #include "grammar/interpreted/TreeMatcher.hpp"
-#include "IrcTrace.hpp"
-#include "Log.hpp"
-#include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
 
 bool Server::isRunning = true;
 
-Server::Server(int port, const std::string& password,
-               time_t pendingCloseTimeoutSec)
+Server::Server(int port, const std::string& password, time_t pendingCloseTimeoutSec)
     : _port(port),
       _password(password),
       _serverName(SERVER_NAME),
@@ -48,12 +47,9 @@ Server::Server(int port, const std::string& password,
   addToEpoll(_listenFd, EPOLLIN);
 }
 
-void Server::audit(const std::string& event, const std::string& actor,
-                   const std::string& detail) {
-  for (size_t i = 0; i < _extensions.size(); ++i)
-    _extensions[i]->onAudit(event, actor, detail);
+void Server::audit(const std::string& event, const std::string& actor, const std::string& detail) {
+  for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onAudit(event, actor, detail);
 }
-
 void Server::addExtension(IServerExtension* ext) {
   if (ext) _extensions.push_back(ext);
 }
@@ -75,23 +71,18 @@ void Server::initGrammar() {
   Abnf::EmbeddedGrammarSource embedded;
   Abnf::FileGrammarSource file(grammarPath ? grammarPath : "");
   const Abnf::IGrammarSource& source =
-      grammarPath ? static_cast<const Abnf::IGrammarSource&>(file)
-               : static_cast<const Abnf::IGrammarSource&>(embedded);
+      grammarPath ? static_cast<const Abnf::IGrammarSource&>(file) : static_cast<const Abnf::IGrammarSource&>(embedded);
 
   std::string text;
-  if (!source.read(text))
-    throw std::runtime_error(std::string("cannot read grammar from ") +
-                             source.origin());
+  if (!source.read(text)) throw std::runtime_error(std::string("cannot read grammar from ") + source.origin());
 
   Abnf::GrammarBuilder builder;
   if (!builder.compile(text, _grammar))
-    throw std::runtime_error(std::string("grammar from ") + source.origin() +
-                             ": " + builder.error());
+    throw std::runtime_error(std::string("grammar from ") + source.origin() + ": " + builder.error());
 
   const char* strategy = std::getenv("FT_IRC_MATCHER");
   if (strategy != NULL && std::string(strategy) == "compiled") {
-    Abnf::Compiled::ProgramMatcher* compiled =
-        new Abnf::Compiled::ProgramMatcher(_grammar);
+    Abnf::Compiled::ProgramMatcher* compiled = new Abnf::Compiled::ProgramMatcher(_grammar);
     if (!compiled->compileAll()) {
       const std::string why = compiled->error();
       delete compiled;
@@ -102,15 +93,13 @@ void Server::initGrammar() {
     _matcher = new Abnf::Interpreted::TreeMatcher(_grammar);
   }
   _messageRule = _grammar.ruleIndex("message");
-  if (_messageRule == Abnf::Grammar::kNoRule)
-    throw std::runtime_error("grammar defines no 'message' rule");
+  if (_messageRule == Abnf::Grammar::kNoRule) throw std::runtime_error("grammar defines no 'message' rule");
 
   bindCommandRules();
+  verifyCommandTable(source.origin());
 
-  Log::debug(std::string("grammar: ") + source.origin() + " -> " +
-             _matcher->strategy() + ", " +
-             libcpp::str::to_string(static_cast<int>(_commandRules.size())) +
-             " command productions");
+  Log::debug(std::string("grammar: ") + source.origin() + " -> " + _matcher->strategy() + ", " +
+             libcpp::str::to_string(static_cast<int>(_commandRules.size())) + " command productions");
 }
 
 void Server::bindCommandRules() {
@@ -120,8 +109,7 @@ void Server::bindCommandRules() {
   for (std::size_t i = 0; i < _grammar.ruleCount(); ++i) {
     const std::string& rule = _grammar.ruleName(static_cast<int>(i));
     if (rule.size() <= suffix.size()) continue;
-    if (rule.compare(rule.size() - suffix.size(), suffix.size(), suffix) != 0)
-      continue;
+    if (rule.compare(rule.size() - suffix.size(), suffix.size(), suffix) != 0) continue;
 
     std::string name = rule.substr(0, rule.size() - suffix.size());
     for (std::size_t k = 0; k < name.size(); ++k) {
@@ -130,6 +118,23 @@ void Server::bindCommandRules() {
     }
     _commandRules[name] = static_cast<int>(i);
   }
+}
+
+void Server::verifyCommandTable(const std::string& origin) const {
+  std::vector<std::string> missingHandler;
+  for (std::map<std::string, int>::const_iterator it = _commandRules.begin(); it != _commandRules.end(); ++it)
+    if (findCommand(it->first) == NULL) missingHandler.push_back(it->first);
+
+  std::vector<std::string> missingRule;
+  for (const CommandEntry* entry = kCommands; entry->name != NULL; ++entry)
+    if (_commandRules.find(entry->name) == _commandRules.end()) missingRule.push_back(entry->name);
+
+  if (missingHandler.empty() && missingRule.empty()) return;
+
+  std::string why = "grammar from " + origin + " does not match the command table:";
+  for (size_t i = 0; i < missingHandler.size(); ++i) why += " " + missingHandler[i] + "-cmd has no handler;";
+  for (size_t i = 0; i < missingRule.size(); ++i) why += " " + missingRule[i] + " has no grammar rule;";
+  throw std::runtime_error(why);
 }
 
 int Server::commandRule(const std::string& command) const {
@@ -174,8 +179,7 @@ bool Server::parseLine(const std::string& raw, Message& out) const {
   }
 
   fillParams(result, out);
-  if (result.count("trail") > 0)
-    out.trailingIndex = static_cast<int>(out.params.size()) - 1;
+  if (result.count("trail") > 0) out.trailingIndex = static_cast<int>(out.params.size()) - 1;
   return true;
 }
 
@@ -183,17 +187,13 @@ Server::~Server() {
   delete _matcher;
   _matcher = NULL;
 
-  for (std::vector<IServerExtension*>::reverse_iterator it =
-           _extensions.rbegin();
-       it != _extensions.rend(); ++it)
+  for (std::vector<IServerExtension*>::reverse_iterator it = _extensions.rbegin(); it != _extensions.rend(); ++it)
     delete *it;
-  for (std::map<int, Client*>::iterator it = _clients.begin();
-       it != _clients.end(); ++it) {
+  for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
     close(it->first);
     delete it->second;
   }
-  for (std::map<std::string, Channel*>::iterator it = _channels.begin();
-       it != _channels.end(); ++it) {
+  for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
     delete it->second;
   }
 
@@ -202,14 +202,11 @@ Server::~Server() {
 
 void Server::createListenSocket() {
   _listenFd = socket(AF_INET, SOCK_STREAM, 0);
-  if (_listenFd < 0)
-    throw std::runtime_error("socket() failed: " +
-                             std::string(strerror(errno)));
+  if (_listenFd < 0) throw std::runtime_error("socket() failed: " + std::string(strerror(errno)));
 
   int opt = 1;
   if (setsockopt(_listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-    throw std::runtime_error("setsockopt() failed: " +
-                             std::string(strerror(errno)));
+    throw std::runtime_error("setsockopt() failed: " + std::string(strerror(errno)));
 
   if (fcntl(_listenFd, F_SETFL, O_NONBLOCK) < 0)
     throw std::runtime_error("fcntl() failed: " + std::string(strerror(errno)));
@@ -220,30 +217,22 @@ void Server::createListenSocket() {
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(_port);
 
-  if (bind(_listenFd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) <
-      0)
+  if (bind(_listenFd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0)
     throw std::runtime_error("bind() failed: " + std::string(strerror(errno)));
 
-  if (listen(_listenFd, SOMAXCONN) < 0)
-    throw std::runtime_error("listen() failed: " +
-                             std::string(strerror(errno)));
+  if (listen(_listenFd, SOMAXCONN) < 0) throw std::runtime_error("listen() failed: " + std::string(strerror(errno)));
 }
 
 void Server::createEpoll() {
-  if (!_reactor.open())
-    throw std::runtime_error("epoll_create1() failed: " +
-                             std::string(strerror(errno)));
+  if (!_reactor.open()) throw std::runtime_error("epoll_create1() failed: " + std::string(strerror(errno)));
 }
 
 void Server::addToEpoll(int fd, uint32_t events) {
-  if (!_reactor.add(fd, events))
-    throw std::runtime_error("epoll_ctl ADD failed: " +
-                             std::string(strerror(errno)));
+  if (!_reactor.add(fd, events)) throw std::runtime_error("epoll_ctl ADD failed: " + std::string(strerror(errno)));
 }
 
 void Server::modifyEpoll(int fd, uint32_t events) {
-  if (!_reactor.modify(fd, events))
-    Log::error(std::string("epoll_ctl MOD failed: ") + strerror(errno));
+  if (!_reactor.modify(fd, events)) Log::error(std::string("epoll_ctl MOD failed: ") + strerror(errno));
 }
 
 void Server::removeFromEpoll(int fd) {
@@ -256,15 +245,13 @@ void Server::run() {
 
   Log::banner("ft_irc - listening on port " + libcpp::str::to_string(_port));
 
-  for (size_t i = 0; i < _extensions.size(); ++i)
-    _extensions[i]->onServerStart(*this);
+  for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onServerStart(*this);
 
   while (isRunning) {
     int nfds = epoll_wait(_reactor.fd(), events, MAX_EVENTS, 1000);
     if (nfds < 0) {
       if (errno == EINTR) continue;
-      throw std::runtime_error("epoll_wait() failed: " +
-                               std::string(strerror(errno)));
+      throw std::runtime_error("epoll_wait() failed: " + std::string(strerror(errno)));
     }
 
     for (int i = 0; i < nfds; ++i) {
@@ -276,10 +263,8 @@ void Server::run() {
       } else if (_clients.count(fd)) {
         if (ev & EPOLLIN) handleClientInput(fd);
         if ((ev & EPOLLOUT) && _clients.count(fd)) handleClientOutput(fd);
-        if ((ev & (EPOLLERR | EPOLLHUP)) && _clients.count(fd))
-
-          disconnectClientNow(fd, "Connection error");
-      } else if (!dispatchExtensionFd(fd, ev)) {
+        if ((ev & (EPOLLERR | EPOLLHUP)) && _clients.count(fd)) disconnectClientNow(fd, "Connection error");
+      } else {
         removeFromEpoll(fd);
       }
     }
@@ -288,31 +273,18 @@ void Server::run() {
     checkPendingCloseTimeouts();
 
     time_t now = std::time(NULL);
-    for (size_t i = 0; i < _extensions.size(); ++i)
-      _extensions[i]->onTick(*this, now);
+    for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onTick(*this, now);
 
-    for (std::map<int, Client*>::iterator it = _clients.begin();
-         it != _clients.end(); ++it)
+    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it)
       updateEpollInterest(it->second);
   }
-}
-
-bool Server::dispatchExtensionFd(int fd, uint32_t events) {
-  for (size_t i = 0; i < _extensions.size(); ++i) {
-    if (_extensions[i]->ownsFd(fd)) {
-      _extensions[i]->onFdEvent(*this, fd, events);
-      return true;
-    }
-  }
-  return false;
 }
 
 void Server::acceptClient() {
   struct sockaddr_in clientAddr;
   socklen_t addrLen = sizeof(clientAddr);
 
-  int clientFd = accept(
-      _listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
+  int clientFd = accept(_listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
   if (clientFd < 0) return;
 
   if (_clients.size() >= MAX_CLIENTS) {
@@ -342,8 +314,7 @@ void Server::acceptClient() {
   _epollMask[clientFd] = EPOLLIN;
 
   IrcTrace::sessionOpen(clientFd, hostname);
-  Log::info("new connection from " + hostname + " (fd " +
-            libcpp::str::to_string(clientFd) + ")");
+  Log::info("new connection from " + hostname + " (fd " + libcpp::str::to_string(clientFd) + ")");
 }
 
 void Server::handleClientInput(int fd) {
@@ -387,8 +358,7 @@ void Server::handleClientOutput(int fd) {
   client->clearSendBuffer(bytesSent);
 
   if (client->isPendingClose()) {
-    if (!client->hasPendingData() || client->isSendQExceeded())
-      finalizeDisconnect(fd);
+    if (!client->hasPendingData() || client->isSendQExceeded()) finalizeDisconnect(fd);
     return;
   }
 
@@ -420,8 +390,7 @@ void Server::handleMessage(Client* client, const std::string& raw) {
 void Server::updateEpollInterest(Client* client) {
   int fd = client->getFd();
 
-  uint32_t want = (client->isPendingClose() ? 0u : EPOLLIN) |
-                  (client->hasPendingData() ? EPOLLOUT : 0u);
+  uint32_t want = (client->isPendingClose() ? 0u : EPOLLIN) | (client->hasPendingData() ? EPOLLOUT : 0u);
   std::map<int, uint32_t>::iterator it = _epollMask.find(fd);
   if (it != _epollMask.end() && it->second == want) return;
   modifyEpoll(fd, want);
@@ -435,8 +404,7 @@ void Server::checkTimeouts() {
 
   std::vector<int> sendQNow;
   std::vector<int> pingTimeoutDeferred;
-  for (std::map<int, Client*>::iterator it = _clients.begin();
-       it != _clients.end(); ++it) {
+  for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
     Client* client = it->second;
 
     if (client->isPendingClose()) continue;
@@ -452,19 +420,15 @@ void Server::checkTimeouts() {
     }
   }
 
-  for (size_t i = 0; i < sendQNow.size(); ++i)
-    disconnectClientNow(sendQNow[i], "SendQ exceeded");
-  for (size_t i = 0; i < pingTimeoutDeferred.size(); ++i)
-    disconnectClient(pingTimeoutDeferred[i], "Ping timeout");
+  for (size_t i = 0; i < sendQNow.size(); ++i) disconnectClientNow(sendQNow[i], "SendQ exceeded");
+  for (size_t i = 0; i < pingTimeoutDeferred.size(); ++i) disconnectClient(pingTimeoutDeferred[i], "Ping timeout");
 }
 
 void Server::checkPendingCloseTimeouts() {
   time_t now = std::time(NULL);
   std::vector<int> expired;
-  for (std::map<int, Client*>::iterator it = _clients.begin();
-       it != _clients.end(); ++it) {
-    if (it->second->isPendingClose() &&
-        now - it->second->getPendingCloseSince() >= _pendingCloseTimeoutSec)
+  for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+    if (it->second->isPendingClose() && now - it->second->getPendingCloseSince() >= _pendingCloseTimeoutSec)
       expired.push_back(it->first);
   }
   for (size_t i = 0; i < expired.size(); ++i) {
@@ -476,31 +440,38 @@ void Server::checkPendingCloseTimeouts() {
   }
 }
 
-void Server::dispatchCommand(Client* client, const Message& msg) {
-  const std::string& cmd = msg.command;
+const Server::CommandEntry Server::kCommands[] = {
+    {"CAP", &Server::cmdCap, false},
+    {"PASS", &Server::cmdPass, false},
+    {"NICK", &Server::cmdNick, false},
+    {"USER", &Server::cmdUser, false},
+    {"QUIT", &Server::cmdQuit, false},
+    {"PONG", &Server::cmdPong, false},
+    {"PING", &Server::cmdPing, true},
+    {"JOIN", &Server::cmdJoin, true},
+    {"PART", &Server::cmdPart, true},
+    {"PRIVMSG", &Server::cmdPrivmsg, true},
+    {"NOTICE", &Server::cmdNotice, true},
+    {"KICK", &Server::cmdKick, true},
+    {"INVITE", &Server::cmdInvite, true},
+    {"TOPIC", &Server::cmdTopic, true},
+    {"MODE", &Server::cmdMode, true},
+    {"WHO", &Server::cmdWho, true},
+    {"WHOIS", &Server::cmdWhois, true},
+    {"USERHOST", &Server::cmdUserhost, true},
+    {NULL, NULL, false}};
 
-  if (cmd == "CAP") {
-    cmdCap(client, msg);
-    return;
-  }
-  if (cmd == "PASS") {
-    cmdPass(client, msg);
-    return;
-  }
-  if (cmd == "NICK") {
-    cmdNick(client, msg);
-    return;
-  }
-  if (cmd == "USER") {
-    cmdUser(client, msg);
-    return;
-  }
-  if (cmd == "QUIT") {
-    cmdQuit(client, msg);
-    return;
-  }
-  if (cmd == "PONG") {
-    cmdPong(client, msg);
+const Server::CommandEntry* Server::findCommand(const std::string& name) {
+  for (const CommandEntry* entry = kCommands; entry->name != NULL; ++entry)
+    if (name == entry->name) return entry;
+  return NULL;
+}
+
+void Server::dispatchCommand(Client* client, const Message& msg) {
+  const CommandEntry* entry = findCommand(msg.command);
+
+  if (entry != NULL && !entry->needsRegistration) {
+    (this->*entry->handler)(client, msg);
     return;
   }
 
@@ -509,52 +480,8 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
     return;
   }
 
-  if (cmd == "PING") {
-    cmdPing(client, msg);
-    return;
-  }
-  if (cmd == "JOIN") {
-    cmdJoin(client, msg);
-    return;
-  }
-  if (cmd == "PART") {
-    cmdPart(client, msg);
-    return;
-  }
-  if (cmd == "PRIVMSG") {
-    cmdPrivmsg(client, msg);
-    return;
-  }
-  if (cmd == "NOTICE") {
-    cmdNotice(client, msg);
-    return;
-  }
-  if (cmd == "KICK") {
-    cmdKick(client, msg);
-    return;
-  }
-  if (cmd == "INVITE") {
-    cmdInvite(client, msg);
-    return;
-  }
-  if (cmd == "TOPIC") {
-    cmdTopic(client, msg);
-    return;
-  }
-  if (cmd == "MODE") {
-    cmdMode(client, msg);
-    return;
-  }
-  if (cmd == "WHO") {
-    cmdWho(client, msg);
-    return;
-  }
-  if (cmd == "WHOIS") {
-    cmdWhois(client, msg);
-    return;
-  }
-  if (cmd == "USERHOST") {
-    cmdUserhost(client, msg);
+  if (entry != NULL) {
+    (this->*entry->handler)(client, msg);
     return;
   }
 
@@ -562,7 +489,7 @@ void Server::dispatchCommand(Client* client, const Message& msg) {
     if (_extensions[i]->onCommand(*this, *client, msg)) return;
   }
 
-  sendReply(client, ERR_UNKNOWNCOMMAND, cmd + " :Unknown command");
+  sendReply(client, ERR_UNKNOWNCOMMAND, msg.command + " :Unknown command");
 }
 
 Client* Server::findClientByFd(int fd) const {
@@ -571,18 +498,15 @@ Client* Server::findClientByFd(int fd) const {
 }
 
 Client* Server::findClientByNick(const std::string& nickname) const {
-  for (std::map<int, Client*>::const_iterator it = _clients.begin();
-       it != _clients.end(); ++it) {
+  for (std::map<int, Client*>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
     if (!it->second->isRegistered() || it->second->isTearingDown()) continue;
     if (ircEquals(it->second->getNickname(), nickname)) return it->second;
   }
   return NULL;
 }
 
-bool Server::isNickInUse(const std::string& nickname,
-                         const Client* except) const {
-  for (std::map<int, Client*>::const_iterator it = _clients.begin();
-       it != _clients.end(); ++it) {
+bool Server::isNickInUse(const std::string& nickname, const Client* except) const {
+  for (std::map<int, Client*>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
     if (it->second == except || it->second->isTearingDown()) continue;
     if (ircEquals(it->second->getNickname(), nickname)) return true;
   }
@@ -593,10 +517,8 @@ void Server::sendToClient(Client* client, const std::string& msg) {
   client->queueMessage(":" + _serverName + " " + msg);
 }
 
-void Server::sendReply(Client* client, const std::string& numeric,
-                       const std::string& params) {
-  client->queueMessage(":" + _serverName + " " + numeric + " " +
-                       client->getNickname() + " " + params);
+void Server::sendReply(Client* client, const std::string& numeric, const std::string& params) {
+  client->queueMessage(":" + _serverName + " " + numeric + " " + client->getNickname() + " " + params);
 }
 
 void Server::teardownClientState(Client* client, const std::string& reason) {
@@ -609,8 +531,7 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
 
   std::set<int> alreadySent;
   alreadySent.insert(fd);
-  for (std::map<std::string, Channel*>::iterator it = _channels.begin();
-       it != _channels.end();) {
+  for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end();) {
     Channel* chan = it->second;
 
     chan->removeInvite(client);
@@ -632,12 +553,10 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
     ++it;
   }
 
-  for (size_t i = 0; i < _extensions.size(); ++i)
-    _extensions[i]->onClientDisconnect(*this, *client, reason);
+  for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onClientDisconnect(*this, *client, reason);
 
   IrcTrace::sessionClose(fd, client->getNickname(), reason);
-  Log::info("client disconnected: " + client->getNickname() + " (" + reason +
-            ")");
+  Log::info("client disconnected: " + client->getNickname() + " (" + reason + ")");
   audit("disconnect", client->getNickname(), reason);
 }
 
@@ -654,8 +573,7 @@ void Server::disconnectClient(int fd, const std::string& reason) {
   if (cit == _clients.end()) return;
 
   Client* client = cit->second;
-  if (client->isTearingDown())
-    return;
+  if (client->isTearingDown()) return;
 
   teardownClientState(client, reason);
   if (!client->hasPendingData()) {
@@ -674,16 +592,14 @@ void Server::disconnectClientNow(int fd, const std::string& reason) {
     finalizeDisconnect(fd);
     return;
   }
-  if (client->isTearingDown())
-    return;
+  if (client->isTearingDown()) return;
 
   teardownClientState(client, reason);
   finalizeDisconnect(fd);
 }
 
 Channel* Server::findChannel(const std::string& name) const {
-  std::map<std::string, Channel*>::const_iterator it =
-      _channels.find(ircToLower(name));
+  std::map<std::string, Channel*>::const_iterator it = _channels.find(ircToLower(name));
   if (it != _channels.end()) return it->second;
   return NULL;
 }
@@ -701,8 +617,7 @@ Channel* Server::createChannel(const std::string& name, Client* creator) {
 }
 
 void Server::removeChannel(const std::string& name) {
-  std::map<std::string, Channel*>::iterator it =
-      _channels.find(ircToLower(name));
+  std::map<std::string, Channel*>::iterator it = _channels.find(ircToLower(name));
   if (it != _channels.end()) {
     delete it->second;
     _channels.erase(it);
@@ -715,16 +630,14 @@ bool Server::isValidNickname(const std::string& nick) const {
   if (nick.empty()) return false;
 
   char first = nick[0];
-  if (!std::isalpha(static_cast<unsigned char>(first)) && first != '[' &&
-      first != ']' && first != '{' && first != '}' && first != '\\' &&
-      first != '|' && first != '^' && first != '_')
+  if (!std::isalpha(static_cast<unsigned char>(first)) && first != '[' && first != ']' && first != '{' &&
+      first != '}' && first != '\\' && first != '|' && first != '^' && first != '_')
     return false;
 
   for (size_t i = 1; i < nick.size(); ++i) {
     char c = nick[i];
-    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '[' && c != ']' &&
-        c != '{' && c != '}' && c != '\\' && c != '|' && c != '^' && c != '_' &&
-        c != '-')
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '[' && c != ']' && c != '{' && c != '}' && c != '\\' &&
+        c != '|' && c != '^' && c != '_' && c != '-')
       return false;
   }
   return true;
@@ -745,8 +658,7 @@ void Server::broadcastToChannels(Client* client, const std::string& msg) {
   std::set<int> alreadySent;
   alreadySent.insert(client->getFd());
 
-  for (std::map<std::string, Channel*>::iterator it = _channels.begin();
-       it != _channels.end(); ++it) {
+  for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
     Channel* chan = it->second;
     if (!chan->isMember(client)) continue;
     std::vector<Client*> members = chan->getMembers();

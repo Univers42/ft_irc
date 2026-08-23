@@ -9,18 +9,17 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "Message.hpp"
+#include "Replies.hpp"
 #include "grammar/Grammar.hpp"
 #include "grammar/IMatcher.hpp"
 #include "grammar/MatchResult.hpp"
-#include "Replies.hpp"
 #include "libcpp98/reactor.hpp"
 
 class IServerExtension;
 
 class Server {
  public:
-  Server(int port, const std::string& password,
-         time_t pendingCloseTimeoutSec = PENDING_CLOSE_TIMEOUT);
+  Server(int port, const std::string& password, time_t pendingCloseTimeoutSec = PENDING_CLOSE_TIMEOUT);
   ~Server();
 
   void run();
@@ -37,11 +36,9 @@ class Server {
 
   const std::string& getServerName() const;
 
-  void sendReply(Client* client, const std::string& numeric,
-                 const std::string& params);
+  void sendReply(Client* client, const std::string& numeric, const std::string& params);
 
-  void audit(const std::string& event, const std::string& actor,
-             const std::string& detail);
+  void audit(const std::string& event, const std::string& actor, const std::string& detail);
 
   void addExtension(IServerExtension* ext);
 
@@ -68,7 +65,6 @@ class Server {
   void checkTimeouts();
   void checkPendingCloseTimeouts();
   void updateEpollInterest(Client* client);
-  bool dispatchExtensionFd(int fd, uint32_t events);
 
   void teardownClientState(Client* client, const std::string& reason);
 
@@ -76,16 +72,27 @@ class Server {
 
   void finalizeDisconnect(int fd);
 
+  typedef void (Server::*CommandHandler)(Client* client, const Message& msg);
+
+  struct CommandEntry {
+    const char* name;
+    CommandHandler handler;
+    bool needsRegistration;
+  };
+
+  static const CommandEntry kCommands[];
+  static const CommandEntry* findCommand(const std::string& name);
+
   void dispatchCommand(Client* client, const Message& msg);
   void partAllChannels(Client* client);
 
   void initGrammar();
   void bindCommandRules();
+  void verifyCommandTable(const std::string& origin) const;
   int commandRule(const std::string& command) const;
   bool parseLine(const std::string& raw, Message& out) const;
   std::string firstToken(const std::string& raw) const;
-  void fillParams(const Abnf::MatchResult& fields,
-                  Message& out) const;
+  void fillParams(const Abnf::MatchResult& fields, Message& out) const;
 
   void cmdCap(Client* client, const Message& msg);
   void cmdPass(Client* client, const Message& msg);
