@@ -75,15 +75,6 @@ static void broadcastModeChanges(Channel* channel, const std::string& prefix, co
   for (size_t i = 0; i < lines.size(); ++i) channel->broadcastMessage(lines[i], NULL);
 }
 
-static bool isValidChannelKey(const std::string& key) {
-  if (key.empty() || key.size() > MAX_KEYLEN) return false;
-  for (std::string::size_type i = 0; i < key.size(); ++i) {
-    unsigned char c = static_cast<unsigned char>(key[i]);
-    if (c <= ' ' || c == ',') return false;
-  }
-  return true;
-}
-
 void Server::cmdKick(Client* client, const Message& msg) {
   if (!msg.matched()) {
     replyNeedMoreParams(client, "KICK");

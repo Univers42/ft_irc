@@ -462,11 +462,7 @@ const Server::CommandEntry Server::kCommands[] = {
     {NULL, NULL, false},
 };
 
-const Server::CommandEntry* Server::findCommand(const std::string& name) {
-  for (const CommandEntry* entry = kCommands; entry->name != NULL; ++entry)
-    if (name == entry->name) return entry;
-  return NULL;
-}
+const Server::CommandEntry* Server::findCommand(const std::string& name) { return Dispatch::find(kCommands, name); }
 
 void Server::replyNeedMoreParams(Client* client, const std::string& command) {
   sendReply(client, ERR_NEEDMOREPARAMS, command + " :Not enough parameters");
@@ -649,20 +645,29 @@ void Server::removeChannel(const std::string& name) {
 
 const std::string& Server::getServerName() const { return _serverName; }
 
+static bool isAsciiAlpha(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+static bool isAsciiDigit(char c) { return c >= '0' && c <= '9'; }
+
+static bool isNickSpecial(char c) {
+  const unsigned char u = static_cast<unsigned char>(c);
+  return (u >= 0x5B && u <= 0x60) || (u >= 0x7B && u <= 0x7D);
+}
+
+static bool isNickLead(char c) { return isAsciiAlpha(c) || isNickSpecial(c); }
+
+static bool isNickBody(char c) {
+  return isAsciiAlpha(c) || isAsciiDigit(c) || isNickSpecial(c) || c == '-';
+}
+
 bool Server::isValidNickname(const std::string& nick) const {
   if (nick.empty()) return false;
 
-  char first = nick[0];
-  if (!std::isalpha(static_cast<unsigned char>(first)) && first != '[' && first != ']' && first != '{' &&
-      first != '}' && first != '\\' && first != '|' && first != '^' && first != '_')
-    return false;
-
-  for (size_t i = 1; i < nick.size(); ++i) {
-    char c = nick[i];
-    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '[' && c != ']' && c != '{' && c != '}' && c != '\\' &&
-        c != '|' && c != '^' && c != '_' && c != '-')
-      return false;
-  }
+  if (!isNickLead(nick[0])) return false;
+  for (size_t i = 1; i < nick.size(); ++i)
+    if (!isNickBody(nick[i])) return false;
   return true;
 }
 
@@ -673,6 +678,17 @@ bool Server::isValidChannelName(const std::string& name) const {
 
   for (size_t i = 0; i < name.size(); ++i) {
     if (name[i] == ' ' || name[i] == '\x07' || name[i] == ',') return false;
+    if (name[i] == ':') return false;
+  }
+  return true;
+}
+
+bool Server::isValidChannelKey(const std::string& key) const {
+  if (key.empty() || key.size() > MAX_KEYLEN) return false;
+  for (std::string::size_type i = 0; i < key.size(); ++i) {
+    const unsigned char c = static_cast<unsigned char>(key[i]);
+    if (c <= ' ' || c == ',') return false;
+    if (c > 0x7F) return false;
   }
   return true;
 }

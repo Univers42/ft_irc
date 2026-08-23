@@ -38,7 +38,8 @@ void Server::cmdJoin(Client* client, const Message& msg) {
         continue;
       }
 
-      if (!chan->getKey().empty() && chan->getKey() != key) {
+      if (!chan->getKey().empty() &&
+          (!isValidChannelKey(key) || chan->getKey() != key)) {
         sendReply(client, ERR_BADCHANNELKEY, name + " :Cannot join channel (+k)");
         continue;
       }

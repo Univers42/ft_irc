@@ -8,6 +8,7 @@
 
 #include "Channel.hpp"
 #include "Client.hpp"
+#include "Dispatch.hpp"
 #include "Message.hpp"
 #include "Replies.hpp"
 #include "grammar/Grammar.hpp"
@@ -127,6 +128,7 @@ class Server {
 
   bool isValidNickname(const std::string& nick) const;
   bool isValidChannelName(const std::string& name) const;
+  bool isValidChannelKey(const std::string& key) const;
   void broadcastToChannels(Client* client, const std::string& msg);
 
   int _port;
