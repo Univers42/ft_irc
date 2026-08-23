@@ -8,6 +8,7 @@
 
 #include "Client.hpp"
 #include "IrcCase.hpp"
+#include "IrcMessage.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "Settings.hpp"
@@ -191,8 +192,9 @@ void FileTransferExt::cmdSend(Server& server, Client& client, const Message& msg
   t.lastActivity = std::time(NULL);
   _transfers[id] = t;
 
-  recipient->queueMessage(":" + client.getPrefix() + " FILE OFFER " + libcpp::str::to_string(id) + " " + filename +
-                          " " + libcpp::str::to_string(size));
+  recipient->queueMessage(
+      IrcMessage::relay(client.getPrefix(), "FILE",
+                        "OFFER " + libcpp::str::to_string(id) + " " + filename + " " + libcpp::str::to_string(size)));
   notice(server, client, "FILE " + libcpp::str::to_string(id) + " offered to " + nick);
   server.audit("file-offer", client.getNickname(), nick + " " + filename + " " + libcpp::str::to_string(size));
 }
@@ -219,10 +221,10 @@ void FileTransferExt::cmdAnswer(Server& server, Client& client, const Message& m
   t->lastActivity = std::time(NULL);
   if (accept) {
     t->accepted = true;
-    sender->queueMessage(":" + client.getPrefix() + " FILE OK " + libcpp::str::to_string(id));
+    sender->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "OK " + libcpp::str::to_string(id)));
     server.audit("file-accept", client.getNickname(), t->filename);
   } else {
-    sender->queueMessage(":" + client.getPrefix() + " FILE NO " + libcpp::str::to_string(id));
+    sender->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "NO " + libcpp::str::to_string(id)));
     server.audit("file-reject", client.getNickname(), t->filename);
     _transfers.erase(id);
   }
@@ -272,7 +274,7 @@ void FileTransferExt::cmdData(Server& server, Client& client, const Message& msg
 
   t->relayedBytes += decodedBytes(chunk);
   t->lastActivity = std::time(NULL);
-  recipient->queueMessage(":" + client.getPrefix() + " FILE DATA " + msg.params[1] + " " + chunk);
+  recipient->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "DATA " + msg.params[1] + " " + chunk));
 }
 
 void FileTransferExt::cmdEnd(Server& server, Client& client, const Message& msg) {
@@ -289,8 +291,8 @@ void FileTransferExt::cmdEnd(Server& server, Client& client, const Message& msg)
 
   Client* recipient = server.findClientByFd(t->recipientFd);
   if (recipient)
-    recipient->queueMessage(":" + client.getPrefix() + " FILE END " + msg.params[1] + " " +
-                            libcpp::str::to_string(t->relayedBytes));
+    recipient->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE",
+                                              "END " + msg.params[1] + " " + libcpp::str::to_string(t->relayedBytes)));
   server.audit("file-end", client.getNickname(), t->filename + " " + libcpp::str::to_string(t->relayedBytes));
   _transfers.erase(id);
 }

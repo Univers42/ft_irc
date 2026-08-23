@@ -3,6 +3,7 @@
 
 #include "ChannelModes.hpp"
 #include "IrcCase.hpp"
+#include "IrcMessage.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
@@ -71,7 +72,7 @@ static std::vector<std::string> renderModeLines(const std::string& head, const s
 }
 
 static void broadcastModeChanges(Channel* channel, const std::string& prefix, const std::vector<ModeChange>& applied) {
-  const std::string head = ":" + prefix + " MODE " + channel->getName() + " ";
+  const std::string head = IrcMessage::relay(prefix, "MODE", channel->getName()) + " ";
   const std::vector<std::string> lines = renderModeLines(head, applied);
   for (size_t i = 0; i < lines.size(); ++i) channel->broadcastMessage(lines[i], NULL);
 }
@@ -99,7 +100,7 @@ void Server::cmdKick(Client* client, const Message& msg) {
   }
 
   std::string kickMsg =
-      ":" + client->getPrefix() + " KICK " + chan->getName() + " " + targetClient->getNickname() + " :" + reason;
+      IrcMessage::relay(client->getPrefix(), "KICK", chan->getName() + " " + targetClient->getNickname(), reason);
   chan->broadcastMessage(kickMsg, NULL);
   chan->removeMember(targetClient);
 
@@ -135,7 +136,7 @@ void Server::cmdInvite(Client* client, const Message& msg) {
 
   sendReply(client, RPL_INVITING, target, chanName);
 
-  targetClient->queueMessage(":" + client->getPrefix() + " INVITE " + target + " :" + chanName);
+  targetClient->queueMessage(IrcMessage::relay(client->getPrefix(), "INVITE", target, chanName));
 }
 
 void Server::cmdTopic(Client* client, const Message& msg) {
@@ -166,7 +167,7 @@ void Server::cmdTopic(Client* client, const Message& msg) {
   if (newTopic.size() > Limits::kTopicLen) newTopic.erase(Limits::kTopicLen);
   chan->setTopic(newTopic, client->getNickname());
 
-  chan->broadcastMessage(":" + client->getPrefix() + " TOPIC " + chan->getName() + " :" + newTopic, NULL);
+  chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "TOPIC", chan->getName(), newTopic), NULL);
 }
 
 void Server::cmdMode(Client* client, const Message& msg) {
@@ -243,7 +244,7 @@ void Server::handleUserMode(Client* client, const Message& msg) {
   }
 
   if (!applied.empty()) {
-    const std::string head = ":" + client->getPrefix() + " MODE " + client->getNickname() + " ";
+    const std::string head = IrcMessage::relay(client->getPrefix(), "MODE", client->getNickname()) + " ";
     const std::vector<std::string> lines = renderModeLines(head, applied);
     for (size_t i = 0; i < lines.size(); ++i) client->queueMessage(lines[i]);
   }

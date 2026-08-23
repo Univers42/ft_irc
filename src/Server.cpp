@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "IrcCase.hpp"
+#include "IrcMessage.hpp"
 #include "IrcTrace.hpp"
 #include "Limits.hpp"
 #include "Log.hpp"
@@ -589,7 +590,7 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
 
   int fd = client->getFd();
   std::string prefix = client->getPrefix();
-  std::string quitMsg = ":" + prefix + " QUIT :" + reason;
+  std::string quitMsg = IrcMessage::relay(prefix, "QUIT", "", reason);
 
   std::set<int> alreadySent;
   alreadySent.insert(fd);

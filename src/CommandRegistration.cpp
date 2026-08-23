@@ -1,6 +1,7 @@
 #include <string>
 
 #include "IrcCase.hpp"
+#include "IrcMessage.hpp"
 #include "IrcTrace.hpp"
 #include "Limits.hpp"
 #include "Log.hpp"
@@ -64,7 +65,7 @@ void Server::cmdNick(Client* client, const Message& msg) {
 
   if (client->isRegistered()) {
     std::string oldPrefix = client->getPrefix();
-    std::string nickMsg = ":" + oldPrefix + " NICK :" + nick;
+    std::string nickMsg = IrcMessage::relay(oldPrefix, "NICK", "", nick);
 
     client->queueMessage(nickMsg);
 

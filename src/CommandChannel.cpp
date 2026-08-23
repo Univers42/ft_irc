@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 
+#include "IrcMessage.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
@@ -59,7 +60,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
       }
     }
 
-    chan->broadcastMessage(":" + client->getPrefix() + " JOIN " + chan->getName(), NULL);
+    chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "JOIN", chan->getName()), NULL);
     audit("join", client->getNickname(), name);
     for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onJoin(*this, *client, *chan);
 
@@ -102,8 +103,9 @@ void Server::cmdPart(Client* client, const Message& msg) {
     if (!chan) continue;
     if (!requireMember(client, chan, chanName)) continue;
 
-    std::string partMsg = ":" + client->getPrefix() + " PART " + chan->getName();
-    if (!reason.empty()) partMsg += " :" + reason;
+    const std::string partMsg = reason.empty()
+                                    ? IrcMessage::relay(client->getPrefix(), "PART", chan->getName())
+                                    : IrcMessage::relay(client->getPrefix(), "PART", chan->getName(), reason);
 
     chan->broadcastMessage(partMsg, NULL);
     audit("part", client->getNickname(), chanName);
@@ -123,7 +125,7 @@ void Server::partAllChannels(Client* client) {
     Channel* chan = findChannel(names[i]);
     if (chan == NULL) continue;
 
-    const std::string partMsg = ":" + client->getPrefix() + " PART " + chan->getName();
+    const std::string partMsg = IrcMessage::relay(client->getPrefix(), "PART", chan->getName());
 
     chan->broadcastMessage(partMsg, NULL);
     audit("part", client->getNickname(), names[i]);

@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "IrcCase.hpp"
+#include "IrcMessage.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
@@ -31,7 +32,7 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
         sendReply(client, ERR_CANNOTSENDTOCHAN, target);
         continue;
       }
-      chan->broadcastMessage(":" + client->getPrefix() + " PRIVMSG " + target + " :" + text, client);
+      chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "PRIVMSG", target, text), client);
     } else {
       bool handled = false;
       for (size_t k = 0; k < _extensions.size() && !handled; ++k)
@@ -43,7 +44,7 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
         sendReply(client, ERR_NOSUCHNICK, target);
         continue;
       }
-      dest->queueMessage(":" + client->getPrefix() + " PRIVMSG " + target + " :" + text);
+      dest->queueMessage(IrcMessage::relay(client->getPrefix(), "PRIVMSG", target, text));
     }
   }
 }
@@ -61,11 +62,11 @@ void Server::cmdNotice(Client* client, const Message& msg) {
     if (target[0] == '#') {
       Channel* chan = findChannel(target);
       if (!chan || !chan->isMember(client)) continue;
-      chan->broadcastMessage(":" + client->getPrefix() + " NOTICE " + target + " :" + text, client);
+      chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "NOTICE", target, text), client);
     } else {
       Client* dest = findClientByNick(target);
       if (!dest) continue;
-      dest->queueMessage(":" + client->getPrefix() + " NOTICE " + target + " :" + text);
+      dest->queueMessage(IrcMessage::relay(client->getPrefix(), "NOTICE", target, text));
     }
   }
 }
