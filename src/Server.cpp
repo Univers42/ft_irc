@@ -98,8 +98,8 @@ void Server::initGrammar() {
   bindCommandRules();
   verifyCommandTable(source.origin());
 
-  Log::debug(std::string("grammar: ") + source.origin() + " -> " + _matcher->strategy() + ", " +
-             libcpp::str::to_string(static_cast<int>(_commandRules.size())) + " command productions");
+  Log::debug() << "grammar: " << source.origin() << " -> " << _matcher->strategy() << ", " << _grammar << ", "
+               << _commandRules.size() << " command productions";
 }
 
 void Server::bindCommandRules() {
@@ -232,18 +232,18 @@ void Server::addToEpoll(int fd, uint32_t events) {
 }
 
 void Server::modifyEpoll(int fd, uint32_t events) {
-  if (!_reactor.modify(fd, events)) Log::error(std::string("epoll_ctl MOD failed: ") + strerror(errno));
+  if (!_reactor.modify(fd, events)) Log::error() << "epoll_ctl MOD failed: " << strerror(errno);
 }
 
 void Server::removeFromEpoll(int fd) {
   if (!_reactor.remove(fd) && errno != ENOENT && errno != EBADF)
-    Log::error(std::string("epoll_ctl DEL failed: ") + strerror(errno));
+    Log::error() << "epoll_ctl DEL failed: " << strerror(errno);
 }
 
 void Server::run() {
   struct epoll_event events[MAX_EVENTS];
 
-  Log::banner("ft_irc - listening on port " + libcpp::str::to_string(_port));
+  Log::banner() << "ft_irc - listening on port " << _port;
 
   for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onServerStart(*this);
 
@@ -294,7 +294,7 @@ void Server::acceptClient() {
   }
 
   if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
-    Log::error(std::string("fcntl() failed on client fd: ") + strerror(errno));
+    Log::error() << "fcntl() failed on client fd: " << strerror(errno);
     close(clientFd);
     return;
   }
@@ -314,7 +314,7 @@ void Server::acceptClient() {
   _epollMask[clientFd] = EPOLLIN;
 
   IrcTrace::sessionOpen(clientFd, hostname);
-  Log::info("new connection from " + hostname + " (fd " + libcpp::str::to_string(clientFd) + ")");
+  Log::info() << "new connection from " << hostname << " (fd " << clientFd << ")";
 }
 
 void Server::handleClientInput(int fd) {
@@ -384,6 +384,7 @@ void Server::handleMessage(Client* client, const std::string& raw) {
 
   if (msg.command.empty()) return;
 
+  Log::trace() << "parsed: " << msg;
   dispatchCommand(client, msg);
 }
 
@@ -575,7 +576,7 @@ void Server::teardownClientState(Client* client, const std::string& reason) {
   for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onClientDisconnect(*this, *client, reason);
 
   IrcTrace::sessionClose(fd, client->getNickname(), reason);
-  Log::info("client disconnected: " + client->getNickname() + " (" + reason + ")");
+  Log::info() << "client disconnected: " << *client << " (" << reason << ")";
   audit("disconnect", client->getNickname(), reason);
 }
 
@@ -628,7 +629,7 @@ Channel* Server::createChannel(const std::string& name, Client* creator) {
   try {
     channel = new Channel(name, creator);
   } catch (const std::bad_alloc&) {
-    Log::error("out of memory: cannot create channel " + name);
+    Log::error() << "out of memory: cannot create channel " << name;
     return NULL;
   }
   _channels[ircToLower(name)] = channel;

@@ -95,33 +95,33 @@ void Log::configureFromEnv() {
   if (entry != NULL) g_level = entry->level;
 }
 
-void Log::banner(const std::string& title) {
-  if (enabled(LOG_ERROR)) render('b', title);
+Log::Stream::Stream(char kind, Level required) : _out(NULL), _kind(kind) {
+  if (enabled(required)) _out = new std::ostringstream();
 }
 
-void Log::info(const std::string& msg) {
-  if (enabled(LOG_INFO)) render('i', msg);
+Log::Stream::Stream(const Stream& other) : _out(other._out), _kind(other._kind) { other._out = NULL; }
+
+Log::Stream::~Stream() {
+  if (_out == NULL) return;
+  render(_kind, _out->str());
+  delete _out;
 }
 
-void Log::success(const std::string& msg) {
-  if (enabled(LOG_INFO)) render('s', msg);
-}
+Log::Stream Log::banner() { return Stream('b', LOG_ERROR); }
+Log::Stream Log::info() { return Stream('i', LOG_INFO); }
+Log::Stream Log::success() { return Stream('s', LOG_INFO); }
+Log::Stream Log::warn() { return Stream('w', LOG_WARN); }
+Log::Stream Log::error() { return Stream('e', LOG_ERROR); }
+Log::Stream Log::debug() { return Stream('d', LOG_DEBUG); }
+Log::Stream Log::trace() { return Stream('t', LOG_TRACE); }
 
-void Log::warn(const std::string& msg) {
-  if (enabled(LOG_WARN)) render('w', msg);
-}
-
-void Log::error(const std::string& msg) {
-  if (enabled(LOG_ERROR)) render('e', msg);
-}
-
-void Log::debug(const std::string& msg) {
-  if (enabled(LOG_DEBUG)) render('d', msg);
-}
-
-void Log::trace(const std::string& msg) {
-  if (enabled(LOG_TRACE)) render('t', msg);
-}
+void Log::banner(const std::string& title) { banner() << title; }
+void Log::info(const std::string& msg) { info() << msg; }
+void Log::success(const std::string& msg) { success() << msg; }
+void Log::warn(const std::string& msg) { warn() << msg; }
+void Log::error(const std::string& msg) { error() << msg; }
+void Log::debug(const std::string& msg) { debug() << msg; }
+void Log::trace(const std::string& msg) { trace() << msg; }
 
 void Log::protocol(char dir, int fd, const std::string& peer, const std::string& line, const std::string& note) {
   if (!enabled(LOG_TRACE)) return;

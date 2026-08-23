@@ -222,12 +222,12 @@ void IrcTrace::sessionOpen(int fd, const std::string& host) {
   sessions()[fd] = Stats();
   ++sessionCount();
   if (!Log::enabled(Log::LOG_DEBUG)) return;
-  Log::debug(fdField(fd) + "  ++  connection from " + host);
+  Log::debug() << fdField(fd) << "  ++  connection from " << host;
 }
 
 void IrcTrace::sessionRegistered(int fd, const std::string& prefix) {
   if (!Log::enabled(Log::LOG_DEBUG)) return;
-  Log::debug(fdField(fd) + "  ==  registered as " + prefix);
+  Log::debug() << fdField(fd) << "  ==  registered as " << prefix;
 }
 
 void IrcTrace::sessionClose(int fd, const std::string& peer, const std::string& reason) {
@@ -235,9 +235,8 @@ void IrcTrace::sessionClose(int fd, const std::string& peer, const std::string& 
   if (it != sessions().end()) {
     if (Log::enabled(Log::LOG_DEBUG)) {
       const Stats& s = it->second;
-      Log::debug(fdField(fd) + "  --  " + (peer.empty() ? "*" : peer) + " left (" + reason + ") — " +
-                 libcpp::str::to_string(s.linesIn) + " in / " + libcpp::str::to_string(s.linesOut) + " out, " +
-                 libcpp::str::to_string(s.bytesIn) + " B / " + libcpp::str::to_string(s.bytesOut) + " B");
+      Log::debug() << fdField(fd) << "  --  " << (peer.empty() ? "*" : peer) << " left (" << reason << ") — "
+                   << s.linesIn << " in / " << s.linesOut << " out, " << s.bytesIn << " B / " << s.bytesOut << " B";
     }
 
     sessions().erase(it);

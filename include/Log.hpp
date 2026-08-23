@@ -1,6 +1,7 @@
 #ifndef LOG_HPP
 #define LOG_HPP
 
+#include <sstream>
 #include <string>
 
 namespace Log {
@@ -22,6 +23,26 @@ class ILogSink {
   }
 };
 
+class Stream {
+ public:
+  Stream(char kind, Level required);
+  Stream(const Stream& other);
+  ~Stream();
+
+  template <class T>
+  Stream& operator<<(const T& value) {
+    if (_out != NULL) *_out << value;
+    return *this;
+  }
+
+ private:
+  Stream();
+  Stream& operator=(const Stream& other);
+
+  mutable std::ostringstream* _out;
+  char _kind;
+};
+
 void setSink(ILogSink* sink);
 
 void setLevel(Level level);
@@ -36,6 +57,14 @@ void warn(const std::string& msg);
 void error(const std::string& msg);
 void debug(const std::string& msg);
 void trace(const std::string& msg);
+
+Stream banner();
+Stream info();
+Stream success();
+Stream warn();
+Stream error();
+Stream debug();
+Stream trace();
 
 void protocol(char dir, int fd, const std::string& peer, const std::string& line, const std::string& note);
 

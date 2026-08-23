@@ -43,10 +43,10 @@ int main(int argc, char** argv) {
     Server server(static_cast<int>(port), password);
     registerExtensions(server);
     server.run();
-    Log::info("traffic: " + IrcTrace::summary());
+    Log::info() << "traffic: " << IrcTrace::summary();
     Log::info("shutting down — server stopped cleanly");
   } catch (const std::exception& e) {
-    Log::error(std::string("fatal: ") + e.what());
+    Log::error() << "fatal: " << e.what();
     Log::setSink(NULL);
     return 1;
   }
