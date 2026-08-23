@@ -23,7 +23,8 @@ bool GrammarValidator::validate(const Grammar& grammar) {
 
 bool GrammarValidator::checkAllRulesDefined() {
   for (std::size_t i = 0; i < _grammar->ruleCount(); ++i) {
-    if (_grammar->ruleRoot(static_cast<int>(i)) == Grammar::kNoRule) {
+    if (_grammar->ruleRoot(static_cast<int>(i)) ==
+        Grammar::kNoRule) {  //< "a = b" with no b · referenced, never defined
       _error = "rule '" + _grammar->ruleName(static_cast<int>(i)) + "' is referenced but never defined";
       return false;
     }
@@ -43,7 +44,7 @@ bool GrammarValidator::isNullable(int node, std::vector<char>& busy) const {
 
     case GrammarNode::Reference: {
       const std::size_t rule = static_cast<std::size_t>(n.lo);
-      if (busy[rule]) return false;
+      if (busy[rule]) return false;  //< already on the stack · conservative, breaks the cycle
       busy[rule] = 1;
       const int root = _grammar->ruleRoot(n.lo);
       const bool result = (root == Grammar::kNoRule) || isNullable(root, busy);
@@ -114,7 +115,7 @@ bool GrammarValidator::checkNoLeftRecursion() {
     std::vector<char> busy(rules, 0);
     collectLeftReachable(root, seen, busy);
 
-    if (seen[r]) {
+    if (seen[r]) {  //< rule reaches ITSELF with no input eaten · "a = a b" would spin forever
       _error = "rule '" + _grammar->ruleName(static_cast<int>(r)) + "' is left-recursive";
       return false;
     }

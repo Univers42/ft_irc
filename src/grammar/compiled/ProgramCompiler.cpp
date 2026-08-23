@@ -42,7 +42,8 @@ int ProgramCompiler::emit(Instruction::Op op, int x, int y) {
 int ProgramCompiler::addClass(const unsigned char* bits) {
   const std::size_t existing = _program->_classes.size() / 32;
   for (std::size_t i = 0; i < existing; ++i)
-    if (std::memcmp(&_program->_classes[i * 32], bits, 32) == 0) return static_cast<int>(i);
+    if (std::memcmp(&_program->_classes[i * 32], bits, 32) == 0)
+      return static_cast<int>(i);  //< dedupe · nospcrlfcl reused
 
   for (int i = 0; i < 32; ++i) _program->_classes.push_back(bits[i]);
   return static_cast<int>(existing);
@@ -51,7 +52,7 @@ int ProgramCompiler::addClass(const unsigned char* bits) {
 bool ProgramCompiler::isSingleOctet(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
   if (_octetMemo.size() < index + 1) const_cast<std::vector<char>&>(_octetMemo).resize(index + 1, 0);
-  if (_octetMemo[index] != 0) return _octetMemo[index] == 1;
+  if (_octetMemo[index] != 0) return _octetMemo[index] == 1;  //< memo · 2 set on entry also stops rule cycles
 
   const_cast<std::vector<char>&>(_octetMemo)[index] = 2;
 
@@ -94,7 +95,7 @@ bool ProgramCompiler::buildClass(int node, unsigned char* bits) const {
       return true;
     case GrammarNode::Literal: {
       const std::string& text = _grammar->literal(n.literal);
-      if (text.size() != 1) return false;
+      if (text.size() != 1) return false;  //< "x" folds into a class · "JOIN" cannot, it is 4 octets
       setBit(bits, static_cast<unsigned char>(text[0]));
       const char lower = fold(text[0]);
       const char upper = (lower >= 'a' && lower <= 'z') ? static_cast<char>(lower - 'a' + 'A') : lower;
@@ -119,7 +120,7 @@ bool ProgramCompiler::hasCapture(int node) const {
   const GrammarNode& n = _grammar->node(node);
 
   if (n.kind == GrammarNode::Reference) {
-    if (n.capture != GrammarNode::kNoCapture) return true;
+    if (n.capture != GrammarNode::kNoCapture) return true;  //< a $capture lives under here
     const int root = _grammar->ruleRoot(n.lo);
     return root != Grammar::kNoRule && hasCapture(root);
   }
@@ -142,7 +143,7 @@ bool ProgramCompiler::emitRepetition(int node) {
   if (!emitBody(child, least)) return false;
 
   if (n.hi == GrammarNode::kUnbounded) {
-    if (hasCapture(child))
+    if (hasCapture(child))  //< REFUSED · *( $x ) reuses one slot pair, so only the last match would survive
       return fail(
           "a capture inside an unbounded repetition cannot be compiled: the "
           "loop reuses one slot pair, so only the last match would survive. "
@@ -157,8 +158,9 @@ bool ProgramCompiler::emitRepetition(int node) {
   }
 
   const int optional = n.hi - least;
-  if (optional < 0) return fail("repetition range runs backwards");
-  if (optional > kUnrollLimit) return fail("bounded repetition too large to unroll");
+  if (optional < 0) return fail("repetition range runs backwards");  //< "5*2(x)"
+  if (optional > kUnrollLimit)
+    return fail("bounded repetition too large to unroll");  //< *14(x) unrolls · *999(x) will not
 
   std::vector<int> exits;
   for (int i = 0; i < optional; ++i) {
@@ -173,7 +175,7 @@ bool ProgramCompiler::emitRepetition(int node) {
 }
 
 bool ProgramCompiler::emitNode(int node) {
-  if (isSingleOctet(node)) {
+  if (isSingleOctet(node)) {  //< collapse an alt-of-ranges into ONE Class op · nospcrlfcl -> 1 bitmap
     unsigned char bits[32];
     std::memset(bits, 0, sizeof(bits));
     if (buildClass(node, bits)) {

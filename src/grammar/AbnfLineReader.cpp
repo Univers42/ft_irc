@@ -20,9 +20,9 @@ std::string AbnfLineReader::stripComment(const std::string& raw) {
   bool inQuote = false;
 
   for (std::string::size_type i = 0; i < out.size(); ++i) {
-    if (out[i] == '"') {
+    if (out[i] == '"') {  //< quote toggle · a ';' inside "a;b" is DATA, not a comment
       inQuote = !inQuote;
-    } else if (out[i] == ';' && !inQuote) {
+    } else if (out[i] == ';' && !inQuote) {  //< "SPACE = %x20  ; space" -> cut at ';'
       out.erase(i);
       break;
     }
@@ -46,28 +46,28 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
   while (std::getline(in, raw)) {
     ++physical;
 
-    if (!raw.empty() && raw[raw.size() - 1] == '\r') raw.erase(raw.size() - 1);
+    if (!raw.empty() && raw[raw.size() - 1] == '\r') raw.erase(raw.size() - 1);  //< CRLF-saved .abnf file
     raw = stripComment(raw);
 
     const std::string body = AbnfChars::trimmed(raw);
-    if (body.empty()) continue;
+    if (body.empty()) continue;  //< blank line, or a line that was ONLY a comment: "; header"
 
-    const bool continuation = AbnfChars::isBlank(raw[0]);
-    const bool redefines = (body[0] == '=');
+    const bool continuation = AbnfChars::isBlank(raw[0]);  //< indented · "      *8( letter )" folds up
+    const bool redefines = (body[0] == '=');               //< RFC's elided form · "           =/ 14( SPACE middle )"
 
-    if (continuation && !redefines && !pending.text.empty()) {
+    if (continuation && !redefines && !pending.text.empty()) {  //< plain fold · NOT the elided "=/" case
       pending.text += " ";
       pending.text += body;
       continue;
     }
 
-    if (!pending.text.empty()) {
+    if (!pending.text.empty()) {  //< a new rule starts here, so flush the one being built
       out.push_back(pending);
       pending.text.clear();
     }
 
     if (redefines) {
-      if (lastRuleName.empty()) {
+      if (lastRuleName.empty()) {  //< "=/ x" as the FIRST line · nothing to attach it to -> error
         _errorLine = physical;
         _error = "'=' continuation with no rule name above it";
         return false;
@@ -78,13 +78,13 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
 
       std::size_t k = 0;
       std::string name;
-      while (k < body.size() && AbnfChars::isRuleChar(body[k])) name += body[k++];
-      if (!name.empty()) lastRuleName = name;
+      while (k < body.size() && AbnfChars::isRuleChar(body[k])) name += body[k++];  //< "params = *14(x)" -> "params"
+      if (!name.empty()) lastRuleName = name;  //< remembered so a later bare "=/" can find its owner
     }
     pending.number = physical;
   }
 
-  if (!pending.text.empty()) out.push_back(pending);
+  if (!pending.text.empty()) out.push_back(pending);  //< last rule in the file, never flushed by a successor
   return true;
 }
 

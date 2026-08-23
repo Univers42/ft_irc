@@ -53,7 +53,7 @@ int ProgramMatcher::cloneSlots(int slots, int index, int value) const {
 void ProgramMatcher::addThread(std::vector<Thread>& list, int pc, int slots, std::size_t pos, std::vector<int>& seen,
                                int generation, const Program& program) const {
   const std::size_t index = static_cast<std::size_t>(pc);
-  if (seen[index] == generation) return;
+  if (seen[index] == generation) return;  //< one thread per pc per step · what keeps the VM LINEAR, not exponential
   seen[index] = generation;
 
   const Instruction& ins = program.at(index);
@@ -117,8 +117,8 @@ bool ProgramMatcher::match(int rule, const std::string& line, MatchResult& out) 
       const Thread& thread = current[i];
       const Instruction& ins = program->at(static_cast<std::size_t>(thread.pc));
 
-      if (ins.op == Instruction::Match) {
-        if (pos != length) continue;
+      if (ins.op == Instruction::Match) {  //< a thread reached the end · accept only if the line did too
+        if (pos != length) continue;       //< matched a PREFIX · "JOIN #a junk" is not a JOIN
 
         std::vector<std::vector<std::string> > values(_grammar.captureCount(), std::vector<std::string>());
         std::vector<std::string> sequence;
@@ -140,16 +140,16 @@ bool ProgramMatcher::match(int rule, const std::string& line, MatchResult& out) 
         return true;
       }
 
-      if (ins.op == Instruction::Class && pos < length) {
+      if (ins.op == Instruction::Class && pos < length) {  //< consume one octet if it is in the class bitmap
         const unsigned char c = static_cast<unsigned char>(line[pos]);
         if (program->inClass(ins.x, c))
           addThread(next, thread.pc + 1, thread.slots, pos + 1, seen, generation, *program);
       }
     }
 
-    if (pos >= length) break;
+    if (pos >= length) break;  //< end of input · only Match threads still matter
     current.swap(next);
-    if (current.empty()) break;
+    if (current.empty()) break;  //< every thread died · no path can match, stop early
   }
 
   _generation = generation;

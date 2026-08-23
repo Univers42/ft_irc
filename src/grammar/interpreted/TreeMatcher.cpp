@@ -55,7 +55,7 @@ bool TreeMatcher::isSingleOctet(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
   if (_singleOctet.size() < index + 1) _singleOctet.resize(index + 1, 0);
 
-  if (_singleOctet[index] != 0) return _singleOctet[index] == 1;
+  if (_singleOctet[index] != 0) return _singleOctet[index] == 1;  //< memo hit · 1=yes 2=no · 2 also breaks rule cycles
 
   _singleOctet[index] = 2;
 
@@ -111,9 +111,9 @@ const unsigned char* TreeMatcher::octetBitmap(int node) const {
 }
 
 bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos, Walk& walk) const {
-  if (walk.exhausted) return false;
+  if (walk.exhausted) return false;  //< a budget blew deeper in · unwind, do no more work
 
-  if (k == NULL) return pos == walk.line->size();
+  if (k == NULL) return pos == walk.line->size();  //< WHOLE line must be consumed · "JOIN #a junk" fails here
 
   switch (k->kind) {
     case ContNode:
@@ -149,7 +149,7 @@ bool TreeMatcher::matchContinuation(const Continuation* k, std::size_t pos, Walk
 
 bool TreeMatcher::matchSequence(int node, int childNo, std::size_t pos, const Continuation* next, Walk& walk) const {
   const GrammarNode& n = _grammar.node(node);
-  if (childNo >= n.count) return matchContinuation(next, pos, walk);
+  if (childNo >= n.count) return matchContinuation(next, pos, walk);  //< seq done · "USER" SP u SP m SP un SP ":" rn
 
   Continuation frame;
   frame.kind = ContSequence;
@@ -168,7 +168,8 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart, st
   const GrammarNode& n = _grammar.node(node);
   const int child = _grammar.child(n.first);
 
-  if (count == 0 && isSingleOctet(child)) {
+  if (count == 0 &&
+      isSingleOctet(child)) {  //< fast path · `trailing`/`middle` eat 1 octet each -> count, don't recurse
     const std::size_t least = static_cast<std::size_t>(n.lo < 0 ? 0 : n.lo);
     const std::size_t most = (n.hi == GrammarNode::kUnbounded) ? walk.line->size() : static_cast<std::size_t>(n.hi);
 
@@ -179,7 +180,7 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart, st
     std::size_t p = pos;
     while (taken < most && p < line.size()) {
       const unsigned char c = static_cast<unsigned char>(line[p]);
-      if (!(bits[c >> 3] & (1u << (c & 7)))) break;
+      if (!(bits[c >> 3] & (1u << (c & 7)))) break;  //< 256-bit class test · stops `middle` at the next SPACE
       ++p;
       ++taken;
     }
@@ -189,10 +190,10 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart, st
       walk.exhausted = true;
       return false;
     }
-    if (taken < least) return false;
+    if (taken < least) return false;  //< 1*23(key) with 0 octets · "MODE #c +k" with an empty key
 
     for (std::size_t take = taken + 1; take-- > least;) {
-      if (matchContinuation(next, pos + take, walk)) return true;
+      if (matchContinuation(next, pos + take, walk)) return true;  //< greedy, then give ground 1 octet at a time
       if (walk.exhausted) return false;
       if (take == 0) break;
     }
@@ -201,7 +202,7 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart, st
 
   bool canRepeat = (n.hi == GrammarNode::kUnbounded) || (count < n.hi);
 
-  if (count > 0 && pos == iterStart) canRepeat = false;
+  if (count > 0 && pos == iterStart) canRepeat = false;  //< zero-width guard · *( [ "x" ] ) would spin forever
 
   if (canRepeat) {
     Continuation frame;
@@ -215,18 +216,18 @@ bool TreeMatcher::matchRepetition(int node, int count, std::size_t iterStart, st
     if (walk.exhausted) return false;
   }
 
-  if (count >= n.lo) return matchContinuation(next, pos, walk);
+  if (count >= n.lo) return matchContinuation(next, pos, walk);  //< min satisfied · *14(x) accepts 0..14
   return false;
 }
 
 bool TreeMatcher::matchNode(int node, std::size_t pos, const Continuation* next, Walk& walk) const {
   if (walk.exhausted) return false;
 
-  if (++walk.steps > kMaxSteps) {
+  if (++walk.steps > kMaxSteps) {  //< 200k node visits · *( "x" / "xx" ) on 400 x's blows this
     walk.exhausted = true;
     return false;
   }
-  if (walk.depth >= kMaxDepth) {
+  if (walk.depth >= kMaxDepth) {  //< 256 frames · deep nesting, not line length (that is the fast path's job)
     walk.exhausted = true;
     return false;
   }
@@ -241,7 +242,7 @@ bool TreeMatcher::matchNode(int node, std::size_t pos, const Continuation* next,
       if (pos + text.size() <= walk.line->size()) {
         bool same = true;
         for (std::size_t i = 0; i < text.size(); ++i) {
-          if (fold((*walk.line)[pos + i]) != fold(text[i])) {
+          if (fold((*walk.line)[pos + i]) != fold(text[i])) {  //< literals are case-blind · "join"=="JOIN"
             same = false;
             break;
           }
@@ -254,7 +255,7 @@ bool TreeMatcher::matchNode(int node, std::size_t pos, const Continuation* next,
     case GrammarNode::OctetRange: {
       if (pos < walk.line->size()) {
         const int c = static_cast<unsigned char>((*walk.line)[pos]);
-        if (c >= n.lo && c <= n.hi) ok = matchContinuation(next, pos + 1, walk);
+        if (c >= n.lo && c <= n.hi) ok = matchContinuation(next, pos + 1, walk);  //< one octet · %x21-39 etc.
       }
       break;
     }

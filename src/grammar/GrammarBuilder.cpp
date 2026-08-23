@@ -61,25 +61,26 @@ int GrammarBuilder::addChildren(const std::vector<int>& children) {
 }
 
 bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i, int& out) {
-  if (i >= s.size() || (s[i] != 'x' && s[i] != 'X')) return fail("only the %x form of num-val is supported");
+  if (i >= s.size() || (s[i] != 'x' && s[i] != 'X'))
+    return fail("only the %x form of num-val is supported");  //< %x20 ok · %d32 %b100000 no
   ++i;
 
   std::vector<int> pieces;
   for (;;) {
     std::string hex;
     while (i < s.size() && isHexDigit(s[i])) hex += s[i++];
-    if (hex.empty()) return fail("%x with no hex digits");
+    if (hex.empty()) return fail("%x with no hex digits");  //< "%x" · "%x-39" · "%xZZ"
 
     const int low = static_cast<int>(std::strtol(hex.c_str(), NULL, 16));
     int high = low;
 
-    if (i < s.size() && s[i] == '-') {
+    if (i < s.size() && s[i] == '-') {  //< range form · "%x41-5A" · plain "%x20" skips this
       ++i;
       std::string upper;
       while (i < s.size() && isHexDigit(s[i])) upper += s[i++];
-      if (upper.empty()) return fail("%x range with no upper bound");
+      if (upper.empty()) return fail("%x range with no upper bound");  //< "%x41-" trails off
       high = static_cast<int>(std::strtol(upper.c_str(), NULL, 16));
-      if (high < low) return fail("%x range runs backwards");
+      if (high < low) return fail("%x range runs backwards");  //< "%x5A-41" · Z..A is empty
     }
 
     GrammarNode range;
@@ -88,7 +89,7 @@ bool GrammarBuilder::parseNumericValue(const std::string& s, std::size_t& i, int
     range.hi = high;
     pieces.push_back(addNode(range));
 
-    if (i < s.size() && s[i] == '.') {
+    if (i < s.size() && s[i] == '.') {  //< dotted concat · "%x0D.0A" = CRLF as two octets
       ++i;
       continue;
     }
@@ -114,21 +115,21 @@ bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i, int& out
 
   char c = s[i];
 
-  if (c == '(') {
+  if (c == '(') {  //< group · "( letter / special )" binds the alternation before *8
     ++i;
     if (!parseAlternation(s, i, out)) return false;
     skipBlanks(s, i);
-    if (i >= s.size() || s[i] != ')') return fail("unclosed '('");
+    if (i >= s.size() || s[i] != ')') return fail("unclosed '('");  //< "( letter" runs off the line
     ++i;
     return true;
   }
 
-  if (c == '[') {
+  if (c == '[') {  //< option = 0-or-1 rep · "[ SPACE keylist ]" · JOIN's key list
     ++i;
     int inner = 0;
     if (!parseAlternation(s, i, inner)) return false;
     skipBlanks(s, i);
-    if (i >= s.size() || s[i] != ']') return fail("unclosed '['");
+    if (i >= s.size() || s[i] != ']') return fail("unclosed '['");  //< "[ SPACE x" never closes
     ++i;
 
     GrammarNode rep;
@@ -143,11 +144,11 @@ bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i, int& out
     return true;
   }
 
-  if (c == '"') {
+  if (c == '"') {  //< char-val · "JOIN" matches join/JoIn (RFC 5234: case-insensitive)
     ++i;
     std::string text;
     while (i < s.size() && s[i] != '"') text += s[i++];
-    if (i >= s.size()) return fail("unterminated string literal");
+    if (i >= s.size()) return fail("unterminated string literal");  //< opening quote, no closer
     ++i;
 
     GrammarNode lit;
@@ -158,17 +159,17 @@ bool GrammarBuilder::parseElement(const std::string& s, std::size_t& i, int& out
     return true;
   }
 
-  if (c == '%') {
+  if (c == '%') {  //< num-val · "%x01-09" in nospcrlfcl
     ++i;
     return parseNumericValue(s, i, out);
   }
 
   bool capture = false;
-  if (c == '$') {
+  if (c == '$') {  //< OUR extension, not RFC 5234 · "$realname" records the span it matched
     capture = true;
     ++i;
     skipBlanks(s, i);
-    if (i >= s.size() || !isAlpha(s[i])) return fail("'$' must be followed by a rule name");
+    if (i >= s.size() || !isAlpha(s[i])) return fail("'$' must be followed by a rule name");  //< "$\"x\"" · "$ "
     c = s[i];
   }
 
@@ -194,12 +195,12 @@ bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i, int& 
   int high = 1;
   bool repeated = false;
 
-  if (i < s.size() && (isDigit(s[i]) || s[i] == '*')) {
+  if (i < s.size() && (isDigit(s[i]) || s[i] == '*')) {  //< repeat prefix · "*14(" "1*23(" "3digit" "7("
     repeated = true;
     std::string before;
     while (i < s.size() && isDigit(s[i])) before += s[i++];
 
-    if (i < s.size() && s[i] == '*') {
+    if (i < s.size() && s[i] == '*') {  //< "1*23" -> min 1 max 23 · bare "3" -> exactly 3
       ++i;
       low = before.empty() ? 0 : static_cast<int>(std::strtol(before.c_str(), NULL, 10));
       std::string after;
@@ -209,7 +210,7 @@ bool GrammarBuilder::parseRepetition(const std::string& s, std::size_t& i, int& 
       low = high = static_cast<int>(std::strtol(before.c_str(), NULL, 10));
     }
 
-    if (high != GrammarNode::kUnbounded && high < low) return fail("repetition range runs backwards");
+    if (high != GrammarNode::kUnbounded && high < low) return fail("repetition range runs backwards");  //< "5*2(x)"
   }
 
   int child = 0;
@@ -239,14 +240,14 @@ bool GrammarBuilder::parseConcatenation(const std::string& s, std::size_t& i, in
     skipBlanks(s, i);
     if (i >= s.size()) break;
     const char c = s[i];
-    if (c == '/' || c == ')' || c == ']') break;
+    if (c == '/' || c == ')' || c == ']') break;  //< concat ends at an alt bar or an enclosing close
 
     int part = 0;
     if (!parseRepetition(s, i, part)) return false;
     parts.push_back(part);
   }
 
-  if (parts.empty()) return fail("empty concatenation");
+  if (parts.empty()) return fail("empty concatenation");  //< "a = / b" · "a = ( )"
   if (parts.size() == 1) {
     out = parts[0];
     return true;

@@ -69,7 +69,7 @@ const char kGrammar[] =
     "invite-cmd =  \"INVITE\" SPACE $invnick SPACE $invchan *SPACE\n"
 
     "topic-cmd  =  \"TOPIC\" SPACE $topicchan"
-    " [ SPACE \":\" $topictext ] *SPACE\n"
+    " [ SPACE [ \":\" ] $topictext ] *SPACE\n"
     "mode-cmd   =  \"MODE\" SPACE $modetarget"
     " [ SPACE $modestring *13( SPACE $modeparam ) ] *SPACE\n"
     "who-cmd    =  \"WHO\" [ SPACE $whomask ] *SPACE\n"
