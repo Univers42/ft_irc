@@ -182,6 +182,23 @@ else
 	warn "check_header_cycles.py not found (libcpp scripts missing) — skipped"
 fi
 
+# ── 9. untracked headers ─────────────────────────────────────────────────────
+section "headers referenced but not tracked"
+TRK="scripts/check_tracked_headers.py"
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+	warn "not a git repository — skipped"
+elif [ ! -f "$TRK" ]; then
+	fail "$TRK is missing — gate did not run"
+elif python3 "$TRK" >/tmp/ircaudit_trk 2>&1; then
+	pass "every #include names a tracked file"
+elif grep -q 'Traceback (most recent call last)' /tmp/ircaudit_trk; then
+	fail "check_tracked_headers.py crashed — gate did not run:"
+	sed 's/^/      /' /tmp/ircaudit_trk | head
+else
+	fail "a committed #include names an untracked header (breaks a fresh clone):"
+	sed 's/^/      /' /tmp/ircaudit_trk | head
+fi
+
 rm -f "$BUILD_LOG"
 echo
 if [ "$FAILS" -eq 0 ]; then
