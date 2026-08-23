@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 
+#include "Dispatch.hpp"
 #include "ext/IServerExtension.hpp"
 
 class FileTransferExt : public IServerExtension {
@@ -35,8 +36,15 @@ class FileTransferExt : public IServerExtension {
     time_t lastActivity;
   };
 
+  typedef void (FileTransferExt::*SubHandler)(Server& server, Client& client, const Message& msg);
+  typedef Dispatch::Entry<SubHandler> SubCommand;
+
+  static const SubCommand kSubCommands[];
+
   void cmdSend(Server& server, Client& client, const Message& msg);
   void cmdAnswer(Server& server, Client& client, const Message& msg, bool accept);
+  void cmdAccept(Server& server, Client& client, const Message& msg);
+  void cmdReject(Server& server, Client& client, const Message& msg);
   void cmdData(Server& server, Client& client, const Message& msg);
   void cmdEnd(Server& server, Client& client, const Message& msg);
   void cmdAbort(Server& server, Client& client, const Message& msg);

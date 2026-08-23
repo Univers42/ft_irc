@@ -22,6 +22,14 @@ const char* Bot::_jokes[] = {"Why do programmers prefer dark mode? Because light
 
 const int Bot::_jokeCount = 8;
 
+const Bot::BotCommand Bot::kBotCommands[] = {
+    {"!help", &Bot::cmdHelp},
+    {"!time", &Bot::cmdTime},
+    {"!info", &Bot::cmdInfo},
+    {"!joke", &Bot::cmdJoke},
+    {NULL, NULL},
+};
+
 Bot::Bot(Server* server) : _server(server), _nickname("ircbot"), _nextJoke(0) {}
 Bot::~Bot() {}
 
@@ -46,19 +54,17 @@ void Bot::handleMessage(Client* sender, const std::string& text) {
   iss >> cmd;
   if (iss) std::getline(iss >> std::ws, param);
 
-  if (cmd == "!help")
-    cmdHelp(sender);
-  else if (cmd == "!time")
-    cmdTime(sender);
-  else if (cmd == "!info")
-    cmdInfo(sender, param);
-  else if (cmd == "!joke")
-    cmdJoke(sender);
-  else
+  const BotCommand* entry = Dispatch::find(kBotCommands, cmd);
+  if (entry == NULL) {
     reply(sender, "Unknown command. Type !help for available commands.");
+    return;
+  }
+
+  (this->*entry->handler)(sender, param);
 }
 
-void Bot::cmdHelp(Client* sender) {
+void Bot::cmdHelp(Client* sender, const std::string& param) {
+  (void)param;
   reply(sender, "Available commands:");
   reply(sender, "  !help           - Show this help message");
   reply(sender, "  !time           - Show current server time");
@@ -66,7 +72,8 @@ void Bot::cmdHelp(Client* sender) {
   reply(sender, "  !joke           - Tell a random joke");
 }
 
-void Bot::cmdTime(Client* sender) {
+void Bot::cmdTime(Client* sender, const std::string& param) {
+  (void)param;
   time_t now = std::time(NULL);
   char buf[64];
   struct tm* tm = std::localtime(&now);
@@ -92,7 +99,8 @@ void Bot::cmdInfo(Client* sender, const std::string& param) {
   if (!chan->getTopic().empty()) reply(sender, "Topic: " + chan->getTopic());
 }
 
-void Bot::cmdJoke(Client* sender) {
+void Bot::cmdJoke(Client* sender, const std::string& param) {
+  (void)param;
   reply(sender, _jokes[_nextJoke]);
   _nextJoke = (_nextJoke + 1) % _jokeCount;
 }

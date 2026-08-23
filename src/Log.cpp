@@ -6,9 +6,22 @@
 #include <iostream>
 #include <string>
 
+#include "Dispatch.hpp"
 #include "libcpp/str/format.hpp"
 
 namespace {
+struct LevelName {
+  const char* name;
+  Log::Level level;
+};
+
+const LevelName kLevelNames[] = {
+    {"quiet", Log::LOG_QUIET}, {"0", Log::LOG_QUIET}, {"error", Log::LOG_ERROR}, {"1", Log::LOG_ERROR},
+    {"warn", Log::LOG_WARN},   {"2", Log::LOG_WARN},  {"info", Log::LOG_INFO},   {"3", Log::LOG_INFO},
+    {"debug", Log::LOG_DEBUG}, {"4", Log::LOG_DEBUG}, {"trace", Log::LOG_TRACE}, {"5", Log::LOG_TRACE},
+    {NULL, Log::LOG_QUIET},
+};
+
 Log::ILogSink* g_sink = 0;
 Log::Level g_level = Log::LOG_INFO;
 
@@ -78,18 +91,8 @@ void Log::configureFromEnv() {
   const char* v = std::getenv("FT_IRC_LOG");
   if (!v || !*v) return;
 
-  if (std::strcmp(v, "quiet") == 0 || std::strcmp(v, "0") == 0)
-    g_level = LOG_QUIET;
-  else if (std::strcmp(v, "error") == 0 || std::strcmp(v, "1") == 0)
-    g_level = LOG_ERROR;
-  else if (std::strcmp(v, "warn") == 0 || std::strcmp(v, "2") == 0)
-    g_level = LOG_WARN;
-  else if (std::strcmp(v, "info") == 0 || std::strcmp(v, "3") == 0)
-    g_level = LOG_INFO;
-  else if (std::strcmp(v, "debug") == 0 || std::strcmp(v, "4") == 0)
-    g_level = LOG_DEBUG;
-  else if (std::strcmp(v, "trace") == 0 || std::strcmp(v, "5") == 0)
-    g_level = LOG_TRACE;
+  const LevelName* entry = Dispatch::find(kLevelNames, std::string(v));
+  if (entry != NULL) g_level = entry->level;
 }
 
 void Log::banner(const std::string& title) {

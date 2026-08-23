@@ -12,7 +12,25 @@
 #include "libcpp/str/case.hpp"
 #include "libcpp/str/format.hpp"
 
+const FileTransferExt::SubCommand FileTransferExt::kSubCommands[] = {
+    {"SEND", &FileTransferExt::cmdSend},
+    {"ACCEPT", &FileTransferExt::cmdAccept},
+    {"REJECT", &FileTransferExt::cmdReject},
+    {"DATA", &FileTransferExt::cmdData},
+    {"END", &FileTransferExt::cmdEnd},
+    {"ABORT", &FileTransferExt::cmdAbort},
+    {NULL, NULL},
+};
+
 FileTransferExt::FileTransferExt() : _transfers(), _nextId(1) {}
+
+void FileTransferExt::cmdAccept(Server& server, Client& client, const Message& msg) {
+  cmdAnswer(server, client, msg, true);
+}
+
+void FileTransferExt::cmdReject(Server& server, Client& client, const Message& msg) {
+  cmdAnswer(server, client, msg, false);
+}
 
 FileTransferExt::~FileTransferExt() {}
 
@@ -87,21 +105,14 @@ bool FileTransferExt::onCommand(Server& server, Client& client, const Message& m
     return true;
   }
 
-  std::string sub = libcpp::str::to_upper(msg.params[0]);
-  if (sub == "SEND")
-    cmdSend(server, client, msg);
-  else if (sub == "ACCEPT")
-    cmdAnswer(server, client, msg, true);
-  else if (sub == "REJECT")
-    cmdAnswer(server, client, msg, false);
-  else if (sub == "DATA")
-    cmdData(server, client, msg);
-  else if (sub == "END")
-    cmdEnd(server, client, msg);
-  else if (sub == "ABORT")
-    cmdAbort(server, client, msg);
-  else
+  const std::string sub = libcpp::str::to_upper(msg.params[0]);
+  const SubCommand* entry = Dispatch::find(kSubCommands, sub);
+  if (entry == NULL) {
     notice(server, client, "FILE: unknown subcommand " + sub);
+    return true;
+  }
+
+  (this->*entry->handler)(server, client, msg);
   return true;
 }
 

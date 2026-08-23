@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Dispatch.hpp"
 #include "ext/IServerExtension.hpp"
 
 class Server;
@@ -26,10 +27,15 @@ class Bot : public IServerExtension {
   Bot(const Bot& other);
   Bot& operator=(const Bot& other);
 
-  void cmdHelp(Client* sender);
-  void cmdTime(Client* sender);
+  typedef void (Bot::*CommandHandler)(Client* sender, const std::string& param);
+  typedef Dispatch::Entry<CommandHandler> BotCommand;
+
+  static const BotCommand kBotCommands[];
+
+  void cmdHelp(Client* sender, const std::string& param);
+  void cmdTime(Client* sender, const std::string& param);
   void cmdInfo(Client* sender, const std::string& param);
-  void cmdJoke(Client* sender);
+  void cmdJoke(Client* sender, const std::string& param);
 
   void reply(Client* sender, const std::string& text);
 
