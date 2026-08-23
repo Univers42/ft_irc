@@ -24,7 +24,7 @@ void Server::cmdCap(Client* client, const Message& msg) {
 }
 
 void Server::cmdPass(Client* client, const Message& msg) {
-  if (client->isRegistered()) {
+  if (client->isRegistered()) {  //< a second USER after 001 -> 462 · registration is once-only
     sendReply(client, ERR_ALREADYREGISTRED);
     return;
   }
@@ -44,12 +44,10 @@ void Server::cmdNick(Client* client, const Message& msg) {
 
   std::string nick = msg.matched() ? msg.field("newnick") : msg.params[0];
 
-  if (!isValidNickname(nick)) {
+  if (!isValidNickname(nick)) {  //< "1abc" "a.b" -> 432 · "z`tick" passes since D1 closed
     sendReply(client, ERR_ERRONEUSNICKNAME, nick);
     return;
   }
-
-  if (nick.size() > Limits::kNickLen) nick.erase(Limits::kNickLen);
 
   if (isNickInUse(nick, client)) {
     sendReply(client, ERR_NICKNAMEINUSE, nick);
@@ -105,7 +103,7 @@ void Server::cmdUser(Client* client, const Message& msg) {
     sendReply(client, ERR_ALREADYREGISTRED);
     return;
   }
-  if (msg.params.size() < 4) {
+  if (msg.params.size() < 4) {  //< "USER a 0 *" -> 461 · "USER a 0 * :R" is 4 and passes
     replyNeedMoreParams(client, "USER");
     return;
   }

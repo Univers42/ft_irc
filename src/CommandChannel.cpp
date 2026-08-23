@@ -14,7 +14,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     return;
   }
 
-  if (!msg.has("chanlist")) {
+  if (!msg.has("chanlist")) {  //< "JOIN 0" · the grammar's own alternative · parts every channel (3.2.1)
     partAllChannels(client);
     return;
   }
@@ -26,7 +26,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     const std::string& name = channels[i];
     std::string key = (i < keys.size()) ? keys[i] : "";
 
-    if (!isValidChannelName(name)) {
+    if (!isValidChannelName(name)) {  //< per-channel · "JOIN #ok,bad" joins #ok and answers 476 for bad
       sendReply(client, ERR_BADCHANMASK, name);
       continue;
     }
@@ -35,7 +35,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     if (chan) {
       if (chan->isMember(client)) continue;
 
-      if (chan->isInviteOnly() && !chan->isInvited(client)) {
+      if (chan->isInviteOnly() && !chan->isInvited(client)) {  //< +i without an INVITE -> 473
         sendReply(client, ERR_INVITEONLYCHAN, name);
         continue;
       }
@@ -45,7 +45,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
         continue;
       }
 
-      if (chan->getUserLimit() > 0 && chan->getMemberCount() >= chan->getUserLimit()) {
+      if (chan->getUserLimit() > 0 && chan->getMemberCount() >= chan->getUserLimit()) {  //< +l full -> 471
         sendReply(client, ERR_CHANNELISFULL, name);
         continue;
       }

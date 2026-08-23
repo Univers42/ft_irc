@@ -8,12 +8,12 @@
 #include "libcpp/str/format.hpp"
 
 void Server::cmdPrivmsg(Client* client, const Message& msg) {
-  if (msg.params.empty() || msg.params[0].empty()) {
+  if (msg.params.empty() || msg.params[0].empty()) {  //< "PRIVMSG" alone -> 411 (no recipient)
     sendReply(client, ERR_NORECIPIENT);
     return;
   }
 
-  if (msg.params.size() < 2 || msg.params[1].empty()) {
+  if (msg.params.size() < 2 || msg.params[1].empty()) {  //< "PRIVMSG #c" -> 412 (no text) · distinct from 411
     sendReply(client, ERR_NOTEXTTOSEND);
     return;
   }

@@ -707,6 +707,7 @@ static bool isNickBody(char c) { return isAsciiAlpha(c) || isAsciiDigit(c) || is
 
 bool Server::isValidNickname(const std::string& nick) const {
   if (nick.empty()) return false;
+  if (nick.size() > Limits::kNickLen) return false;
 
   if (!isNickLead(nick[0])) return false;  //< length is NOT checked here · cmdNick truncates to NICKLEN instead
   for (size_t i = 1; i < nick.size(); ++i)
