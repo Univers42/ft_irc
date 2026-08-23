@@ -244,15 +244,16 @@ jobs:
           # the cause. Diagnose AFTER the fetch rather than before: a valid
           # gitlink is often a commit deep in history, which `git ls-remote`
           # does not list, so a pre-check on ref tips reports false failures.
-          if ! git submodule update --init vendor/libcpp vendor/googletest; then
-            for sm in vendor/libcpp vendor/googletest; do
+          mods="vendor/libcpp vendor/googletest vendor/scripts"
+          if ! git submodule update --init $mods; then
+            for sm in $mods; do
               want="$(git ls-tree HEAD "$sm" | awk '{print $3}')"
               url="$(git config -f .gitmodules --get submodule."$sm".url)"
               echo "::error::$sm wants $want from $url"
             done
             echo "::error::if that commit is local-only, push it to its remote"
             exit 1
-          fi vendor/scripts
+          fi
       # `make norm` reports a tool that is not installed as "skipped" rather
       # than failing, so installing all four is what makes this gate mean
       # anything at all.
