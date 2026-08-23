@@ -337,14 +337,21 @@ test:
 #      pip install --user cpplint clang-tidy      # clang-format: your distro
 #      cppcheck: distro package, or build from github.com/danmar/cppcheck
 #
-#  Scope is exactly what ircserv compiles: src/, include/, and the libcpp
-#  modules linked into the binary. libcpp's demo/, studio/ and lab/ trees are
-#  not part of this build (and carry their own vendored node_modules), so they
-#  are listed out rather than walked.
-NORM_SCRIPT		= vendor/scripts/norminette.sh
-NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
+#  Scope is THIS repository's code: src/ and include/.
+#
+#  The libcpp modules ircserv compiles in used to be in scope too, and that
+#  was a quiet trap: vendor/libcpp is a submodule with its own repository and
+#  its own style, so `make norm-fix` reformatted files belonging to a
+#  different project and left the submodule dirty. It went unnoticed only
+#  because the two happened to agree at 80 columns; raising ColumnLimit to
+#  120 made every one of those files rewrite at once. A gate this repo cannot
+#  land a fix for is not a gate -- libcpp's four standing cpplint findings
+#  live in its own CI.
+#
 #  Override to widen the scope for a one-off sweep:
 #      make norm NORM_FILES="src include $(LIBCPP)/src/str/case.cpp"
+NORM_SCRIPT		= vendor/scripts/norminette.sh
+NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
 NORM_FILES		= src include
 
 # Everything after `--` is what clang-tidy parses the sources with, so it has

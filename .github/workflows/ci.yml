@@ -188,15 +188,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential python3 python3-pip clang-format clang-tidy cppcheck
           pip3 install --user cpplint
-      # Scoped to our own code. `make norm` with no override also walks the
-      # vendored libcpp modules ircserv compiles in, and those carry four
-      # findings of their own (runtime/explicit, include_what_you_use) that
-      # belong to a different repository -- vendor/libcpp is a submodule, so
-      # CI re-inits it from the committed pointer and a local fix would never
-      # reach this job anyway. Gating on code this repo cannot change would
-      # make the job permanently red for a reason nobody here can act on.
-      - name: make norm (src + include)
-        run: make norm NORM_FILES="src include"
+      # NORM_FILES defaults to src + include -- this repository's own code.
+      # vendor/libcpp is a submodule with four standing findings of its own,
+      # and CI re-inits it from the committed pointer, so a fix made here
+      # could never reach this job. See the note on NORM_FILES in the Makefile.
+      - name: make norm
+        run: make norm
       # clang-format is not merely advisory here: the whole tree is formatted
       # at ColumnLimit 120, and a file that drifts out of it silently breaks
       # the cpplint linelength gate that is pinned to the same number.
