@@ -9,6 +9,7 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "Dispatch.hpp"
+#include "Limits.hpp"
 #include "Message.hpp"
 #include "Replies.hpp"
 #include "grammar/Grammar.hpp"
@@ -20,7 +21,7 @@ class IServerExtension;
 
 class Server {
  public:
-  Server(int port, const std::string& password, time_t pendingCloseTimeoutSec = PENDING_CLOSE_TIMEOUT);
+  Server(int port, const std::string& password, time_t pendingCloseTimeoutSec = Limits::kPendingCloseTimeout);
   ~Server();
 
   void run();

@@ -20,6 +20,7 @@
 
 #include "IrcCase.hpp"
 #include "IrcTrace.hpp"
+#include "Limits.hpp"
 #include "Log.hpp"
 #include "ext/IServerExtension.hpp"
 #include "grammar/EmbeddedGrammarSource.hpp"
@@ -34,7 +35,7 @@ bool Server::isRunning = true;
 Server::Server(int port, const std::string& password, time_t pendingCloseTimeoutSec)
     : _port(port),
       _password(password),
-      _serverName(SERVER_NAME),
+      _serverName(Limits::kServerName),
       _listenFd(-1),
       _reactor(),
       _lastPingCheck(std::time(NULL)),
@@ -301,9 +302,9 @@ void Server::acceptClient() {
   int clientFd = accept(_listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
   if (clientFd < 0) return;
 
-  if (_clients.size() >= MAX_CLIENTS) {
+  if (_clients.size() >= Limits::kMaxClients) {
     close(clientFd);
-    Log::warn("connection rejected: MAX_CLIENTS reached");
+    Log::warn("connection rejected: client limit reached");
     return;
   }
 
@@ -335,9 +336,9 @@ void Server::handleClientInput(int fd) {
   if (_clients.find(fd) == _clients.end()) return;
 
   Client* client = _clients[fd];
-  char buf[MAX_MSGLEN + 1];
+  char buf[Limits::kMsgLen + 1];
 
-  ssize_t bytesRead = recv(fd, buf, MAX_MSGLEN, 0);
+  ssize_t bytesRead = recv(fd, buf, Limits::kMsgLen, 0);
   if (bytesRead <= 0) {
     if (bytesRead == 0) disconnectClient(fd, "Connection closed");
     return;
@@ -427,9 +428,9 @@ void Server::checkTimeouts() {
 
     if (client->isSendQExceeded()) {
       sendQNow.push_back(it->first);
-    } else if (client->isPingSent() && idle > PING_INTERVAL + PING_TIMEOUT) {
+    } else if (client->isPingSent() && idle > Limits::kPingInterval + Limits::kPingTimeout) {
       pingTimeoutDeferred.push_back(it->first);
-    } else if (!client->isPingSent() && idle > PING_INTERVAL) {
+    } else if (!client->isPingSent() && idle > Limits::kPingInterval) {
       sendToClient(client, "PING :" + _serverName);
       client->setPingSent(true);
     }
@@ -707,7 +708,7 @@ bool Server::isValidNickname(const std::string& nick) const {
 }
 
 bool Server::isValidChannelName(const std::string& name) const {
-  if (name.empty() || name.size() > MAX_CHANNELLEN) return false;
+  if (name.empty() || name.size() > Limits::kChannelLen) return false;
   if (name[0] != '#') return false;
   if (name.size() < 2) return false;
 
@@ -719,7 +720,7 @@ bool Server::isValidChannelName(const std::string& name) const {
 }
 
 bool Server::isValidChannelKey(const std::string& key) const {
-  if (key.empty() || key.size() > MAX_KEYLEN) return false;
+  if (key.empty() || key.size() > Limits::kKeyLen) return false;
   for (std::string::size_type i = 0; i < key.size(); ++i) {
     const unsigned char c = static_cast<unsigned char>(key[i]);
     if (c <= ' ' || c == ',') return false;

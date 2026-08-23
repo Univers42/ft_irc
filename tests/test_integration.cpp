@@ -2,6 +2,7 @@
 
 #include <poll.h>
 
+#include "Limits.hpp"
 #include "PostMan.hpp"
 #include "TestHarness.hpp"
 #include "ext/IServerExtension.hpp"
@@ -846,15 +847,15 @@ TEST_F(IntegrationTest, BotViaPrivmsg)
  * so simulating a genuinely-stuck TCP peer via socket-buffer tuning is not
  * reliable across machines (the same class of environment sensitivity the
  * T6 frozen-reader tests already documented for buffer-size thresholds).
- * Instead, this probe keeps _out topped up (just under MAX_SENDQ, refilled
+ * Instead, this probe keeps _out topped up (just under Limits::kSendQ, refilled
  * every tick) for as long as the client exists, so drain-complete can
  * never be what closes the connection -- only checkPendingCloseTimeouts()
- * can, once PENDING_CLOSE_TIMEOUT elapses. This tests the deadline itself
+ * can, once Limits::kPendingCloseTimeout elapses. This tests the deadline itself
  * as an unconditional ceiling, deterministically.
  * ════════════════════════════════════════════════════════════════════ */
 
 /* Fires once a client registers: queues an initial payload just under
-   MAX_SENDQ and defers a disconnect on it, then keeps topping _out back up
+   Limits::kSendQ and defers a disconnect on it, then keeps topping _out back up
    every tick for as long as the client still exists, so it never drains to
    empty on its own. Used only by DeferredCloseDeadlineTest. */
 struct DeadlineRefillProbe : public IServerExtension
@@ -911,7 +912,7 @@ struct DeadlineRefillProbe : public IServerExtension
 		** couple of hundred milliseconds -- long before any deadline.
 		**
 		** Raising the backlog instead is not an option: it must stay under
-		** MAX_SENDQ (64 KiB) or this turns into a SendQ close, and 64 KiB
+		** Limits::kSendQ (64 KiB) or this turns into a SendQ close, and 64 KiB
 		** is far below what the kernel will absorb. Shrinking the pipe is
 		** the only lever that leaves _out non-empty.
 		**
@@ -958,7 +959,7 @@ struct DeadlineRefillProbe : public IServerExtension
 		** test cannot run in, not a bug in the deadline sweep. */
 		if (client->hasPendingData())
 			frozen = true;
-		/* Top back up, staying clear of MAX_SENDQ (64 KiB): the ceiling
+		/* Top back up, staying clear of Limits::kSendQ (64 KiB): the ceiling
 		** here is 50000 + 10240 ~= 60 KB, so the refill never trips
 		** isSendQExceeded() and turns this into a SendQ close instead. */
 		if (client->getSendBuffer().size() < 50000)
@@ -966,7 +967,7 @@ struct DeadlineRefillProbe : public IServerExtension
 	}
 };
 
-/* PENDING_CLOSE_TIMEOUT (5s) is the production default; this suite injects
+/* Limits::kPendingCloseTimeout (5s) is the production default; this suite injects
 ** a much shorter deadline via Server's constructor param so the test isn't
 ** stuck paying a fixed multi-second sleep every run (was 8s: 5s deadline +
 ** 3s test-side margin). The deadline is a whole-second time_t (matching
@@ -996,13 +997,13 @@ protected:
 
 TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 {
-	/* Shrink tc's receive window well below MAX_SENDQ, BEFORE connect().
+	/* Shrink tc's receive window well below Limits::kSendQ, BEFORE connect().
 	**
 	** On loopback the default tcp_rmem here is 128 KiB -- larger than the
-	** 64 KiB MAX_SENDQ the probe must stay under -- so the whole payload
+	** 64 KiB Limits::kSendQ the probe must stay under -- so the whole payload
 	** fits in the receiver's window and the server flushes it in one pass:
 	** drain-complete, not the deadline, closes the connection, and no
-	** payload size under MAX_SENDQ can outrun that.
+	** payload size under Limits::kSendQ can outrun that.
 	**
 	** This clamp used to be applied AFTER connect(), which looks equivalent
 	** and is not: the window is advertised during the handshake from the
@@ -1058,7 +1059,7 @@ TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 
 	/* checkPendingCloseTimeouts() only runs once per event-loop pass, and the
 	** loop idles up to 1000ms between passes when nothing else is happening
-	** -- a constant orthogonal to PENDING_CLOSE_TIMEOUT itself. hb is a
+	** -- a constant orthogonal to Limits::kPendingCloseTimeout itself. hb is a
 	** second, healthy connection kept busy to give the loop fd activity to
 	** wake on, so passes happen at roughly this poll's own cadence instead
 	** of that 1000ms idle ceiling. It's only started after a short grace

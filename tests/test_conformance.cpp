@@ -2,7 +2,7 @@
  *
  * Every test here was written RED against the pre-fix tree (TESTING.md §1):
  *   - RfcLineLength.*      : outbound lines were never capped at 512, only the
- *                            INPUT LineBuffer knew MAX_MSGLEN. A relayed
+ *                            INPUT LineBuffer knew Limits::kMsgLen. A relayed
  *                            PRIVMSG (prefix + text) or a big 353 exceeded it.
  *   - InviteLifetime.*     : invites were keyed by nickname string, so they
  *                            did not follow a NICK change and outlived the
@@ -12,7 +12,7 @@
  *                            instead of ircEquals, the one place in the tree
  *                            that bypassed CASEMAPPING=ascii.
  *   - NickTruncation.*     : isValidNickname() rejected any nick over
- *                            MAX_NICKLEN with 432 instead of truncating,
+ *                            Limits::kNickLen with 432 instead of truncating,
  *                            and (if fixed naively, truncating after the
  *                            isNickInUse check) two different over-long
  *                            nicks could truncate to the same name and
@@ -37,6 +37,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "PostMan.hpp"
 #include "TestHarness.hpp"
 #include "Client.hpp"
@@ -80,7 +81,7 @@ TEST(RfcLineLength, QueuedLineIsCappedAtTheProtocolLimit)
 	/* The choke point every reply/relay funnels through. */
 	Client c(70, "127.0.0.1");
 	c.queueMessage(std::string(600, 'x'));
-	EXPECT_LE(c.getSendBuffer().size(), static_cast<size_t>(MAX_MSGLEN))
+	EXPECT_LE(c.getSendBuffer().size(), Limits::kMsgLen)
 		<< "queueMessage must cap the line at 512 incl. CRLF";
 	EXPECT_EQ(c.getSendBuffer().substr(c.getSendBuffer().size() - 2), "\r\n")
 		<< "truncation must keep the line terminated";
@@ -97,8 +98,8 @@ TEST(RfcLineLength, LineOfExactlyTheLimitSurvivesWhole)
 {
 	/* 510 payload + CRLF == 512: the largest legal line, must not be cut. */
 	Client c(72, "127.0.0.1");
-	c.queueMessage(std::string(MAX_MSGLEN - 2, 'y'));
-	EXPECT_EQ(c.getSendBuffer().size(), static_cast<size_t>(MAX_MSGLEN));
+	c.queueMessage(std::string(Limits::kMsgLen - 2, 'y'));
+	EXPECT_EQ(c.getSendBuffer().size(), Limits::kMsgLen);
 	EXPECT_EQ(c.getSendBuffer().substr(0, 3), "yyy");
 }
 
@@ -123,13 +124,13 @@ TEST_F(ConformanceTest, PrivmsgRelayStaysWithinLimit)
 
 	/* Fill the sender's line right up to the 512-byte input limit. */
 	const std::string head = "PRIVMSG #linelen :";
-	tx.sendCmd(head + std::string(MAX_MSGLEN - 2 - head.size(), 'z'));
+	tx.sendCmd(head + std::string(Limits::kMsgLen - 2 - head.size(), 'z'));
 	std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
 	std::string got = rx.recvAll(300);
 	ASSERT_NE(got.find("PRIVMSG #linelen"), std::string::npos)
 		<< "receiver never got the relayed message";
-	EXPECT_LE(maxLineLen(got), static_cast<size_t>(MAX_MSGLEN))
+	EXPECT_LE(maxLineLen(got), Limits::kMsgLen)
 		<< "relayed PRIVMSG exceeded the RFC 2812 line limit";
 
 	tx.sendCmd("QUIT");
@@ -175,7 +176,7 @@ TEST_F(ConformanceTest, NamesReplyStaysWithinLimit)
 	std::this_thread::sleep_for(std::chrono::milliseconds(400));
 	std::string got = late.recvAll(500);
 
-	EXPECT_LE(maxLineLen(got), static_cast<size_t>(MAX_MSGLEN))
+	EXPECT_LE(maxLineLen(got), Limits::kMsgLen)
 		<< "RPL_NAMREPLY exceeded the RFC 2812 line limit";
 
 	/* Splitting must not silently drop members. */
@@ -223,7 +224,7 @@ TEST_F(ConformanceTest, LongUsernameCannotEatTheRelayPayload)
 	std::string got = rx.recvAll(300);
 	EXPECT_NE(got.find("HELLO_MARKER_INTACT"), std::string::npos)
 		<< "an oversized username pushed the payload past the line cap";
-	EXPECT_LE(maxLineLen(got), static_cast<size_t>(MAX_MSGLEN));
+	EXPECT_LE(maxLineLen(got), Limits::kMsgLen);
 
 	tx.sendCmd("QUIT");
 	rx.sendCmd("QUIT");
@@ -681,7 +682,7 @@ TEST_F(ConformanceTest, DigitFirstNickIsRejected)
 	 *
 	 * Unlike the two tests above, this one has no red state tied to
 	 * reordering truncation relative to validation: truncation
-	 * (nick.erase(MAX_NICKLEN)) only ever removes trailing characters, and
+	 * (nick.erase(Limits::kNickLen)) only ever removes trailing characters, and
 	 * the defect here is at position 0, so no truncate/validate ordering
 	 * can make this nick pass -- it fails isValidNickname's first-character
 	 * check either way. That's a structural difference from

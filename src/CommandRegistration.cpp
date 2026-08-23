@@ -2,6 +2,7 @@
 
 #include "IrcCase.hpp"
 #include "IrcTrace.hpp"
+#include "Limits.hpp"
 #include "Log.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
@@ -46,7 +47,7 @@ void Server::cmdNick(Client* client, const Message& msg) {
     return;
   }
 
-  if (nick.size() > MAX_NICKLEN) nick.erase(MAX_NICKLEN);
+  if (nick.size() > Limits::kNickLen) nick.erase(Limits::kNickLen);
 
   if (isNickInUse(nick, client)) {
     sendReply(client, ERR_NICKNAMEINUSE, nick);
@@ -113,7 +114,7 @@ void Server::cmdUser(Client* client, const Message& msg) {
   }
 
   std::string username = msg.matched() ? msg.field("username") : msg.params[0];
-  if (username.size() > MAX_USERLEN) username.erase(MAX_USERLEN);
+  if (username.size() > Limits::kUserLen) username.erase(Limits::kUserLen);
   if (!isValidUsername(username)) {
     sendNumeric(client, ERR_NEEDMOREPARAMS, "USER :Invalid username");
     return;
@@ -142,19 +143,17 @@ void Server::completeRegistration(Client* client) {
 
   sendNumeric(client, RPL_WELCOME, ":Welcome to the " + _serverName + " Network " + prefix);
 
-  sendNumeric(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + SERVER_VERSION);
+  sendNumeric(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + Limits::kServerVersion);
 
-  sendNumeric(client, RPL_CREATED, ":This server was created " + std::string(SERVER_CREATED));
+  sendNumeric(client, RPL_CREATED, ":This server was created " + std::string(Limits::kServerCreated));
 
-  sendNumeric(client, RPL_MYINFO, _serverName + " " + SERVER_VERSION + " o itkol");
+  sendNumeric(client, RPL_MYINFO, _serverName + " " + Limits::kServerVersion + " o itkol");
 
   sendNumeric(client, RPL_ISUPPORT,
-              "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it "
-              "NICKLEN=9 CHANNELLEN=50 TOPICLEN=390 "
-              "NETWORK=" +
-                  _serverName +
-                  " CASEMAPPING=ascii "
-                  ":are supported by this server");
+              "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it NICKLEN=" + libcpp::str::to_string(Limits::kNickLen) +
+                  " CHANNELLEN=" + libcpp::str::to_string(Limits::kChannelLen) +
+                  " TOPICLEN=" + libcpp::str::to_string(Limits::kTopicLen) + " NETWORK=" + _serverName +
+                  " CASEMAPPING=ascii :are supported by this server");
 
   sendReply(client, ERR_NOMOTD);
 

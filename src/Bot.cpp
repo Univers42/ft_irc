@@ -5,6 +5,7 @@
 
 #include "Client.hpp"
 #include "IrcCase.hpp"
+#include "Limits.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
 
@@ -83,7 +84,7 @@ void Bot::cmdTime(Client* sender, const std::string& param) {
 
 void Bot::cmdInfo(Client* sender, const std::string& param) {
   if (param.empty() || param[0] != '#') {
-    reply(sender, "Server: " + _server->getServerName() + " v" + SERVER_VERSION);
+    reply(sender, "Server: " + _server->getServerName() + " v" + Limits::kServerVersion);
     return;
   }
 

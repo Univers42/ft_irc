@@ -1,6 +1,7 @@
 /* ─── Unit tests: Client buffer management & state ─── */
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "PostMan.hpp"
 #include "Client.hpp"
 #include "Replies.hpp"
@@ -57,13 +58,13 @@ TEST(ClientBuffer, MultipleMessagesInOneRecv)
 TEST(ClientBuffer, OverflowProtection)
 {
 	Client c(46, "127.0.0.1");
-	/* Build a string > MAX_MSGLEN (512) with no newline */
+	/* Build a string > Limits::kMsgLen (512) with no newline */
 	std::string huge(600, 'X');
 	c.appendToRecvBuffer(huge);
 	std::vector<std::string> msgs = c.extractMessages();
-	/* Should force-extract at MAX_MSGLEN */
+	/* Should force-extract at Limits::kMsgLen */
 	ASSERT_EQ(msgs.size(), 1u);
-	EXPECT_EQ(msgs[0].size(), static_cast<size_t>(MAX_MSGLEN));
+	EXPECT_EQ(msgs[0].size(), Limits::kMsgLen);
 }
 
 TEST(ClientBuffer, QueueMessageAppendsCRLF)

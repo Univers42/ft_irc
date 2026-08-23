@@ -29,6 +29,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "TestHarness.hpp"
 #include "Replies.hpp"
 
@@ -413,7 +414,7 @@ TEST_F(ModeMatrixTest, ErrorsAreReportedOncePerDistinctComplaint)
 		{"+l abc", "", "+", ERR_INVALIDMODEPARAM, "a limit must be a number"},
 		{"+l 0", "", "+", ERR_INVALIDMODEPARAM, "…at least 1"},
 		{"+l -3", "", "+", ERR_INVALIDMODEPARAM, "…and not negative"},
-		{"+l 65536", "", "+", ERR_INVALIDMODEPARAM, "…and at most MAX_USERLIMIT"},
+		{"+l 65536", "", "+", ERR_INVALIDMODEPARAM, "…and at most Limits::kUserLimit"},
 		{"+ll abc abc", "", "+", ERR_INVALIDMODEPARAM,
 		 "the same bad limit twice is one complaint"},
 		{"+ll abc def", "", "+", "696 696", "two bad limits are two"},
@@ -667,7 +668,7 @@ TEST_F(ModeMatrixTest, ADenseModeStringStaysWithinTheLineLimit)
 	std::this_thread::sleep_for(std::chrono::milliseconds(300));
 	std::string seen = watcher.recvAll(400);
 
-	EXPECT_LE(longestLine(seen), static_cast<size_t>(MAX_MSGLEN))
+	EXPECT_LE(longestLine(seen), Limits::kMsgLen)
 		<< "a dense MODE echo overran the 512-byte line limit";
 	EXPECT_NE(seen.find(" MODE #dense "), std::string::npos)
 		<< "the dense MODE was never echoed at all";
@@ -714,7 +715,7 @@ TEST_F(ModeMatrixTest, ADenseJunkModeStringCannotStormTheSender)
 
 	EXPECT_EQ(countLines(got), 4u)
 		<< "expected one 472 per distinct char (z q w y), got:\n" << got;
-	EXPECT_LE(longestLine(got), static_cast<size_t>(MAX_MSGLEN));
+	EXPECT_LE(longestLine(got), Limits::kMsgLen);
 
 	op.sendCmd("QUIT");
 }
@@ -771,8 +772,8 @@ TEST_F(ModeMatrixTest, ParametersAreNeverReparsedAsModeCharacters)
 
 TEST_F(ModeMatrixTest, LimitAndKeyBoundaries)
 {
-	const std::string maxKey(MAX_KEYLEN, 'k');
-	const std::string tooLongKey(MAX_KEYLEN + 1, 'k');
+	const std::string maxKey(Limits::kKeyLen, 'k');
+	const std::string tooLongKey(Limits::kKeyLen + 1, 'k');
 
 	const std::string okMin = "+l 1";
 	const std::string okMax = "+l 65535";
@@ -786,7 +787,7 @@ TEST_F(ModeMatrixTest, LimitAndKeyBoundaries)
 	const ModeCase cases[] = {
 		{okMin.c_str(), setMin.c_str(), "+l 1", "", "1 is the smallest limit"},
 		{okMax.c_str(), setMax.c_str(), "+l 65535", "",
-		 "MAX_USERLIMIT is the largest"},
+		 "Limits::kUserLimit is the largest"},
 		{"+l 65536", "", "+", ERR_INVALIDMODEPARAM, "one past it is refused"},
 		{"+l 1x", "", "+", ERR_INVALIDMODEPARAM,
 		 "a trailing non-digit is not silently dropped"},
@@ -794,7 +795,7 @@ TEST_F(ModeMatrixTest, LimitAndKeyBoundaries)
 		{"+l ", "", "+", ERR_NEEDMOREPARAMS,
 		 "an empty limit is a missing parameter, not a zero one"},
 		{keyOk.c_str(), keyOkEcho.c_str(), keyOkState.c_str(), "",
-		 "a key of exactly MAX_KEYLEN is accepted"},
+		 "a key of exactly Limits::kKeyLen is accepted"},
 		{keyBad.c_str(), "", "+", ERR_INVALIDKEY, "one octet longer is not"},
 		{"+k with space", "+k with", "+k with", "",
 		 "the key stops at the space — 'space' is a separate parameter"},

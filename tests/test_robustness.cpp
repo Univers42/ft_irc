@@ -1,6 +1,7 @@
 /* ─── Robustness tests: crash resistance, stress, edge cases ─── */
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "PostMan.hpp"
 #include "Server.hpp"
 
@@ -671,7 +672,7 @@ TEST_F(RobustnessTest, FrozenReaderEventuallyDisconnectedOnSendQ)
 {
 	/* Heaviest test in the suite: sends ~12 MB to push a frozen reader past
 	 * both this machine's real OS socket-buffer ceiling and the 64 KiB
-	 * MAX_SENDQ latch. The exact byte count at which the disconnect fires
+	 * Limits::kSendQ latch. The exact byte count at which the disconnect fires
 	 * is environment-dependent (see
 	 * .claude/workflow/tasks/T6-frozen-reader-flood/01-audit.md) — this
 	 * flood volume carries a wide safety margin (~6x) over the ~1.88 MB
@@ -733,7 +734,7 @@ TEST_F(RobustnessTest, FrozenReaderEventuallyDisconnectedOnSendQ)
 		<< "Frozen reader A should eventually be disconnected once a large "
 		   "enough flood (" << FLOOD_LINES << " lines, ~"
 		<< (FLOOD_LINES * (payload.size() + 19)) / (1024 * 1024)
-		<< " MB) exceeds real OS + MAX_SENDQ backpressure";
+		<< " MB) exceeds real OS + Limits::kSendQ backpressure";
 
 	close(fdA);
 	close(fdB);

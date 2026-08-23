@@ -1,6 +1,7 @@
 /* ─── Security & robustness hardening tests ─── */
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "PostMan.hpp"
 #include "TestHarness.hpp"
 #include "Client.hpp"
@@ -213,14 +214,14 @@ TEST(SendQ, OverflowLatchesAndDropsExcess)
 	Client c(80, "127.0.0.1");
 	EXPECT_FALSE(c.isSendQExceeded());
 
-	/* Queue well past MAX_SENDQ without draining */
+	/* Queue well past Limits::kSendQ without draining */
 	std::string line(500, 'x');
-	for (int i = 0; i < (MAX_SENDQ / 500) + 10; ++i)
+	for (std::size_t i = 0; i < (Limits::kSendQ / 500) + 10; ++i)
 		c.queueMessage(line);
 
 	EXPECT_TRUE(c.isSendQExceeded());
 	/* The buffer never grows past the cap — excess lines were dropped */
-	EXPECT_LE(c.getSendBuffer().size(), static_cast<size_t>(MAX_SENDQ));
+	EXPECT_LE(c.getSendBuffer().size(), Limits::kSendQ);
 }
 
 TEST(SendQ, NormalTrafficNeverTrips)

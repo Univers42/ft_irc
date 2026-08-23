@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "IrcTrace.hpp"
+#include "Limits.hpp"
 #include "Replies.hpp"
 
 Client::Client(int fd, const std::string& hostname)
@@ -15,7 +16,7 @@ Client::Client(int fd, const std::string& hostname)
       _passSent(false),
       _nickSet(false),
       _userSet(false),
-      _io(MAX_MSGLEN, MAX_SENDQ),
+      _io(Limits::kMsgLen, Limits::kSendQ),
       _lastActivity(std::time(NULL)),
       _pingSent(false),
       _pendingClose(false),
@@ -106,7 +107,7 @@ std::vector<std::string> Client::extractMessages() {
 }
 
 void Client::queueMessage(const std::string& msg) {
-  const size_t maxPayload = static_cast<size_t>(MAX_MSGLEN) - 2;
+  const size_t maxPayload = Limits::kMsgLen - 2;
   std::string wire = (msg.size() > maxPayload) ? msg.substr(0, maxPayload) : msg;
   _io.queue(wire);
 

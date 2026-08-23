@@ -10,6 +10,7 @@
 #define TEST_HARNESS_HPP
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "Server.hpp"
 #include "ext/RegisterExtensions.hpp"
 
@@ -153,7 +154,7 @@ protected:
 	/* Override to shrink the pending-close deadline sweep below its 5s
 	** production default (Server's ctor takes it directly now) -- avoids
 	** paying real wall-clock seconds in tests that need to observe it. */
-	virtual time_t pendingCloseTimeoutSec() const { return PENDING_CLOSE_TIMEOUT; }
+	virtual time_t pendingCloseTimeoutSec() const { return Limits::kPendingCloseTimeout; }
 
 	void SetUp() override
 	{

@@ -3,6 +3,7 @@
 
 #include "ChannelModes.hpp"
 #include "IrcCase.hpp"
+#include "Limits.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
 
@@ -26,7 +27,7 @@ struct ModeChange {
 
 static std::vector<std::string> renderModeLines(const std::string& head, const std::vector<ModeChange>& applied) {
   std::vector<std::string> lines;
-  const size_t budget = static_cast<size_t>(MAX_MSGLEN) - 2;
+  const size_t budget = Limits::kMsgLen - 2;
 
   size_t i = 0;
   while (i < applied.size()) {
@@ -162,7 +163,7 @@ void Server::cmdTopic(Client* client, const Message& msg) {
   if (chan->isTopicRestricted() && !requireChanOp(client, chan, chanName)) return;
 
   std::string newTopic = msg.matched() ? msg.field("topictext") : msg.params[1];
-  if (newTopic.size() > MAX_TOPICLEN) newTopic.erase(MAX_TOPICLEN);
+  if (newTopic.size() > Limits::kTopicLen) newTopic.erase(Limits::kTopicLen);
   chan->setTopic(newTopic, client->getNickname());
 
   chan->broadcastMessage(":" + client->getPrefix() + " TOPIC " + chan->getName() + " :" + newTopic, NULL);
@@ -335,7 +336,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
           std::string limitStr = msg.params[paramIdx++];
 
           long limit = 0;
-          if (!libcpp::str::parse_long(limitStr, 1, MAX_USERLIMIT, limit)) {
+          if (!libcpp::str::parse_long(limitStr, 1, Limits::kUserLimit, limit)) {
             if (!alreadyReported(reported, "696:" + limitStr))
               sendReply(client, ERR_INVALIDMODEPARAM, channel->getName(), "l", limitStr);
             continue;

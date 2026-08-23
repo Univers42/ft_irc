@@ -37,6 +37,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "Limits.hpp"
 #include "TestHarness.hpp"
 #include "Replies.hpp"
 
@@ -262,21 +263,21 @@ TEST_F(UserMatrixTest, UsernameProduction)
 
 TEST_F(UserMatrixTest, UsernameIsTruncatedNotRejected)
 {
-	/* MAX_USERLEN is a storage bound, not a grammar rule: an over-long name
+	/* Limits::kUserLen is a storage bound, not a grammar rule: an over-long name
 	 * is cut down, the way an over-long nick is, rather than refused. */
-	const std::string longName(MAX_USERLEN + 20, 'u');
+	const std::string longName(Limits::kUserLen + 20, 'u');
 	Registration r = registerWith(serverPort, "trunc1", "USER " + longName + " 0 * :R");
 	EXPECT_TRUE(r.welcomed) << r.raw;
-	EXPECT_EQ(r.username.size(), static_cast<size_t>(MAX_USERLEN))
-		<< "username should be truncated to MAX_USERLEN, got \"" << r.username
+	EXPECT_EQ(r.username.size(), Limits::kUserLen)
+		<< "username should be truncated to Limits::kUserLen, got \"" << r.username
 		<< "\"";
 
 	/* Truncation happens BEFORE validation, so an '@' past the cut cannot
 	 * reach the prefix — and cannot cause a spurious refusal either. */
 	Registration r2 = registerWith(serverPort, "trunc2",
-								   "USER " + std::string(MAX_USERLEN, 'v') + "@evil 0 * :R");
+								   "USER " + std::string(Limits::kUserLen, 'v') + "@evil 0 * :R");
 	EXPECT_TRUE(r2.welcomed)
-		<< "an '@' beyond MAX_USERLEN is cut off, not a refusal\n" << r2.raw;
+		<< "an '@' beyond Limits::kUserLen is cut off, not a refusal\n" << r2.raw;
 	EXPECT_EQ(r2.username.find('@'), std::string::npos)
 		<< "no '@' may survive into the stored username: \"" << r2.username << "\"";
 }
@@ -537,7 +538,7 @@ TEST_F(UserMatrixTest, ALongRealnameIsStoredWithinTheLineLimit)
 	 * fill an incoming 512-byte line must not produce an outgoing one that
 	 * overruns it. */
 	const std::string head = "USER u 0 * :";
-	const std::string big(MAX_MSGLEN - 2 - head.size(), 'R');
+	const std::string big(Limits::kMsgLen - 2 - head.size(), 'R');
 
 	Registration r = registerWith(serverPort, "big1", head + big);
 	ASSERT_TRUE(r.welcomed) << r.raw;
@@ -553,7 +554,7 @@ TEST_F(UserMatrixTest, ALongRealnameIsStoredWithinTheLineLimit)
 			worst = (end - start) + 2;
 		start = end + 2;
 	}
-	EXPECT_LE(worst, static_cast<size_t>(MAX_MSGLEN))
+	EXPECT_LE(worst, Limits::kMsgLen)
 		<< "a long realname produced an over-long reply";
 }
 
@@ -724,7 +725,7 @@ TEST_F(UserMatrixTest, DenseCrossProductOfEveryParameterAxis)
 					++accepted;
 
 					/* <user> survives verbatim (nothing here exceeds
-					 * MAX_USERLEN, so truncation is not in play). */
+					 * Limits::kUserLen, so truncation is not in play). */
 					EXPECT_EQ(got.username, std::string(kUsers[u].value))
 						<< "case " << caseNo << ": <user> was not stored verbatim";
 

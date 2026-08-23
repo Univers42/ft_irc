@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 
+#include "Limits.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/format.hpp"
@@ -71,8 +72,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
 
     std::string namesHead = "= " + name + " :";
     size_t framing = 1 + _serverName.size() + 1 + 3 + 1 + client->getNickname().size() + 1 + namesHead.size();
-    size_t budget =
-        (framing + 1 < static_cast<size_t>(MAX_MSGLEN) - 2) ? static_cast<size_t>(MAX_MSGLEN) - 2 - framing : 1;
+    size_t budget = (framing + 1 < Limits::kMsgLen - 2) ? Limits::kMsgLen - 2 - framing : 1;
     std::vector<std::string> chunks = chan->getNamesChunks(budget);
     for (size_t c = 0; c < chunks.size(); ++c) sendNumeric(client, RPL_NAMREPLY, namesHead + chunks[c]);
     sendReply(client, RPL_ENDOFNAMES, name);
