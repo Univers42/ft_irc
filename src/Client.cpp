@@ -19,7 +19,9 @@ Client::Client(int fd, const std::string& hostname)
       _pingSent(false),
       _pendingClose(false),
       _pendingCloseSince(0),
-      _tearingDown(false) {}
+      _tearingDown(false),
+      _invisible(false),
+      _wallops(false) {}
 
 Client::~Client() {}
 
@@ -38,10 +40,19 @@ bool Client::isPingSent() const { return _pingSent; }
 bool Client::isPendingClose() const { return _pendingClose; }
 time_t Client::getPendingCloseSince() const { return _pendingCloseSince; }
 bool Client::isTearingDown() const { return _tearingDown; }
+bool Client::isInvisible() const { return _invisible; }
+bool Client::isWallops() const { return _wallops; }
+void Client::setInvisible(bool on) { _invisible = on; }
+void Client::setWallops(bool on) { _wallops = on; }
 
-std::string Client::getPrefix() const {
-  return _nickname + "!" + _username + "@" + _hostname;
+std::string Client::getUserModeString() const {
+  std::string modes = "+";
+  if (_invisible) modes += "i";
+  if (_wallops) modes += "w";
+  return modes;
 }
+
+std::string Client::getPrefix() const { return _nickname + "!" + _username + "@" + _hostname; }
 
 void Client::setNickname(const std::string& nickname) { _nickname = nickname; }
 void Client::setUsername(const std::string& username) { _username = username; }
@@ -63,30 +74,39 @@ void Client::markTearingDown() { _tearingDown = true; }
 
 void Client::appendToRecvBuffer(const std::string& data) { _io.feed(data); }
 
-static std::string sanitizeLine(const std::string& line) {
+static std::string stripNul(const std::string& line) {
   std::string out;
   out.reserve(line.size());
   for (std::string::size_type i = 0; i < line.size(); ++i) {
-    if (line[i] != '\r' && line[i] != '\0') out += line[i];
+    if (line[i] != '\0') out += line[i];
   }
   return out;
+}
+
+static void splitOnCr(const std::string& line, std::vector<std::string>& out) {
+  std::string::size_type start = 0;
+  while (start <= line.size()) {
+    std::string::size_type cr = line.find('\r', start);
+    if (cr == std::string::npos) {
+      if (start < line.size()) out.push_back(line.substr(start));
+      return;
+    }
+    if (cr > start) out.push_back(line.substr(start, cr - start));
+    start = cr + 1;
+  }
 }
 
 std::vector<std::string> Client::extractMessages() {
   std::vector<std::string> messages;
   std::string line;
 
-  while (_io.nextLine(line)) {
-    line = sanitizeLine(line);
-    if (!line.empty()) messages.push_back(line);
-  }
+  while (_io.nextLine(line)) splitOnCr(stripNul(line), messages);
   return messages;
 }
 
 void Client::queueMessage(const std::string& msg) {
   const size_t maxPayload = static_cast<size_t>(MAX_MSGLEN) - 2;
-  std::string wire =
-      (msg.size() > maxPayload) ? msg.substr(0, maxPayload) : msg;
+  std::string wire = (msg.size() > maxPayload) ? msg.substr(0, maxPayload) : msg;
   _io.queue(wire);
 
   IrcTrace::outbound(_fd, _nickname, wire);

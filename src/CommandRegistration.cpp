@@ -1,8 +1,8 @@
 #include <string>
 
 #include "IrcCase.hpp"
-#include "Log.hpp"
 #include "IrcTrace.hpp"
+#include "Log.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/case.hpp"
@@ -55,8 +55,7 @@ void Server::cmdNick(Client* client, const Message& msg) {
 
   for (size_t i = 0; i < _extensions.size(); ++i) {
     if (_extensions[i]->reservesNick(nick)) {
-      sendReply(client, ERR_NICKNAMEINUSE,
-                nick + " :Nickname is already in use");
+      sendReply(client, ERR_NICKNAMEINUSE, nick + " :Nickname is already in use");
       return;
     }
   }
@@ -79,8 +78,8 @@ void Server::cmdNick(Client* client, const Message& msg) {
 }
 
 static bool isValidUsernameChar(unsigned char c) {
-  return (c >= 0x01 && c <= 0x09) || (c >= 0x0B && c <= 0x0C) ||
-         (c >= 0x0E && c <= 0x1F) || (c >= 0x21 && c <= 0x3F) || (c >= 0x41);
+  return (c >= 0x01 && c <= 0x09) || (c >= 0x0B && c <= 0x0C) || (c >= 0x0E && c <= 0x1F) || (c >= 0x21 && c <= 0x3F) ||
+         (c >= 0x41);
 }
 
 static bool isValidUsername(const std::string& user) {
@@ -130,8 +129,7 @@ void Server::cmdUser(Client* client, const Message& msg) {
 }
 
 void Server::completeRegistration(Client* client) {
-  if (!client->hasPassSent() ||
-      !libcpp::str::eq_consttime(client->getPassword(), _password)) {
+  if (!client->hasPassSent() || !libcpp::str::eq_consttime(client->getPassword(), _password)) {
     sendReply(client, ERR_PASSWDMISMATCH, ":Password incorrect");
     disconnectClient(client->getFd(), "Password mismatch");
     return;
@@ -142,18 +140,13 @@ void Server::completeRegistration(Client* client) {
   std::string nick = client->getNickname();
   std::string prefix = client->getPrefix();
 
-  sendReply(client, RPL_WELCOME,
-            ":Welcome to the " + _serverName + " Network " + prefix);
+  sendReply(client, RPL_WELCOME, ":Welcome to the " + _serverName + " Network " + prefix);
 
-  sendReply(
-      client, RPL_YOURHOST,
-      ":Your host is " + _serverName + ", running version " + SERVER_VERSION);
+  sendReply(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + SERVER_VERSION);
 
-  sendReply(client, RPL_CREATED,
-            ":This server was created " + std::string(SERVER_CREATED));
+  sendReply(client, RPL_CREATED, ":This server was created " + std::string(SERVER_CREATED));
 
-  sendReply(client, RPL_MYINFO,
-            _serverName + " " + SERVER_VERSION + " o itkol");
+  sendReply(client, RPL_MYINFO, _serverName + " " + SERVER_VERSION + " o itkol");
 
   sendReply(client, RPL_ISUPPORT,
             "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it "
@@ -166,10 +159,8 @@ void Server::completeRegistration(Client* client) {
   sendReply(client, ERR_NOMOTD, ":MOTD File is missing");
 
   IrcTrace::sessionRegistered(client->getFd(), prefix);
-  Log::success("registered " + nick + " (" + client->getUsername() + "@" +
-               client->getHostname() + ")");
+  Log::success("registered " + nick + " (" + client->getUsername() + "@" + client->getHostname() + ")");
   audit("register", nick, client->getUsername() + "@" + client->getHostname());
 
-  for (size_t i = 0; i < _extensions.size(); ++i)
-    _extensions[i]->onClientRegistered(*this, *client);
+  for (size_t i = 0; i < _extensions.size(); ++i) _extensions[i]->onClientRegistered(*this, *client);
 }

@@ -30,6 +30,12 @@ class Client {
   bool isTearingDown() const;
   std::string getPrefix() const;
 
+  bool isInvisible() const;
+  bool isWallops() const;
+  void setInvisible(bool on);
+  void setWallops(bool on);
+  std::string getUserModeString() const;
+
   void setNickname(const std::string& nickname);
   void setUsername(const std::string& username);
   void setRealname(const std::string& realname);
@@ -77,6 +83,8 @@ class Client {
   bool _pendingClose;
   time_t _pendingCloseSince;
   bool _tearingDown;
+  bool _invisible;
+  bool _wallops;
 };
 
 #endif
