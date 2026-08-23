@@ -468,6 +468,28 @@ const Server::CommandEntry* Server::findCommand(const std::string& name) {
   return NULL;
 }
 
+void Server::replyNeedMoreParams(Client* client, const std::string& command) {
+  sendReply(client, ERR_NEEDMOREPARAMS, command + " :Not enough parameters");
+}
+
+Channel* Server::requireChannel(Client* client, const std::string& name) {
+  Channel* channel = findChannel(name);
+  if (channel == NULL) sendReply(client, ERR_NOSUCHCHANNEL, name + " :No such channel");
+  return channel;
+}
+
+bool Server::requireMember(Client* client, Channel* channel, const std::string& name) {
+  if (channel->isMember(client)) return true;
+  sendReply(client, ERR_NOTONCHANNEL, name + " :You're not on that channel");
+  return false;
+}
+
+bool Server::requireChanOp(Client* client, Channel* channel, const std::string& name) {
+  if (channel->isOperator(client)) return true;
+  sendReply(client, ERR_CHANOPRIVSNEEDED, name + " :You're not channel operator");
+  return false;
+}
+
 void Server::dispatchCommand(Client* client, const Message& msg) {
   const CommandEntry* entry = findCommand(msg.command);
 

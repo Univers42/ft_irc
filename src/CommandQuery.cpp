@@ -78,7 +78,7 @@ void Server::cmdWhois(Client* client, const Message& msg) {
 
 void Server::cmdUserhost(Client* client, const Message& msg) {
   if (msg.params.empty()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "USERHOST :Not enough parameters");
+    replyNeedMoreParams(client, "USERHOST");
     return;
   }
 

@@ -26,7 +26,7 @@ void Server::cmdPass(Client* client, const Message& msg) {
     return;
   }
   if (msg.params.empty()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "PASS :Not enough parameters");
+    replyNeedMoreParams(client, "PASS");
     return;
   }
   client->setPassword(msg.matched() ? msg.field("password") : msg.params[0]);
@@ -103,12 +103,12 @@ void Server::cmdUser(Client* client, const Message& msg) {
     return;
   }
   if (msg.params.size() < 4) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "USER :Not enough parameters");
+    replyNeedMoreParams(client, "USER");
     return;
   }
 
   if (msg.matched() ? false : msg.trailingIndex != 3) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "USER :Not enough parameters");
+    replyNeedMoreParams(client, "USER");
     return;
   }
 

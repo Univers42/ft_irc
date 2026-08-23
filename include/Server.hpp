@@ -94,6 +94,11 @@ class Server {
   std::string firstToken(const std::string& raw) const;
   void fillParams(const Abnf::MatchResult& fields, Message& out) const;
 
+  void replyNeedMoreParams(Client* client, const std::string& command);
+  Channel* requireChannel(Client* client, const std::string& name);
+  bool requireMember(Client* client, Channel* channel, const std::string& name);
+  bool requireChanOp(Client* client, Channel* channel, const std::string& name);
+
   void cmdCap(Client* client, const Message& msg);
   void cmdPass(Client* client, const Message& msg);
   void cmdNick(Client* client, const Message& msg);

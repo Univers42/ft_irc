@@ -8,7 +8,7 @@
 
 void Server::cmdJoin(Client* client, const Message& msg) {
   if (!msg.matched()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
+    replyNeedMoreParams(client, "JOIN");
     return;
   }
 
@@ -89,7 +89,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
 
 void Server::cmdPart(Client* client, const Message& msg) {
   if (!msg.matched()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "PART :Not enough parameters");
+    replyNeedMoreParams(client, "PART");
     return;
   }
 
@@ -99,16 +99,9 @@ void Server::cmdPart(Client* client, const Message& msg) {
 
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& chanName = targets[t];
-    Channel* chan = findChannel(chanName);
-    if (!chan) {
-      sendReply(client, ERR_NOSUCHCHANNEL, chanName + " :No such channel");
-      continue;
-    }
-
-    if (!chan->isMember(client)) {
-      sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
-      continue;
-    }
+    Channel* chan = requireChannel(client, chanName);
+    if (!chan) continue;
+    if (!requireMember(client, chan, chanName)) continue;
 
     std::string partMsg = ":" + client->getPrefix() + " PART " + chan->getName();
     if (!reason.empty()) partMsg += " :" + reason;

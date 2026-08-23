@@ -103,7 +103,7 @@ static bool isValidChannelKey(const std::string& key) {
 
 void Server::cmdKick(Client* client, const Message& msg) {
   if (!msg.matched()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "KICK :Not enough parameters");
+    replyNeedMoreParams(client, "KICK");
     return;
   }
 
@@ -112,21 +112,10 @@ void Server::cmdKick(Client* client, const Message& msg) {
   std::string reason = client->getNickname();
   if (msg.has("kickreason")) reason = msg.field("kickreason");
 
-  Channel* chan = findChannel(chanName);
-  if (!chan) {
-    sendReply(client, ERR_NOSUCHCHANNEL, chanName + " :No such channel");
-    return;
-  }
-
-  if (!chan->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
-    return;
-  }
-
-  if (!chan->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED, chanName + " :You're not channel operator");
-    return;
-  }
+  Channel* chan = requireChannel(client, chanName);
+  if (!chan) return;
+  if (!requireMember(client, chan, chanName)) return;
+  if (!requireChanOp(client, chan, chanName)) return;
 
   Client* targetClient = chan->findMember(target);
   if (!targetClient) {
@@ -144,28 +133,17 @@ void Server::cmdKick(Client* client, const Message& msg) {
 
 void Server::cmdInvite(Client* client, const Message& msg) {
   if (!msg.matched()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "INVITE :Not enough parameters");
+    replyNeedMoreParams(client, "INVITE");
     return;
   }
 
   const std::string& target = msg.field("invnick");
   const std::string& chanName = msg.field("invchan");
 
-  Channel* chan = findChannel(chanName);
-  if (!chan) {
-    sendReply(client, ERR_NOSUCHCHANNEL, chanName + " :No such channel");
-    return;
-  }
-
-  if (!chan->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
-    return;
-  }
-
-  if (chan->isInviteOnly() && !chan->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED, chanName + " :You're not channel operator");
-    return;
-  }
+  Channel* chan = requireChannel(client, chanName);
+  if (!chan) return;
+  if (!requireMember(client, chan, chanName)) return;
+  if (chan->isInviteOnly() && !requireChanOp(client, chan, chanName)) return;
 
   Client* targetClient = findClientByNick(target);
   if (!targetClient) {
@@ -187,22 +165,14 @@ void Server::cmdInvite(Client* client, const Message& msg) {
 
 void Server::cmdTopic(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[0].empty()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
+    replyNeedMoreParams(client, "TOPIC");
     return;
   }
 
   const std::string& chanName = msg.params[0];
-  Channel* chan = findChannel(chanName);
-
-  if (!chan) {
-    sendReply(client, ERR_NOSUCHCHANNEL, chanName + " :No such channel");
-    return;
-  }
-
-  if (!chan->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL, chanName + " :You're not on that channel");
-    return;
-  }
+  Channel* chan = requireChannel(client, chanName);
+  if (!chan) return;
+  if (!requireMember(client, chan, chanName)) return;
 
   if (msg.params.size() == 1) {
     if (chan->getTopic().empty()) {
@@ -215,10 +185,7 @@ void Server::cmdTopic(Client* client, const Message& msg) {
     return;
   }
 
-  if (chan->isTopicRestricted() && !chan->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED, chanName + " :You're not channel operator");
-    return;
-  }
+  if (chan->isTopicRestricted() && !requireChanOp(client, chan, chanName)) return;
 
   std::string newTopic = msg.matched() ? msg.field("topictext") : msg.params[1];
   if (newTopic.size() > MAX_TOPICLEN) newTopic.erase(MAX_TOPICLEN);
@@ -229,23 +196,17 @@ void Server::cmdTopic(Client* client, const Message& msg) {
 
 void Server::cmdMode(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[0].empty()) {
-    sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+    replyNeedMoreParams(client, "MODE");
     return;
   }
 
   const std::string& target = msg.params[0];
 
   if (target[0] == '#') {
-    Channel* chan = findChannel(target);
-    if (!chan) {
-      sendReply(client, ERR_NOSUCHCHANNEL, target + " :No such channel");
-      return;
-    }
+    Channel* chan = requireChannel(client, target);
+    if (!chan) return;
     if (msg.params.size() == 1) {
-      if (!chan->isMember(client)) {
-        sendReply(client, ERR_NOTONCHANNEL, target + " :You're not on that channel");
-        return;
-      }
+      if (!requireMember(client, chan, target)) return;
       std::string modes = chan->getModeString();
       std::string params = chan->getModeParams();
       std::string reply = target + " " + modes;
@@ -315,15 +276,8 @@ void Server::handleUserMode(Client* client, const Message& msg) {
 }
 
 void Server::handleChannelMode(Client* client, Channel* channel, const Message& msg) {
-  if (!channel->isMember(client)) {
-    sendReply(client, ERR_NOTONCHANNEL, channel->getName() + " :You're not on that channel");
-    return;
-  }
-
-  if (!channel->isOperator(client)) {
-    sendReply(client, ERR_CHANOPRIVSNEEDED, channel->getName() + " :You're not channel operator");
-    return;
-  }
+  if (!requireMember(client, channel, channel->getName())) return;
+  if (!requireChanOp(client, channel, channel->getName())) return;
 
   const std::string& modeStr = msg.params[1];
 
@@ -361,7 +315,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
       case 'k': {
         if (adding) {
           if (paramIdx >= msg.params.size()) {
-            if (!alreadyReported(reported, "461")) sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+            if (!alreadyReported(reported, "461")) replyNeedMoreParams(client, "MODE");
             continue;
           }
           std::string key = msg.params[paramIdx++];
@@ -386,7 +340,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
       }
       case 'o': {
         if (paramIdx >= msg.params.size()) {
-          if (!alreadyReported(reported, "461")) sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+          if (!alreadyReported(reported, "461")) replyNeedMoreParams(client, "MODE");
           continue;
         }
         std::string nick = msg.params[paramIdx++];
@@ -403,7 +357,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
       case 'l': {
         if (adding) {
           if (paramIdx >= msg.params.size()) {
-            if (!alreadyReported(reported, "461")) sendReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+            if (!alreadyReported(reported, "461")) replyNeedMoreParams(client, "MODE");
             continue;
           }
           std::string limitStr = msg.params[paramIdx++];
