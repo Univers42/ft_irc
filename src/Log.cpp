@@ -71,9 +71,7 @@ void Log::setSink(ILogSink* sink) {
 }
 
 void Log::setLevel(Level level) { g_level = level; }
-
 Log::Level Log::level() { return g_level; }
-
 bool Log::enabled(Level required) { return g_level >= required; }
 
 void Log::configureFromEnv() {
