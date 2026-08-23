@@ -28,9 +28,18 @@ concurrency:
 #   valgrind   leak gate, scripted and under the functional load
 #   docker     the shipped images, plus the suite run inside one
 #
-# The four build submodules are public but .gitmodules spells their URLs as
-# SSH, so every job rewrites to HTTPS before fetching. Only the two the build
-# needs are initialised.
+# The submodules are public but their URLs are spelled SSH in places, so every
+# job rewrites to HTTPS before fetching. Each job initialises only what it
+# uses: the build needs libcpp and googletest, and norm additionally needs
+# vendor/scripts, because norminette.sh lives there.
+#
+# Not initialised, deliberately: libcpp's OWN nested scripts submodule, which
+# holds check_header_cycles.py. libcpp pins it at 5ba3135f, a commit that was
+# never pushed to Univers42/scripts, so `--init --recursive vendor/libcpp`
+# fails outright ("not our ref"). audit.sh degrades to a warn when the checker
+# is absent, so leaving it out keeps the job green with the cycle gate marked
+# skipped -- strictly better than a red job. To actually run that gate, repoint
+# libcpp's nested submodule at a pushed commit and bump the libcpp pointer here.
 jobs:
   build:
     name: build — 3 tiers, -Werror
@@ -178,7 +187,7 @@ jobs:
       - name: fetch build submodules (public, over HTTPS)
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init vendor/libcpp vendor/googletest
+          git submodule update --init vendor/libcpp vendor/googletest vendor/scripts
       # `make norm` reports a tool that is not installed as "skipped" rather
       # than failing, so installing all four is what makes this gate mean
       # anything at all.
