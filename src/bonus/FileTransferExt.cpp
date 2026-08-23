@@ -50,9 +50,11 @@ static bool isValidFilename(const std::string& name) {
 }
 
 static bool isBase64Chunk(const std::string& chunk) {
-  if (chunk.empty() || chunk.size() > FileTransferExt::MAX_CHUNK_B64) return false;
+  if (chunk.empty() || chunk.size() > FileTransferExt::MAX_CHUNK_B64) return false;  //< "" · a chunk over the cap
   for (std::string::size_type i = 0; i < chunk.size(); ++i) {
     char c = chunk[i];
+    //< base64 alphabet — the '+' here is a DATA octet, nothing to do with MODE's sign
+    //< "QUJD" · "a+b/c" · "QQ==" pad · reject "a b" (SPACE) and any 8-bit octet
     bool ok =
         (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=';
     if (!ok) return false;

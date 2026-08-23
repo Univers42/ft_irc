@@ -21,7 +21,7 @@ inline const Spec* table() {
 }
 
 inline const Spec* find(char letter) {
-  for (const Spec* spec = table(); spec->letter != '\0'; ++spec)
+  for (const Spec* spec = table(); spec->letter != '\0'; ++spec)  //< '\\0' sentinel ends the i/t/k/o/l table
     if (spec->letter == letter) return spec;
   return 0;
 }
@@ -33,11 +33,11 @@ inline std::size_t mandatoryParams(const std::string& modeStr, std::size_t from,
   bool adding = sign;
   for (std::size_t i = from; i < modeStr.size(); ++i) {
     const char c = modeStr[i];
-    if (c == '+') {
+    if (c == '+') {  //< COUNTING pass · how many params "+kl" needs (2) before consuming any
       adding = true;
       continue;
     }
-    if (c == '-') {
+    if (c == '-') {  //< "-k" needs none when adding, so "+o-k bob" needs 1, not 2
       adding = false;
       continue;
     }
@@ -52,18 +52,18 @@ inline bool firstKeyParam(const std::string& modeStr, std::size_t available, std
   std::size_t used = 0;
   for (std::size_t i = 0; i < modeStr.size(); ++i) {
     const char c = modeStr[i];
-    if (c == '+') {
+    if (c == '+') {  //< LOCATING pass · which positional param is +k's key · "+ok bob key" -> index 1
       adding = true;
       continue;
     }
-    if (c == '-') {
+    if (c == '-') {  //< only +k takes a key here · a '-' run just flips the sign
       adding = false;
       continue;
     }
     const Spec* spec = find(c);
     if (spec == 0) continue;
 
-    if (adding && c == 'k') {
+    if (adding && c == 'k') {  //< first ADDED k wins · "-k+k new" locates the '+k' one
       if (used >= available) return false;
       *out = used;
       return true;

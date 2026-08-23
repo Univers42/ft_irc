@@ -46,7 +46,7 @@ bool Channel::isOperator(Client* client) const { return _operators.count(client-
 void Channel::addInvite(Client* client) { _inviteList.insert(client->getFd()); }
 bool Channel::isInvited(Client* client) const { return _inviteList.count(client->getFd()) > 0; }
 void Channel::setOperator(Client* client, bool op) {
-  if (op)
+  if (op)  //< "+o bob" grants · "-o bob" revokes · membership itself is unchanged either way
     _operators.insert(client->getFd());
   else
     _operators.erase(client->getFd());

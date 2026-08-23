@@ -47,7 +47,8 @@ unsigned long& sessionCount() {
 std::string commandOf(const std::string& line) {
   std::string::size_type pos = 0;
   while (pos < line.size() && line[pos] == ' ') ++pos;
-  if (pos < line.size() && line[pos] == ':') {
+  if (pos < line.size() &&
+      line[pos] == ':') {  //< leading ':' = a PREFIX · ":srv 001 nick :hi" · clients rarely send one
     std::string::size_type sp = line.find(' ', pos);
     if (sp == std::string::npos) return "";
     pos = sp;
@@ -70,7 +71,7 @@ std::string redactParam(const std::string& line, size_t idx) {
     std::string tok = (sp == std::string::npos) ? line.substr(pos) : line.substr(pos, sp - pos);
 
     if (!tok.empty()) {
-      if (!sawPrefix && !sawCommand && tok[0] == ':') {
+      if (!sawPrefix && !sawCommand && tok[0] == ':') {  //< only the FIRST token · a later ':' opens the trailing
         sawPrefix = true;
       } else if (!sawCommand) {
         sawCommand = true;

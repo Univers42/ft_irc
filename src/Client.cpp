@@ -81,7 +81,7 @@ static std::string stripNul(const std::string& line) {
   std::string out;
   out.reserve(line.size());
   for (std::string::size_type i = 0; i < line.size(); ++i) {
-    if (line[i] != '\0') out += line[i];
+    if (line[i] != '\0') out += line[i];  //< NUL is not a message octet · "he\\0llo" -> "hello", line survives
   }
   return out;
 }

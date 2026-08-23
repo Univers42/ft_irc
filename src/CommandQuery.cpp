@@ -5,7 +5,7 @@
 #include "Server.hpp"
 
 void Server::cmdWho(Client* client, const Message& msg) {
-  if (msg.params.empty() || msg.params[0].empty()) {
+  if (msg.params.empty() || msg.params[0].empty()) {  //< "WHOIS" with no nick -> 431
     sendReply(client, RPL_ENDOFWHO, "*");
     return;
   }
