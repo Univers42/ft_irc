@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "grammar/MatchResult.hpp"
-#include "libcpp/str/format.hpp"
 
 #include "libcpp/str/case.hpp"
 
@@ -44,12 +43,12 @@ const std::string& Message::field(const char* name, std::size_t index) const {
 
 std::vector<std::string> Message::list(const char* name, char separator) const {
   if (fields == NULL) return std::vector<std::string>();
-  return libcpp::str::split_nonempty(fields->at(name, 0), separator);
+  return fields->list(name, separator);
 }
 
 std::vector<std::string> Message::listKeepEmpty(const char* name, char separator) const {
   if (fields == NULL) return std::vector<std::string>();
-  return libcpp::str::split(fields->at(name, 0), separator);
+  return fields->listKeepEmpty(name, separator);
 }
 
 std::ostream& operator<<(std::ostream& os, const Message& msg) {

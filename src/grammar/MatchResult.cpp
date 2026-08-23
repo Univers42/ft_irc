@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "grammar/Grammar.hpp"
+#include "libcpp/str/format.hpp"
 
 namespace Abnf {
 namespace {
@@ -87,6 +88,14 @@ int MatchResult::sequenceOwner(std::size_t index) const {
 void MatchResult::adoptSequence(std::vector<std::string>& sequence, std::vector<int>& owners) {
   _sequence.swap(sequence);
   _owners.swap(owners);
+}
+
+std::vector<std::string> MatchResult::list(const std::string& name, char separator) const {
+  return libcpp::str::split_nonempty(at(name, 0), separator);
+}
+
+std::vector<std::string> MatchResult::listKeepEmpty(const std::string& name, char separator) const {
+  return libcpp::str::split(at(name, 0), separator);
 }
 
 void MatchResult::clear() {

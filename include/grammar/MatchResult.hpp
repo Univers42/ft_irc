@@ -26,6 +26,16 @@ class MatchResult {
 
   const std::vector<std::string>& all(const std::string& name) const;
 
+  /* A capture read as a separated list -- "#a,#b" as two fields rather than
+  ** one string. Nothing about splitting a capture is protocol-specific, so it
+  ** belongs beside at() rather than in whatever type happens to hold the
+  ** result; Message had both of these and did nothing with them but forward.
+  ** list() drops empty fields, which is what a comma-separated protocol list
+  ** ("#a,,#b,") almost always means; listKeepEmpty() keeps them, for the
+  ** parallel lists where position carries the meaning. */
+  std::vector<std::string> list(const std::string& name, char separator) const;
+  std::vector<std::string> listKeepEmpty(const std::string& name, char separator) const;
+
   void clear();
 
   void reset(const Grammar& grammar);
