@@ -7,6 +7,7 @@
 #include "IrcCase.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
+#include "Settings.hpp"
 #include "libcpp/str/format.hpp"
 
 const char* Bot::_jokes[] = {"Why do programmers prefer dark mode? Because light attracts bugs.",
@@ -84,7 +85,7 @@ void Bot::cmdTime(Client* sender, const std::string& param) {
 
 void Bot::cmdInfo(Client* sender, const std::string& param) {
   if (param.empty() || param[0] != '#') {
-    reply(sender, "Server: " + _server->getServerName() + " v" + Limits::kServerVersion);
+    reply(sender, "Server: " + _server->getServerName() + " v" + settings().serverVersion);
     return;
   }
 

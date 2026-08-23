@@ -10,6 +10,7 @@
 #include "IrcCase.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
+#include "Settings.hpp"
 #include "libcpp/str/case.hpp"
 #include "libcpp/str/format.hpp"
 
@@ -264,7 +265,7 @@ void FileTransferExt::cmdData(Server& server, Client& client, const Message& msg
     return;
   }
 
-  if (recipient->getSendBuffer().size() > Limits::kSendQ / 2) {
+  if (recipient->getSendBuffer().size() > settings().sendQ / 2) {
     notice(server, client, "FILE WAIT " + msg.params[1]);
     return;
   }

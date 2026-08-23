@@ -21,7 +21,7 @@ class IServerExtension;
 
 class Server {
  public:
-  Server(int port, const std::string& password, time_t pendingCloseTimeoutSec = Limits::kPendingCloseTimeout);
+  Server(int port, const std::string& password, time_t pendingCloseTimeoutSec = -1);
   ~Server();
 
   void run();

@@ -3,6 +3,7 @@
 
 class Server;
 
+void configureSettings();
 void registerExtensions(Server& server);
 
 #endif

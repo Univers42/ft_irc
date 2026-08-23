@@ -22,6 +22,7 @@ const long kUserLimit = 65535;
 
 const time_t kPingInterval = 120;
 const time_t kPingTimeout = 120;
+const time_t kPingSweepInterval = 30;
 const time_t kPendingCloseTimeout = 5;
 
 }  // namespace Limits

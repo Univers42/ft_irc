@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
   signal(SIGTERM, signalHandler);
 
   try {
+    configureSettings();
     Server server(static_cast<int>(port), password);
     registerExtensions(server);
     server.run();

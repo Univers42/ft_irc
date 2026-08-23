@@ -6,6 +6,8 @@
 #include "bonus/FileTransferExt.hpp"
 #include "ext/RegisterExtensions.hpp"
 
+void configureSettings() {}
+
 void registerExtensions(Server& server) {
   try {
     server.addExtension(new Bot(&server));

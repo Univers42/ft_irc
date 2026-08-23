@@ -13,7 +13,7 @@
   X(RPL_USERHOST, "302", 0)                                         \
                                                                     \
   X(RPL_WHOISUSER, "311", 0)                                        \
-  X(RPL_WHOISSERVER, "312", "ft_irc server")                        \
+  X(RPL_WHOISSERVER, "312", 0)                                      \
   X(RPL_ENDOFWHOIS, "318", "End of WHOIS list")                     \
   X(RPL_WHOISCHANNELS, "319", 0)                                    \
                                                                     \

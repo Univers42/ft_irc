@@ -7,6 +7,7 @@
 #include "IrcTrace.hpp"
 #include "Limits.hpp"
 #include "Replies.hpp"
+#include "Settings.hpp"
 
 Client::Client(int fd, const std::string& hostname)
     : _fd(fd),
@@ -16,7 +17,7 @@ Client::Client(int fd, const std::string& hostname)
       _passSent(false),
       _nickSet(false),
       _userSet(false),
-      _io(Limits::kMsgLen, Limits::kSendQ),
+      _io(Limits::kMsgLen, settings().sendQ),
       _lastActivity(std::time(NULL)),
       _pingSent(false),
       _pendingClose(false),

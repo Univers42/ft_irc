@@ -59,7 +59,7 @@ void Server::cmdWhois(Client* client, const Message& msg) {
       client, RPL_WHOISUSER,
       dest->getNickname() + " " + dest->getUsername() + " " + dest->getHostname() + " * :" + dest->getRealname());
 
-  sendReply(client, RPL_WHOISSERVER, dest->getNickname(), _serverName);
+  sendNumeric(client, RPL_WHOISSERVER, dest->getNickname() + " " + _serverName + " :" + _serverName + " server");
 
   std::string chanList;
   for (std::map<std::string, Channel*>::const_iterator it = _channels.begin(); it != _channels.end(); ++it) {

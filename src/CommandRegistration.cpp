@@ -5,6 +5,7 @@
 #include "Limits.hpp"
 #include "Log.hpp"
 #include "Server.hpp"
+#include "Settings.hpp"
 #include "ext/IServerExtension.hpp"
 #include "libcpp/str/case.hpp"
 #include "libcpp/str/format.hpp"
@@ -143,11 +144,11 @@ void Server::completeRegistration(Client* client) {
 
   sendNumeric(client, RPL_WELCOME, ":Welcome to the " + _serverName + " Network " + prefix);
 
-  sendNumeric(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + Limits::kServerVersion);
+  sendNumeric(client, RPL_YOURHOST, ":Your host is " + _serverName + ", running version " + settings().serverVersion);
 
-  sendNumeric(client, RPL_CREATED, ":This server was created " + std::string(Limits::kServerCreated));
+  sendNumeric(client, RPL_CREATED, ":This server was created " + settings().serverCreated);
 
-  sendNumeric(client, RPL_MYINFO, _serverName + " " + Limits::kServerVersion + " o itkol");
+  sendNumeric(client, RPL_MYINFO, _serverName + " " + settings().serverVersion + " o itkol");
 
   sendNumeric(client, RPL_ISUPPORT,
               "CHANTYPES=# PREFIX=(o)@ CHANMODES=,,kl,it NICKLEN=" + libcpp::str::to_string(Limits::kNickLen) +
