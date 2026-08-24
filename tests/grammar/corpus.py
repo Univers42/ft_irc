@@ -180,6 +180,16 @@ CASES += [
        want="461", forbid=()),
     _c("JOIN", "JOIN nohash", "join-cmd", "channel must start with '#'",
        want="476", forbid=()),
+    _c("JOIN", "JOIN #jh key extra words", "join-cmd",
+       "parameters past the keylist are ignored, not answered with 461",
+       forbid=("461", "421")),
+    _c("JOIN", "JOIN #ji  key", "join-cmd",
+       "a run of spaces between parameters is not a syntax error",
+       forbid=("461", "421")),
+    _c("JOIN", "JOIN :", "join-cmd", "an empty channel name is a missing one",
+       want="461", forbid=()),
+    _c("JOIN", "JOIN ,,,", "join-cmd", "a list of nothing but separators names no channel",
+       want="461", forbid=()),
 ]
 
 # ── PART ─────────────────────────────────────────────────────────────────

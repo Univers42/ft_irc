@@ -40,6 +40,7 @@ struct Message {
   const std::string& fieldOr(const char* name, std::size_t index) const;
 
   std::vector<std::string> listOr(const char* name, std::size_t index, char separator) const;
+  std::vector<std::string> listKeepEmptyOr(const char* name, std::size_t index, char separator) const;
 
   std::vector<std::string> list(const char* name, char separator) const;
 

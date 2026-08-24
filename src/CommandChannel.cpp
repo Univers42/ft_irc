@@ -10,18 +10,27 @@
 #include "libcpp/str/format.hpp"
 
 void Server::cmdJoin(Client* client, const Message& msg) {
-  if (!msg.matched()) {
-    replyNeedMoreParams(client, "JOIN");
-    return;
-  }
-
-  if (!msg.has("chanlist")) {  //< "JOIN 0" · the grammar's own alternative · parts every channel (3.2.1)
+  /* "JOIN 0" parts every channel (3.2.1). It is the grammar's own alternative
+  ** to a chanlist and captures nothing, so a matched line says so by having no
+  ** chanlist -- and that is also why this is tested before the empty-parameter
+  ** check below, which it would otherwise trip. On the fallback path it is the
+  ** sole parameter being exactly "0". */
+  const bool partEverything = msg.matched() ? !msg.has("chanlist") : (msg.params.size() == 1 && msg.params[0] == "0");
+  if (partEverything) {
     partAllChannels(client);
     return;
   }
 
-  std::vector<std::string> channels = msg.list("chanlist", ',');
-  std::vector<std::string> keys = msg.listKeepEmpty("keylist", ',');
+  std::vector<std::string> channels = msg.listOr("chanlist", 0, ',');
+  std::vector<std::string> keys = msg.listKeepEmptyOr("keylist", 1, ',');
+
+  /* Named no channel at all: a bare JOIN, an empty name ("JOIN :"), or a list
+  ** that is nothing but separators. An empty name is a missing name, and a
+  ** client waiting on an answer must not simply hang. */
+  if (channels.empty()) {
+    replyNeedMoreParams(client, "JOIN");
+    return;
+  }
 
   for (size_t i = 0; i < channels.size(); ++i) {
     const std::string& name = channels[i];

@@ -54,6 +54,12 @@ std::vector<std::string> Message::listOr(const char* name, std::size_t index, ch
   return libcpp::str::split_nonempty(params[index], separator);
 }
 
+std::vector<std::string> Message::listKeepEmptyOr(const char* name, std::size_t index, char separator) const {
+  if (fields != NULL) return listKeepEmpty(name, separator);
+  if (index >= params.size()) return std::vector<std::string>();
+  return libcpp::str::split(params[index], separator);
+}
+
 std::vector<std::string> Message::list(const char* name, char separator) const {
   if (fields == NULL) return std::vector<std::string>();
   return fields->list(name, separator);
