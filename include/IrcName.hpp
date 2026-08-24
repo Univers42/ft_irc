@@ -70,7 +70,7 @@ inline bool isChannelKey(const std::string& key) {
   for (std::string::size_type i = 0; i < key.size(); ++i) {
     const unsigned char c = static_cast<unsigned char>(key[i]);
     if (c <= ' ' || c == ',') return false;  //< SPACE ends the param · ',' splits JOIN's key list
-    if (c > 0x7F) return false;              //< key is 7-bit · "sécret" -> 525 · D5 · shared with JOIN so both agree
+    if (c > 0x7F) return false;              //< key is 7-bit · "sécret" -> 525 · D5 · JOIN checks the same
   }
   return true;
 }

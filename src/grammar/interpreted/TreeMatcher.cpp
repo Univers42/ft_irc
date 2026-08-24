@@ -55,7 +55,7 @@ bool TreeMatcher::isSingleOctet(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
   if (_singleOctet.size() < index + 1) _singleOctet.resize(index + 1, 0);
 
-  if (_singleOctet[index] != 0) return _singleOctet[index] == 1;  //< memo hit · 1=yes 2=no · 2 also breaks rule cycles
+  if (_singleOctet[index] != 0) return _singleOctet[index] == 1;  //< memo hit · 1=yes 2=no · 2 breaks cycles
 
   _singleOctet[index] = 2;
 
