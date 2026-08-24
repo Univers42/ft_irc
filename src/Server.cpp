@@ -105,6 +105,7 @@ void Server::initGrammar() {
   bindCommandRules();
   verifyCommandTable(source.origin());
   verifyReplyTable();
+  verifyChannelModeTable();
 
   Log::debug() << "grammar: " << source.origin() << " -> " << _matcher->strategy() << ", " << _grammar << ", "
                << _commandRules.size() << " command productions";

@@ -128,6 +128,24 @@ class Server {
   void handleUserMode(Client* client, const Message& msg);
   void handleChannelMode(Client* client, Channel* channel, const Message& msg);
 
+  /* One channel-mode letter being applied: the cursor into the parameter
+  ** list, the sign in force, and the two accumulators. Defined in
+  ** CommandOperator.cpp -- the handlers below need it, nothing else does. */
+  struct ModeApply;
+  struct ChannelModeHandler;
+
+  bool takeModeParam(ModeApply& ctx, std::string& out);
+
+  void applyModeInviteOnly(ModeApply& ctx);
+  void applyModeTopicLock(ModeApply& ctx);
+  void applyModeKey(ModeApply& ctx);
+  void applyModeOperator(ModeApply& ctx);
+  void applyModeLimit(ModeApply& ctx);
+
+  static const ChannelModeHandler kChannelModeHandlers[];
+  static const ChannelModeHandler* findChannelModeHandler(char letter);
+  void verifyChannelModeTable() const;
+
   void cmdWho(Client* client, const Message& msg);
   void cmdWhois(Client* client, const Message& msg);
   void cmdUserhost(Client* client, const Message& msg);

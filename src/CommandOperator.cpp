@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -251,112 +252,174 @@ void Server::handleUserMode(Client* client, const Message& msg) {
   }
 }
 
+/*
+** The state one mode letter is applied against. handleChannelMode() used to
+** carry all of this as locals in a 109-line body, which is why the
+** "this letter needs a parameter I do not have" check was written out three
+** times: there was nowhere shared to put it.
+*/
+struct Server::ModeApply {
+  Client* client;
+  Channel* channel;
+  const Message* msg;
+  const std::string* modeStr;
+  std::size_t letterIndex;
+  std::size_t paramIdx;
+  bool adding;
+  std::vector<ModeChange>* applied;
+  std::vector<std::string>* reported;
+};
+
+/* The one copy of "consume the next parameter, or answer 461 once". Answering
+** once rather than once per occurrence is the ModeReplyStorm fix, so it has to
+** live on this path rather than at each call site. */
+bool Server::takeModeParam(ModeApply& ctx, std::string& out) {
+  if (ctx.paramIdx >= ctx.msg->params.size()) {
+    if (!alreadyReported(*ctx.reported, "461")) replyNeedMoreParams(ctx.client, "MODE");
+    return false;
+  }
+  out = ctx.msg->params[ctx.paramIdx++];
+  return true;
+}
+
+void Server::applyModeInviteOnly(ModeApply& ctx) {
+  ctx.channel->setInviteOnly(ctx.adding);
+  ctx.applied->push_back(ModeChange(ctx.adding, 'i'));
+}
+
+void Server::applyModeTopicLock(ModeApply& ctx) {
+  ctx.channel->setTopicRestricted(ctx.adding);
+  ctx.applied->push_back(ModeChange(ctx.adding, 't'));
+}
+
+void Server::applyModeKey(ModeApply& ctx) {
+  if (ctx.adding) {
+    std::string key;
+    if (!takeModeParam(ctx, key)) return;
+    if (!IrcName::isChannelKey(key)) {
+      if (!alreadyReported(*ctx.reported, "525:" + key)) sendReply(ctx.client, ERR_INVALIDKEY, ctx.channel->getName());
+      return;
+    }
+    ctx.channel->setKey(key);
+    ctx.applied->push_back(ModeChange(true, 'k', key));
+    return;
+  }
+
+  ctx.channel->removeKey();
+
+  /* -k's argument is optional-greedy: it takes the next parameter only if the
+  ** letters after it do not need it themselves, so "-k+o bob" gives bob to +o
+  ** rather than swallowing it as the old key. */
+  std::string oldKey;
+  const std::size_t stillNeeded = ChannelModes::mandatoryParams(*ctx.modeStr, ctx.letterIndex + 1, ctx.adding);
+  if (ctx.paramIdx < ctx.msg->params.size() && ctx.msg->params.size() - ctx.paramIdx > stillNeeded)
+    oldKey = ctx.msg->params[ctx.paramIdx++];
+
+  ctx.applied->push_back(ModeChange(false, 'k', oldKey));
+}
+
+void Server::applyModeOperator(ModeApply& ctx) {
+  std::string nick;
+  if (!takeModeParam(ctx, nick)) return;
+
+  Client* target = ctx.channel->findMember(nick);
+  if (!target) {
+    if (!alreadyReported(*ctx.reported, "441:" + ircToLower(nick)))
+      sendReply(ctx.client, ERR_USERNOTINCHANNEL, nick, ctx.channel->getName());
+    return;
+  }
+  ctx.channel->setOperator(target, ctx.adding);
+  ctx.applied->push_back(ModeChange(ctx.adding, 'o', target->getNickname()));
+}
+
+void Server::applyModeLimit(ModeApply& ctx) {
+  if (!ctx.adding) {
+    ctx.channel->removeUserLimit();
+    ctx.applied->push_back(ModeChange(false, 'l'));
+    return;
+  }
+
+  std::string limitStr;
+  if (!takeModeParam(ctx, limitStr)) return;
+
+  long limit = 0;
+  if (!libcpp::str::parse_long(limitStr, 1, Limits::kUserLimit, limit)) {
+    if (!alreadyReported(*ctx.reported, "696:" + limitStr))
+      sendReply(ctx.client, ERR_INVALIDMODEPARAM, ctx.channel->getName(), "l", limitStr);
+    return;
+  }
+  ctx.channel->setUserLimit(static_cast<std::size_t>(limit));
+  ctx.applied->push_back(ModeChange(true, 'l', libcpp::str::to_string(limit)));
+}
+
+struct Server::ChannelModeHandler {
+  char letter;
+  void (Server::*apply)(ModeApply&);
+};
+
+/* The letters live in ChannelModes::table(), which IrcTrace also reads to know
+** which parameter holds a key. This table says what each one does. Server's
+** verifyChannelModeTable() refuses to start if the two disagree, so a letter
+** can never be declared in one and forgotten in the other. */
+const Server::ChannelModeHandler Server::kChannelModeHandlers[] = {
+    {'i', &Server::applyModeInviteOnly}, {'t', &Server::applyModeTopicLock}, {'k', &Server::applyModeKey},
+    {'o', &Server::applyModeOperator},   {'l', &Server::applyModeLimit},     {'\0', 0},
+};
+
+const Server::ChannelModeHandler* Server::findChannelModeHandler(char letter) {
+  for (const Server::ChannelModeHandler* entry = kChannelModeHandlers; entry->letter != '\0'; ++entry)
+    if (entry->letter == letter) return entry;
+  return 0;
+}
+
+void Server::verifyChannelModeTable() const {
+  for (const ChannelModes::Spec* spec = ChannelModes::table(); spec->letter != '\0'; ++spec)
+    if (findChannelModeHandler(spec->letter) == 0)
+      throw std::runtime_error(std::string("channel mode +") + spec->letter + " has an arity but no handler");
+
+  for (const Server::ChannelModeHandler* entry = kChannelModeHandlers; entry->letter != '\0'; ++entry)
+    if (ChannelModes::find(entry->letter) == 0)
+      throw std::runtime_error(std::string("channel mode +") + entry->letter + " has a handler but no arity");
+}
+
 void Server::handleChannelMode(Client* client, Channel* channel, const Message& msg) {
   if (!requireMember(client, channel, channel->getName())) return;
   if (!requireChanOp(client, channel, channel->getName())) return;
 
   const std::string& modeStr = msg.params[1];
-
   if (modeStr.empty() || (modeStr[0] != '+' && modeStr[0] != '-')) return;
-
-  bool adding = true;
-  size_t paramIdx = 2;
 
   std::vector<ModeChange> applied;
   std::vector<std::string> reported;
 
-  for (size_t i = 0; i < modeStr.size(); ++i) {
-    char c = modeStr[i];
+  ModeApply ctx;
+  ctx.client = client;
+  ctx.channel = channel;
+  ctx.msg = &msg;
+  ctx.modeStr = &modeStr;
+  ctx.letterIndex = 0;
+  ctx.paramIdx = 2;
+  ctx.adding = true;
+  ctx.applied = &applied;
+  ctx.reported = &reported;
 
-    if (c == '+') {  //< CHANNEL mode sign · "+it" · "-o+i" flips · "+-+-i" -> only the last sign counts
-      adding = true;
+  for (std::size_t i = 0; i < modeStr.size(); ++i) {
+    const char c = modeStr[i];
+
+    if (c == '+' || c == '-') {  //< "+it" · "-o+i" flips · "+-+-i" -> only the last sign counts
+      ctx.adding = (c == '+');
       continue;
     }
-    if (c == '-') {  //< "-k" takes the key only if later modes do not need it · "-k+o bob" gives bob to +o
-      adding = false;
+
+    const ChannelModeHandler* handler = findChannelModeHandler(c);
+    if (handler == 0) {
+      const std::string s(1, c);
+      if (!alreadyReported(reported, "472:" + s)) sendReply(client, ERR_UNKNOWNMODE, s);
       continue;
     }
 
-    switch (c) {
-      case 'i': {
-        channel->setInviteOnly(adding);
-        applied.push_back(ModeChange(adding, 'i'));
-        break;
-      }
-      case 't': {
-        channel->setTopicRestricted(adding);
-        applied.push_back(ModeChange(adding, 't'));
-        break;
-      }
-      case 'k': {
-        if (adding) {
-          if (paramIdx >= msg.params.size()) {
-            if (!alreadyReported(reported, "461")) replyNeedMoreParams(client, "MODE");
-            continue;
-          }
-          std::string key = msg.params[paramIdx++];
-          if (!IrcName::isChannelKey(key)) {
-            if (!alreadyReported(reported, "525:" + key)) sendReply(client, ERR_INVALIDKEY, channel->getName());
-            continue;
-          }
-          channel->setKey(key);
-          applied.push_back(ModeChange(true, 'k', key));
-        } else {
-          channel->removeKey();
-
-          std::string oldKey;
-          size_t stillNeeded = ChannelModes::mandatoryParams(modeStr, i + 1, adding);
-          if (paramIdx < msg.params.size() && msg.params.size() - paramIdx > stillNeeded)
-            oldKey = msg.params[paramIdx++];
-
-          applied.push_back(ModeChange(false, 'k', oldKey));
-        }
-        break;
-      }
-      case 'o': {
-        if (paramIdx >= msg.params.size()) {
-          if (!alreadyReported(reported, "461")) replyNeedMoreParams(client, "MODE");
-          continue;
-        }
-        std::string nick = msg.params[paramIdx++];
-        Client* target = channel->findMember(nick);
-        if (!target) {
-          if (!alreadyReported(reported, "441:" + ircToLower(nick)))
-            sendReply(client, ERR_USERNOTINCHANNEL, nick, channel->getName());
-          continue;
-        }
-        channel->setOperator(target, adding);
-        applied.push_back(ModeChange(adding, 'o', target->getNickname()));
-        break;
-      }
-      case 'l': {
-        if (adding) {
-          if (paramIdx >= msg.params.size()) {
-            if (!alreadyReported(reported, "461")) replyNeedMoreParams(client, "MODE");
-            continue;
-          }
-          std::string limitStr = msg.params[paramIdx++];
-
-          long limit = 0;
-          if (!libcpp::str::parse_long(limitStr, 1, Limits::kUserLimit, limit)) {
-            if (!alreadyReported(reported, "696:" + limitStr))
-              sendReply(client, ERR_INVALIDMODEPARAM, channel->getName(), "l", limitStr);
-            continue;
-          }
-          channel->setUserLimit(static_cast<size_t>(limit));
-          applied.push_back(ModeChange(true, 'l', libcpp::str::to_string(limit)));
-        } else {
-          channel->removeUserLimit();
-          applied.push_back(ModeChange(false, 'l'));
-        }
-        break;
-      }
-      default: {
-        std::string s(1, c);
-        if (!alreadyReported(reported, "472:" + s)) sendReply(client, ERR_UNKNOWNMODE, s);
-        break;
-      }
-    }
+    ctx.letterIndex = i;
+    (this->*handler->apply)(ctx);
   }
 
   if (!applied.empty()) broadcastModeChanges(channel, client->getPrefix(), applied);
