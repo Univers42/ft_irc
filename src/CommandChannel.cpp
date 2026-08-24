@@ -92,6 +92,46 @@ Channel* Server::admitToChannel(Client* client, const std::string& name, const s
 ** the numerics echo that, while the JOIN broadcast above uses the canonical
 ** stored name, which is what BroadcastsUseCanonicalChannelAndNickCasing pins.
 */
+/*
+** The member list, split so no line can exceed the 512-octet limit. The budget
+** subtracts everything the server will prepend -- ":<server> 353 <nick> " and
+** the "= <channel> :" head -- because the cap applies to the finished line,
+** not to the payload.
+*/
+void Server::sendNamesReply(Client* client, Channel* chan, const std::string& name) {
+  const std::string namesHead = "= " + name + " :";
+  const size_t framing = 1 + _serverName.size() + 1 + 3 + 1 + client->getNickname().size() + 1 + namesHead.size();
+  const size_t budget = (framing + 1 < Limits::kMsgLen - 2) ? Limits::kMsgLen - 2 - framing : 1;
+  const std::vector<std::string> chunks = chan->getNamesChunks(budget);
+  for (size_t c = 0; c < chunks.size(); ++c) sendNumeric(client, RPL_NAMREPLY, namesHead + chunks[c]);
+  sendReply(client, RPL_ENDOFNAMES, name);
+}
+
+/*
+** RFC 2812 3.2.5. A channel the client cannot see draws only the 366
+** terminator, never an error: a bare NAMES lists every visible channel, and
+** "no such channel" is indistinguishable from "a channel you cannot see".
+** Ending the list either way is what stops a client waiting forever.
+*/
+void Server::cmdNames(Client* client, const Message& msg) {
+  const std::vector<std::string> targets = msg.listOr("chanlist", 0, ',');
+
+  if (targets.empty()) {  //< bare NAMES: every channel this client is in
+    for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it)
+      if (it->second->isMember(client)) sendNamesReply(client, it->second, it->second->getName());
+    sendReply(client, RPL_ENDOFNAMES, "*");
+    return;
+  }
+
+  for (size_t i = 0; i < targets.size(); ++i) {
+    Channel* chan = findChannel(targets[i]);
+    if (chan != NULL && chan->isMember(client))
+      sendNamesReply(client, chan, targets[i]);
+    else
+      sendReply(client, RPL_ENDOFNAMES, targets[i]);
+  }
+}
+
 void Server::sendJoinBurst(Client* client, Channel* chan, const std::string& name) {
   if (!chan->getTopic().empty()) {
     sendNumeric(client, RPL_TOPIC, name + " :" + chan->getTopic());
@@ -100,12 +140,7 @@ void Server::sendJoinBurst(Client* client, Channel* chan, const std::string& nam
     sendReply(client, RPL_NOTOPIC, name);
   }
 
-  const std::string namesHead = "= " + name + " :";
-  const size_t framing = 1 + _serverName.size() + 1 + 3 + 1 + client->getNickname().size() + 1 + namesHead.size();
-  const size_t budget = (framing + 1 < Limits::kMsgLen - 2) ? Limits::kMsgLen - 2 - framing : 1;
-  const std::vector<std::string> chunks = chan->getNamesChunks(budget);
-  for (size_t c = 0; c < chunks.size(); ++c) sendNumeric(client, RPL_NAMREPLY, namesHead + chunks[c]);
-  sendReply(client, RPL_ENDOFNAMES, name);
+  sendNamesReply(client, chan, name);
 
   const std::string modeParams = chan->getModeParams();
   std::string modeReply = name + " " + chan->getModeString();

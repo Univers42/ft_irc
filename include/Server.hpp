@@ -99,6 +99,12 @@ class Server {
   Channel* admitToChannel(Client* client, const std::string& name, const std::string& key);
   void sendJoinBurst(Client* client, Channel* chan, const std::string& name);
 
+  /* The 353/366 pair for one channel. JOIN sends it as part of its burst and
+  ** NAMES sends it on its own; the chunking has to agree, so there is one
+  ** copy. `name` is the channel as the client spelled it -- the numerics echo
+  ** that, while the JOIN broadcast uses the canonical stored name. */
+  void sendNamesReply(Client* client, Channel* chan, const std::string& name);
+
   void initGrammar();
   void bindCommandRules();
   void verifyCommandTable(const std::string& origin) const;
@@ -122,6 +128,11 @@ class Server {
   void cmdJoin(Client* client, const Message& msg);
   void cmdPart(Client* client, const Message& msg);
   void cmdKick(Client* client, const Message& msg);
+
+  /* One channel/user pair of a KICK list. RFC 2812 3.2.8 allows lists on both
+  ** sides, so the numeric-answering half is shared rather than written once
+  ** per shape. */
+  void kickOne(Client* client, const std::string& chanName, const std::string& target, const std::string& reason);
   void cmdInvite(Client* client, const Message& msg);
   void cmdTopic(Client* client, const Message& msg);
   void cmdMode(Client* client, const Message& msg);
@@ -152,6 +163,7 @@ class Server {
   static const ChannelModeHandler kChannelModeHandlers[];
   static const ChannelModeHandler* findChannelModeHandler(char letter);
   void verifyChannelModeTable() const;
+  void cmdNames(Client* client, const Message& msg);
 
   void cmdWho(Client* client, const Message& msg);
   void cmdWhois(Client* client, const Message& msg);

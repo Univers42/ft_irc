@@ -72,10 +72,42 @@ if [ ! -x "$BIN" ]; then
     exit 1
 fi
 
+# A port already in use is fatal, and has to be checked BEFORE we start ours.
+# Our server would lose the bind and exit 1 straight away, but the reachability
+# poll below only asks "is something listening on this port" -- the foreign
+# server answers yes, so the run would silently test someone else's process
+# and then kill a PID that the OS has since handed to somebody else. That is
+# how a concurrent second run of this suite makes the first one fail somewhere
+# unrelated, minutes later. Refuse to start instead.
+if printf '' | timeout 2 nc -z "$IRC_HOST" "$IRC_PORT" >/dev/null 2>&1; then
+    printf 'FATAL: %s:%s is already serving — another ircserv (or another run of\n' \
+        "$IRC_HOST" "$IRC_PORT" >&2
+    printf '       this suite) owns that port. Stop it, or re-run with IRC_PORT=<free port>.\n' >&2
+    exit 1
+fi
+
 "$BIN" "$IRC_PORT" "$IRC_PASSWORD" >/tmp/ftirc_server.log 2>&1 &
 SERVER_PID=$!
+
+# Kill by PID only while that PID is still OUR server. Between the fork and
+# here the process may have exited (a lost bind exits 1 immediately), and a
+# busy machine recycles PIDs fast enough that a blind `kill $SERVER_PID` can
+# land on an unrelated process -- including another session's test server.
+server_alive() {
+    [ -n "${SERVER_PID:-}" ] || return 1
+    kill -0 "$SERVER_PID" 2>/dev/null || return 1
+    case "$(ps -o args= -p "$SERVER_PID" 2>/dev/null)" in
+        *ircserv*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+stop_server() {
+    server_alive && kill "$SERVER_PID" 2>/dev/null
+    SERVER_PID=""
+    return 0
+}
 cleanup() {
-    [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null
+    stop_server
     return 0
 }
 trap cleanup EXIT
@@ -83,6 +115,11 @@ trap cleanup EXIT
 up=0
 i=0
 while [ "$i" -lt 40 ]; do
+    # Our own process first: if it died (lost bind, bad argv) there is nothing
+    # to wait for, and the port poll would only find whoever beat us to it.
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        break
+    fi
     if printf '' | timeout 2 nc -z "$IRC_HOST" "$IRC_PORT" >/dev/null 2>&1; then
         up=1
         break
@@ -93,6 +130,7 @@ done
 if [ "$up" -ne 1 ]; then
     printf 'FATAL: server never became reachable on %s:%s\n' "$IRC_HOST" "$IRC_PORT" >&2
     printf '       server log: /tmp/ftirc_server.log\n' >&2
+    sed 's/^/       /' /tmp/ftirc_server.log >&2
     exit 1
 fi
 printf '\nserver up (pid %s)\n' "$SERVER_PID"
@@ -101,7 +139,7 @@ printf '\nserver up (pid %s)\n' "$SERVER_PID"
 for f in ./02_registration.sh ./03_tcp_framing.sh ./04_disconnect.sh \
          ./05_privmsg.sh ./06_channel_join_part.sh ./07_kick_invite_topic.sh \
          ./08_modes.sh ./09_malformed_preauth.sh ./10_stress_multiclient.sh; do
-    if kill -0 "$SERVER_PID" 2>/dev/null; then
+    if server_alive; then
         run_file "$f"
     else
         printf '\n!! server died before %s could run — recording a failure and stopping\n' "$f"
@@ -110,8 +148,7 @@ for f in ./02_registration.sh ./03_tcp_framing.sh ./04_disconnect.sh \
     fi
 done
 
-kill "$SERVER_PID" 2>/dev/null
-SERVER_PID=""
+stop_server
 trap - EXIT
 sleep 0.5
 

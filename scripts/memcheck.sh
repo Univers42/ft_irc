@@ -77,7 +77,10 @@ build_tier() {
 	case "$1" in
 		mandatory) make mandatory ;;
 		bonus)     make bonus ;;
-		full|"")   make ;;
+		# `make all`, never bare `make`: .DEFAULT_GOAL is help, so bare make
+		# prints the help screen and builds nothing -- which left this measuring
+		# whatever stale binary happened to be there, or none at all.
+		full|"")   make all ;;
 		*) echo "unknown tier '$1' (want mandatory|bonus|full)" >&2; return 1 ;;
 	esac
 }

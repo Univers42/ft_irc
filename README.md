@@ -15,7 +15,8 @@ architecture, attack playbook.
 ## Quick start
 
 ```bash
-git submodule update --init --recursive   # fresh clone only
+git submodule update --init vendor/libcpp vendor/googletest   # fresh clone only
+# NOT --recursive: libcpp pins a nested submodule whose commit was never pushed.
 make all                                  # bare `make` prints the help screen
 ./build/bin/ircserv 6667 mypass
 ```

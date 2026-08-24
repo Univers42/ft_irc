@@ -79,17 +79,46 @@ static void broadcastModeChanges(Channel* channel, const std::string& prefix, co
   for (size_t i = 0; i < lines.size(); ++i) channel->broadcastMessage(lines[i], NULL);
 }
 
+/*
+** RFC 2812 3.2.8:
+**
+**   KICK <channel> *( "," <channel> ) <user> *( "," <user> ) [<comment>]
+**
+** and: "There MUST be either one channel parameter and multiple user
+** parameter, or as many channel parameters as there are user parameters."
+**
+** So three shapes are legal, and the pairing differs in each:
+**
+**   #a       bob,carol   every user out of the one channel
+**   #a,#b    bob         the one user out of every channel
+**   #a,#b    bob,carol   positional: bob from #a, carol from #b
+**
+** Anything else -- 2 channels and 3 users, say -- the RFC does not define, so
+** it draws 461 rather than a guess at what was meant.
+*/
 void Server::cmdKick(Client* client, const Message& msg) {
-  if (!msg.hasOr("kickchans", 0) || !msg.hasOr("kickusers", 1)) {
+  const std::vector<std::string> channels = msg.listOr("kickchans", 0, ',');
+  const std::vector<std::string> targets = msg.listOr("kickusers", 1, ',');
+
+  if (channels.empty() || targets.empty()) {
+    replyNeedMoreParams(client, "KICK");
+    return;
+  }
+  if (channels.size() != 1 && targets.size() != 1 && channels.size() != targets.size()) {
     replyNeedMoreParams(client, "KICK");
     return;
   }
 
-  const std::string& chanName = msg.fieldOr("kickchans", 0);
-  const std::string& target = msg.fieldOr("kickusers", 1);
   std::string reason = client->getNickname();  //< RFC 2812 2.3.1: the kicker's nick is the default comment
   if (msg.hasOr("kickreason", 2)) reason = msg.fieldOr("kickreason", 2);
 
+  const std::size_t rounds = channels.size() > targets.size() ? channels.size() : targets.size();
+  for (std::size_t i = 0; i < rounds; ++i)
+    kickOne(client, channels[channels.size() == 1 ? 0 : i], targets[targets.size() == 1 ? 0 : i], reason);
+}
+
+void Server::kickOne(Client* client, const std::string& chanName, const std::string& target,
+                     const std::string& reason) {
   Channel* chan = requireChannel(client, chanName);
   if (!chan) return;
   if (!requireMember(client, chan, chanName)) return;
@@ -101,7 +130,7 @@ void Server::cmdKick(Client* client, const Message& msg) {
     return;
   }
 
-  std::string kickMsg =
+  const std::string kickMsg =
       IrcMessage::relay(client->getPrefix(), "KICK", chan->getName() + " " + targetClient->getNickname(), reason);
   chan->broadcastMessage(kickMsg, NULL);
   chan->removeMember(targetClient);

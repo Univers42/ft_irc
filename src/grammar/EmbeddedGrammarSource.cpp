@@ -72,6 +72,7 @@ const char kGrammar[] =
     " [ SPACE [ \":\" ] $topictext ] *SPACE\n"
     "mode-cmd   =  \"MODE\" SPACE $modetarget"
     " [ SPACE $modestring *13( SPACE $modeparam ) ] *SPACE\n"
+    "names-cmd  =  \"NAMES\" [ SPACE $chanlist ] *SPACE\n"
     "who-cmd    =  \"WHO\" [ SPACE $whomask ] *SPACE\n"
     "whois-cmd  =  \"WHOIS\" SPACE [ middle SPACE ]"
     " $whoisnick *SPACE\n"

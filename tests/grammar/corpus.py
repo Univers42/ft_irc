@@ -306,6 +306,15 @@ CASES += [
        forbid=("461", "421")),
     _c("KICK", "KICK #probe bob a reason with words", "kick-cmd",
        "the reason is trailing, so it keeps every word", forbid=("461", "421")),
+    _c("KICK", "KICK #probe bob,carol :out", "kick-cmd",
+       "RFC 3.2.8: one channel, many users", forbid=("461", "421", "403")),
+    _c("KICK", "KICK #probe,#probe2 bob :out", "kick-cmd",
+       "RFC 3.2.8: many channels, one user", forbid=("461", "421", "403")),
+    _c("KICK", "KICK #probe,#probe2 bob,carol :out", "kick-cmd",
+       "RFC 3.2.8: equal counts pair positionally", forbid=("461", "421", "403")),
+    _c("KICK", "KICK #probe,#probe2,#probe bob,carol :out", "kick-cmd",
+       "3 channels against 2 users is a shape the RFC does not define",
+       want="461", forbid=()),
 ]
 
 # ── INVITE ───────────────────────────────────────────────────────────────
@@ -363,6 +372,18 @@ CASES += [
        want="461", forbid=()),
     _c("MODE", "MODE probe", "mode-cmd", "user mode query on own nick"),
     _c("MODE", "MODE probe +i", "mode-cmd", "setting a user mode"),
+]
+
+# ── NAMES ────────────────────────────────────────────────────────────────
+# names-cmd = "NAMES" [ SPACE chanlist ] *SPACE
+CASES += [
+    _c("NAMES", "NAMES #probe", "names-cmd", "353 then the 366 terminator"),
+    _c("NAMES", "NAMES", "names-cmd", "no argument lists every channel joined"),
+    _c("NAMES", "NAMES #probe,#probe2", "names-cmd", "chanlist is comma-separated"),
+    _c("NAMES", "NAMES #nosuchchannel", "names-cmd",
+       "an invisible channel still terminates -- never an error", want="366", forbid=SYNTAX_REJECT),
+    _c("NAMES", "NAMES #probe   ", "names-cmd", "trailing *SPACE"),
+    _c("NAMES", "NAMES #probe extra", "names-cmd", "a parameter past the chanlist is ignored"),
 ]
 
 # ── WHO ──────────────────────────────────────────────────────────────────

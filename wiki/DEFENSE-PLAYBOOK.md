@@ -1816,6 +1816,25 @@ From `include/Limits.hpp`. Know these numbers by heart.
 | user limit (`+l`) | 65535 |
 | PING interval / timeout | 120 s / 120 s |
 
+## Appendix B2 — behaviours that look wrong and are not
+
+Every row was checked against RFC 2812 and the subject, and each has been
+mistaken for a bug at least once. If a grader points at one of these, the
+answer is in the right-hand column — do not "fix" them.
+
+| Observation | Why it is correct |
+| --- | --- |
+| A second `PASS` before registration is accepted, with no `462` | RFC 2812 §3.1.1 mandates 462 only *after* registration completes, and `cmdPass` sends it exactly then. Real clients resend `PASS`. |
+| `NICK` → `PASS` → `USER` registers successfully | The password is checked in `completeRegistration()`, which runs once NICK *and* USER are both set, so any `PASS` arriving before that counts. `NICK` → `USER` → `PASS` is too late and correctly gives `464`. |
+| `PASS` with an empty parameter gives `464`, not `461` | The parameter is present, so it is not an arity error. It simply cannot match a password, and the server refuses to start with an empty one. |
+| `USER <mode>` is honoured, not ignored | `applyUserModeBitmask` applies RFC 2812 §3.1.3 bits 4 (`+w`) and 8 (`+i`); `USER u 12 * :R` then makes `MODE <nick>` report `221 +iw`. |
+| A 5 000-line flood at a frozen client does **not** trip the SendQ guard | The loopback socket buffer auto-tunes past 150 KiB and absorbs it. The guard is real: with a 2 KiB `SO_RCVBUF` client and 20 000 lines the server logs `SendQ exceeded` and drops the client. |
+| `MODE` accepts at most 13 parameters | `mode-cmd = … *13( SPACE $modeparam )`. Past that the production fails, the generic `message` rule takes over (15-parameter cap, the 15th absorbing the tail), and the excess draws `441` + `461`. No crash, coherent replies. |
+| `PRIVMSG BOB :hi` is relayed with the target spelled `BOB` | The target token is echoed as the sender wrote it; delivery is casemapped. Standard IRC behaviour. |
+| Three `Connection refused` lines from `memcheck.sh --auto` | `wait_for_listen` poll-connecting while valgrind boots. Bash prints the diagnostic itself, so the function's `2>/dev/null` cannot suppress it. The run is fine. |
+
+---
+
 ## Appendix C — one-page checklist
 
 Print this. Tick it as you go.
@@ -1824,7 +1843,7 @@ Print this. Tick it as you go.
 PRE-FLIGHT
 [ ] empty dir, git clone, git remote -v matches the student
 [ ] alias | grep -E 'make|nc|valgrind'      -> empty
-[ ] git submodule update --init --recursive
+[ ] git submodule update --init vendor/libcpp vendor/googletest
 
 INSTANT-ZERO GATES
 [ ] make re                                  -> no warnings

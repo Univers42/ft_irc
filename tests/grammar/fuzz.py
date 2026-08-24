@@ -142,16 +142,23 @@ def main():
             labels[label] = labels.get(label, 0) + 1
 
             if victim.closed:
-                victim = w.register(HOST, port, PASSWORD, "fuzzer%d" % n)
+                # Must fit NICKLEN. "fuzzer%d" is 10 characters from n=1000 and
+                # the server answers 432 -- correctly, since 1b6ff6d stopped
+                # truncating over-long nicks. CI runs --cases 1500, so this was
+                # a latent flake that only fired when a mutation killed the
+                # victim late in the run.
+                victim = w.register(HOST, port, PASSWORD, ("fz%d" % n)[:9])
                 victim.send_line("JOIN #fuzz")
                 victim.collect(0.1)
 
             victim.send_raw(payload + b"\r\n")
             replies = victim.collect(0.08)
 
-            # I3 survival
+            # I3 survival. Say HOW it died: a crash the payload caused and an
+            # outside SIGTERM look identical from here, and only one of them is
+            # a bug in the server.
             if not server.alive():
-                findings.append((label, payload, "server exited"))
+                findings.append((label, payload, "server gone — %s" % server.death()))
                 break
 
             # I2 well formed
@@ -177,7 +184,9 @@ def main():
                     alive = True
                     break
             if not alive:
-                findings.append((label, payload, "server stopped answering PING"))
+                why = "" if server.alive() else " (%s)" % server.death()
+                findings.append((label, payload,
+                                 "server stopped answering PING" + why))
                 break
 
             if (n + 1) % 100 == 0:
@@ -189,7 +198,11 @@ def main():
             after = w.register(HOST, port, PASSWORD, "afterfuzz")
             after.close()
         except Exception as exc:
-            findings.append(("<teardown>", b"", "cannot register after fuzzing: %s" % exc))
+            # Nearly always a follow-on from an earlier finding: if the server
+            # is gone, "connection refused" is the symptom, not the cause.
+            why = "" if server.alive() else " — %s" % server.death()
+            findings.append(("<teardown>", b"",
+                             "cannot register after fuzzing: %s%s" % (exc, why)))
 
         victim.close()
         watcher.close()

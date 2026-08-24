@@ -28,7 +28,8 @@ Start here depending on who you are:
 ## Quick start
 
 ```bash
-git submodule update --init --recursive   # fresh clone only
+git submodule update --init vendor/libcpp vendor/googletest   # fresh clone only
+# NOT --recursive: libcpp pins a nested submodule whose commit was never pushed.
 make                                      # or: make mandatory / make bonus
 ./build/bin/ircserv 6667 mypass
 ```

@@ -7,12 +7,23 @@ knows what a command means -- it frames, sends and collects.
 
 import errno
 import os
+import re
+import signal
 import socket
 import subprocess
+import tempfile
 import time
 
 CRLF = b"\r\n"
 RECV_BUDGET = 0.35
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+SIGNAL_NAMES = dict(
+    (int(getattr(signal, n)), n)
+    for n in dir(signal)
+    if n.startswith("SIG") and not n.startswith("SIG_")
+)
 
 
 class Conn(object):
@@ -89,20 +100,49 @@ class Server(object):
     def __init__(self, binary, port, password="grammarpw"):
         self.binary, self.port, self.password = binary, port, password
         self.proc = None
+        # Its output used to go to DEVNULL. When the server then went away
+        # mid-run all a report could say was "server exited", which reads like
+        # a crash the payload caused -- and the one thing that distinguishes a
+        # crash from an outside SIGTERM (the server logs a clean shutdown, and
+        # dies by signal rather than by exit code) had already been discarded.
+        # Keep both, and let death() say which happened.
+        self.log = tempfile.NamedTemporaryFile(
+            prefix="ircwire_srv_%d_" % port, suffix=".log", delete=False)
+        self.status = None
+        self.tail = ""
 
     def __enter__(self):
+        # Refuse a port somebody already owns. Racing for the bind and then
+        # noticing is not enough: our child needs a few ms to fail, and the
+        # probe below would connect to the incumbent first and call it ours.
+        try:
+            socket.create_connection(("127.0.0.1", self.port), 0.4).close()
+            self._close_log()
+            raise RuntimeError(
+                "port %d is already serving — another ircserv (or another test "
+                "run) owns it; this server would lose the bind" % self.port)
+        except (socket.error, OSError):
+            pass
+
         self.proc = subprocess.Popen(
             [self.binary, str(self.port), self.password],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=self.log,
+            stderr=subprocess.STDOUT,
         )
         for _ in range(80):
+            # Our own process first. If it lost the bind it exits at once, and
+            # the reachability probe below would happily connect to whoever
+            # already owns the port -- adopting a foreign server, then killing
+            # a PID the OS has since reissued.
+            if self.proc.poll() is not None:
+                self._latch(self.proc.returncode)
+                self._close_log()
+                raise RuntimeError("server exited during startup: %s"
+                                   % (self.tail or "status %s" % self.status))
             try:
                 socket.create_connection(("127.0.0.1", self.port), 0.4).close()
                 return self
             except (socket.error, OSError):
-                if self.proc.poll() is not None:
-                    raise RuntimeError("server exited during startup")
                 time.sleep(0.05)
         raise RuntimeError("server never became reachable on port %d" % self.port)
 
@@ -111,11 +151,59 @@ class Server(object):
         return False
 
     def alive(self):
-        return self.proc is not None and self.proc.poll() is None
+        if self.proc is None:
+            return False
+        code = self.proc.poll()
+        if code is None:
+            return True
+        # stop() clears self.proc, so latch the status the first time death is
+        # seen -- death() is called after the run, when proc is already gone.
+        self._latch(code)
+        return False
+
+    def _latch(self, code):
+        if self.status is not None:
+            return
+        self.status = code
+        try:
+            with open(self.log.name, "rb") as fh:
+                text = fh.read().decode("utf-8", "replace")
+            lines = [l.strip() for l in ANSI.sub("", text).splitlines() if l.strip()]
+            self.tail = lines[-1][:200] if lines else ""
+        except (IOError, OSError):
+            self.tail = ""
+
+    def death(self):
+        """Why the server is gone, in the words a reader needs.
+
+        A negative status is death by signal. SIGTERM/SIGINT there means
+        something outside sent it: no input can make the server signal itself,
+        so that is an environment problem (a concurrent test run, a stray
+        kill), not a defect the payload found.
+        """
+        if self.status is None:
+            return "still running"
+        said = (" — last said: %s" % self.tail) if self.tail else ""
+        if self.status < 0:
+            sig = -self.status
+            return "crashed on %s%s" % (SIGNAL_NAMES.get(sig, "signal %d" % sig), said)
+        if self.status == 0:
+            # The server installs handlers for SIGINT/SIGTERM and shuts down
+            # through them, so being signalled looks like a clean exit 0 --
+            # never a negative status. Mid-run that is the whole tell: no
+            # input can make the server decide to stop, so a 0 here means
+            # somebody outside sent it a signal.
+            return ("exited 0 — a clean shutdown, which only a SIGINT/SIGTERM "
+                    "from outside can trigger; suspect a concurrent test run "
+                    "or a stray kill, not the payload%s" % said)
+        return "exited %d%s" % (self.status, said)
 
     def stop(self):
         if self.proc is None:
+            self._close_log()
             return
+        if self.proc.poll() is not None:
+            self._latch(self.proc.returncode)
         try:
             self.proc.terminate()
             self.proc.wait(5)
@@ -125,6 +213,18 @@ class Server(object):
             except Exception:
                 pass
         self.proc = None
+        self._close_log()
+
+    def _close_log(self):
+        """The tail is already cached, so the file itself need not outlive us."""
+        try:
+            self.log.close()
+        except (IOError, OSError, ValueError):
+            pass
+        try:
+            os.unlink(self.log.name)
+        except OSError:
+            pass
 
 
 def numerics(lines):
