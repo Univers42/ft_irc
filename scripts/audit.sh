@@ -199,6 +199,22 @@ else
 	sed 's/^/      /' /tmp/ircaudit_trk | head
 fi
 
+# ── 10. the bircd discipline ─────────────────────────────────────────────────
+section "event loop — no socket I/O without a readiness event"
+EVL="scripts/check_event_loop.py"
+if [ ! -f "$EVL" ]; then
+	fail "$EVL is missing — gate did not run"
+elif python3 "$EVL" >/tmp/ircaudit_evl 2>&1; then
+	pass "one event wait; every recv/send/accept behind it"
+elif grep -q 'Traceback (most recent call last)' /tmp/ircaudit_evl; then
+	fail "check_event_loop.py crashed — gate did not run:"
+	sed 's/^/      /' /tmp/ircaudit_evl | head
+else
+	# The subject attaches a zero to this one specifically.
+	fail "socket I/O is reachable without an event wait (subject: grade 0):"
+	sed 's/^/      /' /tmp/ircaudit_evl | tail -6
+fi
+
 rm -f "$BUILD_LOG"
 echo
 if [ "$FAILS" -eq 0 ]; then

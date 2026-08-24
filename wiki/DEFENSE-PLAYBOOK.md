@@ -47,6 +47,22 @@ For the parts that need to *see* the protocol:
 
 ```bash
 FT_IRC_LOG=trace ./build/bin/ircserv 6667 pass
+
+
+#or
+FT_IRC_LOG=trace strace -f -tt -T -s 256 -yy -o strace.log ./build/bin/ircserv 6667 pass
+
+
+#or
+FT_IRC_LOG=trace strace -f -tt -T -s 1024 -yy -v -o strace.log ./build/bin/ircserv 6667 pass
+
+
+#or
+
+FT_IRC_LOG=trace strace -f -tt -T -s 1024 -yy \
+  -e trace=network,read,write,close \
+  ./build/bin/ircserv 6667 pass
+
 ```
 
 ### The one flag that matters for nc
@@ -226,6 +242,42 @@ grep -rn 'epoll_ctl' src/ vendor/libcpp/c98/src/reactor.cpp   # registration onl
 bash scripts/audit.sh | grep -i 'event-wait'
 # ✓ exactly 1 event-wait call site
 ```
+
+#### What `bircd` is for, and how to answer if asked
+
+The school hands out `bircd.tar.gz` with this subject. It is **not** a tester
+and the subject text never mentions it — 285 lines of C whose `client_read.c`
+does `recv()` then `send()`s the raw bytes to every other client. Feed it a
+registration burst and the sender gets nothing back while everyone else gets
+`PASS pw\r\nNICK alice\r\n…` verbatim. It has no parser, no numerics, no
+assertions. (It also will not start on a modern box: `init_env.c` allocates
+`sizeof(t_fd) * RLIMIT_NOFILE`, about 8 GB at a soft limit of 1048576. Run it
+under `ulimit -n 1024`. To unpack it: it is **double**-gzipped, so
+`gunzip -c bircd.tar.gz | gunzip -c | tar -x` — plain `tar -xzf` fails.)
+
+What it is, is the worked example of the one rule the subject attaches a zero
+to: *"if you attempt to read/recv or write/send in any file descriptor without
+using poll() (or equivalent), your grade will be 0."* Its three phases are the
+shape that obeys it, and ours maps onto them one for one:
+
+| bircd | ft_irc | what it does |
+| --- | --- | --- |
+| `init_fd()` | `updateEpollInterest()` | declare interest: read always, write **only** when output is buffered — `strlen(buf_write) > 0` there, `hasPendingData()` here |
+| `do_select()` | `epoll_wait()` in `Server::run` | the single event wait |
+| `check_fd()` | the `for (nfds)` dispatch | act **only** on readiness — `FD_ISSET` there, `ev & EPOLLIN/EPOLLOUT` here |
+
+`scripts/check_event_loop.py` asserts exactly that, and runs in the audit:
+
+```bash
+python3 scripts/check_event_loop.py            # static: one wait, all I/O behind it
+python3 scripts/check_event_loop.py --runtime  # strace the live process
+```
+
+The runtime mode is the strong one — it records the syscall order from the
+running server and fails if any `recv`/`send`/`accept` happens before an
+`epoll_wait` has returned. Both modes were negative-tested against a
+deliberately blind server that `recv()`s with no event wait at all, which is
+precisely the graded-zero shape; it reports seven violations.
 
 ### 2.3 poll before every accept / recv / send, and no errno-driven retry
 

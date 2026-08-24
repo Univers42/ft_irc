@@ -185,6 +185,12 @@ jobs:
         run: bash 12_build_norm.sh
       # The server must never fork or spawn a thread. Assert it on the live
       # process rather than only by grepping the sources.
+      # The subject attaches a zero to exactly one rule: touching a descriptor
+      # without asking an event wait whether it was ready. bircd, handed out
+      # with the subject, is the worked example of obeying it. This checks the
+      # live process with strace, which a source read cannot do.
+      - name: event loop — the bircd discipline, straced
+        run: python3 scripts/check_event_loop.py --runtime
       - name: no fork/exec/clone at runtime
         run: |
           ./build/bin/ircserv 6699 ci-pass >/tmp/srv.log 2>&1 &
