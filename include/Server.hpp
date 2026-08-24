@@ -92,6 +92,13 @@ class Server {
   void dispatchCommand(Client* client, const Message& msg);
   void partAllChannels(Client* client);
 
+  /* JOIN, one channel of the list at a time: admit the client (or answer and
+  ** return NULL), then tell it what it joined. Split out because cmdJoin was
+  ** three concerns deep -- parse the lists, decide admission, render the
+  ** welcome burst -- inside one loop body. */
+  Channel* admitToChannel(Client* client, const std::string& name, const std::string& key);
+  void sendJoinBurst(Client* client, Channel* chan, const std::string& name);
+
   void initGrammar();
   void bindCommandRules();
   void verifyCommandTable(const std::string& origin) const;

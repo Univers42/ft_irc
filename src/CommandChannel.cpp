@@ -34,66 +34,84 @@ void Server::cmdJoin(Client* client, const Message& msg) {
 
   for (size_t i = 0; i < channels.size(); ++i) {
     const std::string& name = channels[i];
-    std::string key = (i < keys.size()) ? keys[i] : "";
+    const std::string key = (i < keys.size()) ? keys[i] : "";
 
-    if (!IrcName::isChannelName(name)) {  //< per-channel · "JOIN #ok,bad" joins #ok and answers 476 for bad
-      sendReply(client, ERR_BADCHANMASK, name);
-      continue;
-    }
-
-    Channel* chan = findChannel(name);
-    if (chan) {
-      if (chan->isMember(client)) continue;
-
-      if (chan->isInviteOnly() && !chan->isInvited(client)) {  //< +i without an INVITE -> 473
-        sendReply(client, ERR_INVITEONLYCHAN, name);
-        continue;
-      }
-
-      if (!chan->getKey().empty() && (!IrcName::isChannelKey(key) || chan->getKey() != key)) {
-        sendReply(client, ERR_BADCHANNELKEY, name);
-        continue;
-      }
-
-      if (chan->getUserLimit() > 0 && chan->getMemberCount() >= chan->getUserLimit()) {  //< +l full -> 471
-        sendReply(client, ERR_CHANNELISFULL, name);
-        continue;
-      }
-
-      chan->addMember(client);
-      chan->removeInvite(client);
-    } else {
-      chan = createChannel(name, client);
-      if (!chan) {
-        sendNumeric(client, ERR_NOSUCHCHANNEL, name + " :Cannot create channel (server error)");
-        continue;
-      }
-    }
+    Channel* chan = admitToChannel(client, name, key);
+    if (chan == NULL) continue;  //< already a member, or admitToChannel answered
 
     chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "JOIN", chan->getName()), NULL);
     for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onJoin(*this, *client, *chan);
 
-    if (!chan->getTopic().empty()) {
-      sendNumeric(client, RPL_TOPIC, name + " :" + chan->getTopic());
-      sendReply(client, RPL_TOPICWHOTIME, name, chan->getTopicSetter(), libcpp::str::to_string(chan->getTopicTime()));
-    } else {
-      sendReply(client, RPL_NOTOPIC, name);
-    }
-
-    std::string namesHead = "= " + name + " :";
-    size_t framing = 1 + _serverName.size() + 1 + 3 + 1 + client->getNickname().size() + 1 + namesHead.size();
-    size_t budget = (framing + 1 < Limits::kMsgLen - 2) ? Limits::kMsgLen - 2 - framing : 1;
-    std::vector<std::string> chunks = chan->getNamesChunks(budget);
-    for (size_t c = 0; c < chunks.size(); ++c) sendNumeric(client, RPL_NAMREPLY, namesHead + chunks[c]);
-    sendReply(client, RPL_ENDOFNAMES, name);
-
-    std::string modes = chan->getModeString();
-    std::string modeParams = chan->getModeParams();
-    std::string modeReply = name + " " + modes;
-    if (!modeParams.empty()) modeReply += " " + modeParams;
-    sendNumeric(client, RPL_CHANNELMODEIS, modeReply);
-    sendReply(client, RPL_CREATIONTIME, name, libcpp::str::to_string(chan->getCreationTime()));
+    sendJoinBurst(client, chan, name);
   }
+}
+
+/*
+** NULL means "do not go on": the client is already a member, or a numeric has
+** been sent explaining why it may not join. Only a non-NULL return has
+** actually added the client to the channel.
+*/
+Channel* Server::admitToChannel(Client* client, const std::string& name, const std::string& key) {
+  if (!IrcName::isChannelName(name)) {  //< per-channel · "JOIN #ok,bad" joins #ok and answers 476 for bad
+    sendReply(client, ERR_BADCHANMASK, name);
+    return NULL;
+  }
+
+  Channel* chan = findChannel(name);
+  if (chan == NULL) {
+    chan = createChannel(name, client);
+    if (chan == NULL) sendNumeric(client, ERR_NOSUCHCHANNEL, name + " :Cannot create channel (server error)");
+    return chan;
+  }
+
+  if (chan->isMember(client)) return NULL;
+
+  if (chan->isInviteOnly() && !chan->isInvited(client)) {  //< +i without an INVITE -> 473
+    sendReply(client, ERR_INVITEONLYCHAN, name);
+    return NULL;
+  }
+
+  if (!chan->getKey().empty() && (!IrcName::isChannelKey(key) || chan->getKey() != key)) {
+    sendReply(client, ERR_BADCHANNELKEY, name);
+    return NULL;
+  }
+
+  if (chan->getUserLimit() > 0 && chan->getMemberCount() >= chan->getUserLimit()) {  //< +l full -> 471
+    sendReply(client, ERR_CHANNELISFULL, name);
+    return NULL;
+  }
+
+  chan->addMember(client);
+  chan->removeInvite(client);
+  return chan;
+}
+
+/*
+** What a client is told about a channel the moment it joins: the topic, the
+** member list, and the modes. `name` is the channel as the client typed it --
+** the numerics echo that, while the JOIN broadcast above uses the canonical
+** stored name, which is what BroadcastsUseCanonicalChannelAndNickCasing pins.
+*/
+void Server::sendJoinBurst(Client* client, Channel* chan, const std::string& name) {
+  if (!chan->getTopic().empty()) {
+    sendNumeric(client, RPL_TOPIC, name + " :" + chan->getTopic());
+    sendReply(client, RPL_TOPICWHOTIME, name, chan->getTopicSetter(), libcpp::str::to_string(chan->getTopicTime()));
+  } else {
+    sendReply(client, RPL_NOTOPIC, name);
+  }
+
+  const std::string namesHead = "= " + name + " :";
+  const size_t framing = 1 + _serverName.size() + 1 + 3 + 1 + client->getNickname().size() + 1 + namesHead.size();
+  const size_t budget = (framing + 1 < Limits::kMsgLen - 2) ? Limits::kMsgLen - 2 - framing : 1;
+  const std::vector<std::string> chunks = chan->getNamesChunks(budget);
+  for (size_t c = 0; c < chunks.size(); ++c) sendNumeric(client, RPL_NAMREPLY, namesHead + chunks[c]);
+  sendReply(client, RPL_ENDOFNAMES, name);
+
+  const std::string modeParams = chan->getModeParams();
+  std::string modeReply = name + " " + chan->getModeString();
+  if (!modeParams.empty()) modeReply += " " + modeParams;
+  sendNumeric(client, RPL_CHANNELMODEIS, modeReply);
+  sendReply(client, RPL_CREATIONTIME, name, libcpp::str::to_string(chan->getCreationTime()));
 }
 
 void Server::cmdPart(Client* client, const Message& msg) {

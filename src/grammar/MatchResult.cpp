@@ -14,11 +14,6 @@ const std::string& emptyString() {
   return kEmpty;
 }
 
-const std::vector<std::string>& emptyList() {
-  static const std::vector<std::string> kEmpty;
-  return kEmpty;
-}
-
 }  // namespace
 
 MatchResult::MatchResult() : _grammar(NULL) {}
@@ -65,12 +60,6 @@ const std::string& MatchResult::at(const std::string& name, std::size_t index) c
   const std::vector<std::string>& list = _values[static_cast<std::size_t>(slot)];
   if (index >= list.size()) return emptyString();
   return list[index];
-}
-
-const std::vector<std::string>& MatchResult::all(const std::string& name) const {
-  const int slot = slotOf(name);
-  if (slot < 0) return emptyList();
-  return _values[static_cast<std::size_t>(slot)];
 }
 
 std::size_t MatchResult::sequenceSize() const { return _sequence.size(); }

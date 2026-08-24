@@ -24,8 +24,6 @@ class MatchResult {
 
   const std::string& at(const std::string& name, std::size_t index) const;
 
-  const std::vector<std::string>& all(const std::string& name) const;
-
   /* A capture read as a separated list -- "#a,#b" as two fields rather than
   ** one string. Nothing about splitting a capture is protocol-specific, so it
   ** belongs beside at() rather than in whatever type happens to hold the
