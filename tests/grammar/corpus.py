@@ -203,6 +203,10 @@ CASES += [
        want="461", forbid=()),
     _c("PART", "PART #nosuchchannel", "part-cmd", "unknown channel",
        want="403", forbid=()),
+    _c("PART", "PART #probe  bye", "part-cmd", "a run of spaces is not a syntax error",
+       forbid=("461", "421")),
+    _c("PART", "PART :", "part-cmd", "an empty channel name is a missing one",
+       want="461", forbid=()),
 ]
 
 # ── PRIVMSG ──────────────────────────────────────────────────────────────
@@ -254,6 +258,10 @@ CASES += [
     _c("KICK", "KICK", "kick-cmd", "bare command", want="461", forbid=()),
     _c("KICK", "KICK #probe nosuchuser", "kick-cmd", "target not on channel",
        want="441", forbid=()),
+    _c("KICK", "KICK #probe  bob", "kick-cmd", "a run of spaces is not a syntax error",
+       forbid=("461", "421")),
+    _c("KICK", "KICK #probe bob a reason with words", "kick-cmd",
+       "the reason is trailing, so it keeps every word", forbid=("461", "421")),
 ]
 
 # ── INVITE ───────────────────────────────────────────────────────────────
@@ -266,6 +274,11 @@ CASES += [
     _c("INVITE", "INVITE", "invite-cmd", "bare command", want="461", forbid=()),
     _c("INVITE", "INVITE nosuchnick #probe", "invite-cmd", "unknown nick",
        want="401", forbid=()),
+    _c("INVITE", "INVITE carol  #probe", "invite-cmd", "a run of spaces is not a syntax error",
+       forbid=("461", "421")),
+    _c("INVITE", "INVITE carol #probe extra", "invite-cmd",
+       "a parameter past invchan is ignored, not answered with 461",
+       forbid=("461", "421")),
 ]
 
 # ── TOPIC ────────────────────────────────────────────────────────────────

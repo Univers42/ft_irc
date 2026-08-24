@@ -37,6 +37,8 @@ struct Message {
   ** positional parameter when it did not. Which of the two parse paths ran is
   ** the parser's business: a handler that has to ask stops being a handler and
   ** starts being a second parser, which is what ten call sites had become. */
+  bool hasOr(const char* name, std::size_t index) const;
+
   const std::string& fieldOr(const char* name, std::size_t index) const;
 
   std::vector<std::string> listOr(const char* name, std::size_t index, char separator) const;

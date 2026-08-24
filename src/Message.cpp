@@ -42,6 +42,15 @@ const std::string& Message::field(const char* name, std::size_t index) const {
   return fields->at(name, index);
 }
 
+/* Was this parameter given, by whichever route the line arrived? On the
+** fallback path an empty positional parameter counts as absent, because every
+** production that names a required parameter types it `middle`, which is
+** 1*char and so cannot match an empty one. */
+bool Message::hasOr(const char* name, std::size_t index) const {
+  if (fields != NULL) return has(name);
+  return index < params.size() && !params[index].empty();
+}
+
 const std::string& Message::fieldOr(const char* name, std::size_t index) const {
   static const std::string kEmpty;
   if (fields != NULL) return field(name);

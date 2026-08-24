@@ -97,14 +97,13 @@ void Server::cmdJoin(Client* client, const Message& msg) {
 }
 
 void Server::cmdPart(Client* client, const Message& msg) {
-  if (!msg.matched()) {
+  const std::string reason = msg.fieldOr("partmsg", 1);
+  std::vector<std::string> targets = msg.listOr("chanlist", 0, ',');
+
+  if (targets.empty()) {
     replyNeedMoreParams(client, "PART");
     return;
   }
-
-  const std::string reason = msg.field("partmsg");
-
-  std::vector<std::string> targets = msg.list("chanlist", ',');
 
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& chanName = targets[t];

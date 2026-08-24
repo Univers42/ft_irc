@@ -80,15 +80,15 @@ static void broadcastModeChanges(Channel* channel, const std::string& prefix, co
 }
 
 void Server::cmdKick(Client* client, const Message& msg) {
-  if (!msg.matched()) {
+  if (!msg.hasOr("kickchans", 0) || !msg.hasOr("kickusers", 1)) {
     replyNeedMoreParams(client, "KICK");
     return;
   }
 
-  const std::string& chanName = msg.field("kickchans");
-  const std::string& target = msg.field("kickusers");
-  std::string reason = client->getNickname();
-  if (msg.has("kickreason")) reason = msg.field("kickreason");
+  const std::string& chanName = msg.fieldOr("kickchans", 0);
+  const std::string& target = msg.fieldOr("kickusers", 1);
+  std::string reason = client->getNickname();  //< RFC 2812 2.3.1: the kicker's nick is the default comment
+  if (msg.hasOr("kickreason", 2)) reason = msg.fieldOr("kickreason", 2);
 
   Channel* chan = requireChannel(client, chanName);
   if (!chan) return;
@@ -110,13 +110,13 @@ void Server::cmdKick(Client* client, const Message& msg) {
 }
 
 void Server::cmdInvite(Client* client, const Message& msg) {
-  if (!msg.matched()) {
+  if (!msg.hasOr("invnick", 0) || !msg.hasOr("invchan", 1)) {
     replyNeedMoreParams(client, "INVITE");
     return;
   }
 
-  const std::string& target = msg.field("invnick");
-  const std::string& chanName = msg.field("invchan");
+  const std::string& target = msg.fieldOr("invnick", 0);
+  const std::string& chanName = msg.fieldOr("invchan", 1);
 
   Channel* chan = requireChannel(client, chanName);
   if (!chan) return;
