@@ -2,6 +2,7 @@
 
 #include "IrcCase.hpp"
 #include "IrcMessage.hpp"
+#include "IrcName.hpp"
 #include "IrcTrace.hpp"
 #include "Limits.hpp"
 #include "Log.hpp"
@@ -32,7 +33,7 @@ void Server::cmdPass(Client* client, const Message& msg) {
     replyNeedMoreParams(client, "PASS");
     return;
   }
-  client->setPassword(msg.matched() ? msg.field("password") : msg.params[0]);
+  client->setPassword(msg.fieldOr("password", 0));
   client->setPassSent(true);
 }
 
@@ -42,9 +43,9 @@ void Server::cmdNick(Client* client, const Message& msg) {
     return;
   }
 
-  std::string nick = msg.matched() ? msg.field("newnick") : msg.params[0];
+  std::string nick = msg.fieldOr("newnick", 0);
 
-  if (!isValidNickname(nick)) {  //< "1abc" "a.b" -> 432 · "z`tick" passes since D1 closed
+  if (!IrcName::isNickname(nick)) {  //< "1abc" "a.b" -> 432 · "z`tick" passes since D1 closed
     sendReply(client, ERR_ERRONEUSNICKNAME, nick);
     return;
   }
@@ -78,18 +79,6 @@ void Server::cmdNick(Client* client, const Message& msg) {
   }
 }
 
-static bool isValidUsernameChar(unsigned char c) {
-  return (c >= 0x01 && c <= 0x09) || (c >= 0x0B && c <= 0x0C) || (c >= 0x0E && c <= 0x1F) || (c >= 0x21 && c <= 0x3F) ||
-         (c >= 0x41);
-}
-
-static bool isValidUsername(const std::string& user) {
-  if (user.empty()) return false;
-  for (std::string::size_type i = 0; i < user.size(); ++i)
-    if (!isValidUsernameChar(static_cast<unsigned char>(user[i]))) return false;
-  return true;
-}
-
 static void applyUserModeBitmask(Client* client, const std::string& param) {
   long bits = 0;
   if (!libcpp::str::parse_long(param, 0, 255, bits)) return;
@@ -108,14 +97,14 @@ void Server::cmdUser(Client* client, const Message& msg) {
     return;
   }
 
-  if (msg.matched() ? false : msg.trailingIndex != 3) {
+  if (!msg.matched() && msg.trailingIndex != 3) {
     replyNeedMoreParams(client, "USER");
     return;
   }
 
-  std::string username = msg.matched() ? msg.field("username") : msg.params[0];
+  std::string username = msg.fieldOr("username", 0);
   if (username.size() > Limits::kUserLen) username.erase(Limits::kUserLen);
-  if (!isValidUsername(username)) {
+  if (!IrcName::isUsername(username)) {
     sendNumeric(client, ERR_NEEDMOREPARAMS, "USER :Invalid username");
     return;
   }
@@ -123,7 +112,7 @@ void Server::cmdUser(Client* client, const Message& msg) {
 
   applyUserModeBitmask(client, msg.params[1]);
 
-  client->setRealname(msg.matched() ? msg.field("realname") : msg.params[3]);
+  client->setRealname(msg.fieldOr("realname", 3));
   client->setUserSet(true);
 
   if (client->hasNick()) completeRegistration(client);

@@ -74,6 +74,7 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 
 # ── Test sources ──────────────────────────────────────────────
 TEST_SRCS	= test_main.cpp \
+			  test_ircname.cpp \
 			  test_message.cpp \
 			  test_grammarbuilder.cpp \
 			  test_treematcher.cpp \

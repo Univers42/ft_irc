@@ -132,9 +132,6 @@ class Server {
   void cmdWhois(Client* client, const Message& msg);
   void cmdUserhost(Client* client, const Message& msg);
 
-  bool isValidNickname(const std::string& nick) const;
-  bool isValidChannelName(const std::string& name) const;
-  bool isValidChannelKey(const std::string& key) const;
   void broadcastToChannels(Client* client, const std::string& msg);
 
   int _port;

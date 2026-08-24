@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "IrcMessage.hpp"
+#include "IrcName.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
@@ -26,7 +27,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
     const std::string& name = channels[i];
     std::string key = (i < keys.size()) ? keys[i] : "";
 
-    if (!isValidChannelName(name)) {  //< per-channel · "JOIN #ok,bad" joins #ok and answers 476 for bad
+    if (!IrcName::isChannelName(name)) {  //< per-channel · "JOIN #ok,bad" joins #ok and answers 476 for bad
       sendReply(client, ERR_BADCHANMASK, name);
       continue;
     }
@@ -40,7 +41,7 @@ void Server::cmdJoin(Client* client, const Message& msg) {
         continue;
       }
 
-      if (!chan->getKey().empty() && (!isValidChannelKey(key) || chan->getKey() != key)) {
+      if (!chan->getKey().empty() && (!IrcName::isChannelKey(key) || chan->getKey() != key)) {
         sendReply(client, ERR_BADCHANNELKEY, name);
         continue;
       }

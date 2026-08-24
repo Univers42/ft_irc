@@ -5,7 +5,6 @@
 #include "IrcMessage.hpp"
 #include "Server.hpp"
 #include "ext/IServerExtension.hpp"
-#include "libcpp/str/format.hpp"
 
 void Server::cmdPrivmsg(Client* client, const Message& msg) {
   if (msg.params.empty() || msg.params[0].empty()) {  //< "PRIVMSG" alone -> 411 (no recipient)
@@ -18,10 +17,9 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
     return;
   }
 
-  const std::string text = msg.matched() ? msg.field("msgtext") : msg.params[1];
+  const std::string text = msg.fieldOr("msgtext", 1);
 
-  std::vector<std::string> targets =
-      msg.matched() ? msg.list("msgtarget", ',') : libcpp::str::split_nonempty(msg.params[0], ',');
+  std::vector<std::string> targets = msg.listOr("msgtarget", 0, ',');
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& target = targets[t];
 
@@ -52,10 +50,9 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
 void Server::cmdNotice(Client* client, const Message& msg) {
   if (msg.params.size() < 2 || msg.params[0].empty() || msg.params[1].empty()) return;
 
-  const std::string text = msg.matched() ? msg.field("msgtext") : msg.params[1];
+  const std::string text = msg.fieldOr("msgtext", 1);
 
-  std::vector<std::string> targets =
-      msg.matched() ? msg.list("msgtarget", ',') : libcpp::str::split_nonempty(msg.params[0], ',');
+  std::vector<std::string> targets = msg.listOr("msgtarget", 0, ',');
   for (size_t t = 0; t < targets.size(); ++t) {
     const std::string& target = targets[t];
 

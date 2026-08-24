@@ -4,6 +4,7 @@
 #include "ChannelModes.hpp"
 #include "IrcCase.hpp"
 #include "IrcMessage.hpp"
+#include "IrcName.hpp"
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "libcpp/str/format.hpp"
@@ -163,7 +164,7 @@ void Server::cmdTopic(Client* client, const Message& msg) {
 
   if (chan->isTopicRestricted() && !requireChanOp(client, chan, chanName)) return;
 
-  std::string newTopic = msg.matched() ? msg.field("topictext") : msg.params[1];
+  std::string newTopic = msg.fieldOr("topictext", 1);
   if (newTopic.size() > Limits::kTopicLen) newTopic.erase(Limits::kTopicLen);
   chan->setTopic(newTopic, client->getNickname());
 
@@ -294,7 +295,7 @@ void Server::handleChannelMode(Client* client, Channel* channel, const Message& 
             continue;
           }
           std::string key = msg.params[paramIdx++];
-          if (!isValidChannelKey(key)) {
+          if (!IrcName::isChannelKey(key)) {
             if (!alreadyReported(reported, "525:" + key)) sendReply(client, ERR_INVALIDKEY, channel->getName());
             continue;
           }

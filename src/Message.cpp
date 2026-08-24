@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "grammar/MatchResult.hpp"
+#include "libcpp/str/format.hpp"
 
 #include "libcpp/str/case.hpp"
 
@@ -39,6 +40,18 @@ const std::string& Message::field(const char* name, std::size_t index) const {
   static const std::string kEmpty;
   if (fields == NULL) return kEmpty;
   return fields->at(name, index);
+}
+
+const std::string& Message::fieldOr(const char* name, std::size_t index) const {
+  static const std::string kEmpty;
+  if (fields != NULL) return field(name);
+  return index < params.size() ? params[index] : kEmpty;
+}
+
+std::vector<std::string> Message::listOr(const char* name, std::size_t index, char separator) const {
+  if (fields != NULL) return list(name, separator);
+  if (index >= params.size()) return std::vector<std::string>();
+  return libcpp::str::split_nonempty(params[index], separator);
 }
 
 std::vector<std::string> Message::list(const char* name, char separator) const {
