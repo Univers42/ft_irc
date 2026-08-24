@@ -146,7 +146,7 @@ to know about.
 * Killing one client (`Ctrl+C` on its `nc`) leaves the others fully working.
 * `ps -o nlwp= -p $(pgrep ircserv)` stays at **1** — one thread, always.
 
-Guarded by `tests/10_stress_multiclient.sh`, `tests/concurrent_clients.sh`,
-`tests/no_forking.sh`, `tests/separate_responses_by_client.sh`.
+Guarded by `tests/10_stress_multiclient.sh`, `tests/concurrent_clients.sh`
+and `tests/no_forking.sh`.
 
 **Next:** [06 — The bot](06-bot.md)

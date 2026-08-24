@@ -1,6 +1,5 @@
 #include "bonus/FileTransferExt.hpp"
 
-#include <cerrno>
 #include <climits>
 #include <cstdlib>
 #include <string>

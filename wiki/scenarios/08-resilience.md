@@ -95,8 +95,8 @@ Then flood the channel it is in from another client. What happens:
 The overflow never lands mid-broadcast: a client is dropped at a safe sweep
 point, so no other member gets half a line.
 
-Guarded by `tests/slow_non_reading_client.sh` and the frozen-reader tests in
-`tests/test_robustness.cpp`.
+Guarded by the frozen-reader tests in `tests/test_robustness.cpp` and by
+`tests/10_stress_multiclient.sh`, which drives a non-reading client.
 
 ---
 
@@ -116,7 +116,7 @@ second command past the limit.
 Malformed input at every stage is answered, never crashed on: unknown commands
 give `421`, missing parameters `461`, garbage before registration `451`.
 
-Guarded by `tests/09_malformed_preauth.sh`, `tests/server_remains_stable.sh`.
+Guarded by `tests/09_malformed_preauth.sh`.
 
 ---
 

@@ -1,10 +1,15 @@
-# ═══════════════════════════════════════════════════════════════════════════
-#  ft_irc — IRC server in C++98 (RFC 2812), single-threaded, epoll-driven.
-#
-#  `make`      builds the full tier and prints where to go next.
-#  `make help` prints every target, what it is for, and which variables can
-#              be overridden on the command line.
-# ═══════════════════════════════════════════════════════════════════════════
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: dlesieur <dlesieur@student.42.fr>          +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2026/08/24 06:02:55 by dlesieur          #+#    #+#              #
+#    Updated: 2026/08/24 06:02:58 by dlesieur         ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
 
 NAME		= ircserv
 
@@ -13,26 +18,10 @@ CXXFLAGS	= -Wall -Wextra -Werror -std=c++98
 
 .NOTPARALLEL:
 
-#  Bare `make` prints the help screen and builds nothing; `make all` builds.
-#  There were two .DEFAULT_GOAL assignments here and the later one silently
-#  won -- consolidated so the choice is visible in one place.
-#
-#  Anything automated must therefore say `make all` explicitly, never bare
-#  `make`. scripts/audit.sh does (its no-relink check compares two `make all`
-#  runs); so do tests/12_build_norm.sh, the Dockerfile and ci.yml.
 .DEFAULT_GOAL := help
 
 SRCDIR		= src
 
-# ── Output presentation ─────────────────────────────────────────────────────
-#  Colour is on only when make's own stdout is a terminal: GNU make >= 4.1
-#  defines MAKE_TERMOUT for exactly that, and it survives into the sub-makes
-#  the tier targets spawn. Redirected to a file or a pipe (CI, docker build,
-#  scripts/audit.hellish) everything below degrades to plain ASCII — which is
-#  what keeps build logs greppable, since the audit greps them for compiler
-#  diagnostics and ANSI escapes would sit in the middle of the matched text.
-#
-#  Overrides:  NO_COLOR=1 / COLOR=0  force plain      COLOR=1  force colour
 COLOR ?= auto
 ifeq ($(COLOR),auto)
     ifeq ($(origin MAKE_TERMOUT),undefined)
@@ -73,9 +62,6 @@ S_ARR	:= ->
 S_DOT	:= -
 endif
 
-#  `make -s` must stay silent (tests/12_build_norm.sh drives the build that
-#  way). Only the leading short-flag cluster is inspected: long options such
-#  as --no-builtin-rules also contain an 's' and would false-positive.
 MAKE_SHORTFLAGS := $(firstword $(MAKEFLAGS))
 ifeq (,$(findstring -,$(MAKE_SHORTFLAGS)))
     ifneq (,$(findstring s,$(MAKE_SHORTFLAGS)))
@@ -83,9 +69,6 @@ ifeq (,$(findstring -,$(MAKE_SHORTFLAGS)))
     endif
 endif
 
-#  V=1 swaps the short per-file tags for the real command lines. AT is the
-#  recipe-echo suppressor; PR_TAG/PR_MSG are `printf` or the no-op `:` — they
-#  carry no leading `@`, so they can also be used inside a shell `if`.
 ifeq ($(V),1)
 AT		:=
 PR_TAG	:= :
@@ -101,76 +84,24 @@ else
 PR_MSG	:= printf
 endif
 
-#  $(call tag,<colour>,<LABEL>,<detail>) — per-file build step (hidden by V=1)
-#  $(call act,<colour>,<LABEL>,<detail>) — one-off action (hidden only by -s)
 tag = @$(PR_TAG) '%b\n' '  $(1)$(2)$(C_RST)  $(3)'
 act = @$(PR_MSG) '%b\n' '  $(1)$(2)$(C_RST)  $(3)'
 
 HINT = $(C_DIM)   make help  $(S_DOT)  targets, tiers and overridable flags$(C_RST)
 
-# ── Build tiers ────────────────────────────────────────────────────────────
-#  make mandatory  → strictly the subject's mandatory part (pure RFC kernel)
-#  make bonus      → mandatory + subject bonus (bot, file transfer)
-#  make / make all → full: bonus + optional platform extras (fancy console,
-#                    and the FT_IRC_CONFIG settings override). Without a
-#                    config file the binary behaves exactly like the bonus
-#                    tier apart from the console sink.
-#
-#  Tiers differ ONLY in which sources are linked (per-tier object dirs, one
-#  registerExtensions() TU each); the kernel sources are identical.
-#  Everything the build generates lives under build/: objects and dependency
-#  files in build/obj/<tier>/ (mirroring the source tree), linked binaries in
-#  build/bin/. Nothing generated is left in the repo root at all -- there is
-#  no ./ircserv symlink any more -- so `rm -rf build` is a complete clean and
-#  the root listing stays source-only.
 TIER		?= full
 BUILDDIR	= build
 BINDIR		= $(BUILDDIR)/bin
 OBJROOT		= $(BUILDDIR)/obj
 OBJDIR		= $(OBJROOT)/$(TIER)
 
-#  build/bin/ircserv is the one and only place the binary is produced. The
-#  repo root used to carry a ./ircserv symlink onto it for the subject's run
-#  line (subject.txt:191); that is gone, so every script, test and CI step
-#  spells the real path out. Run it as ./build/bin/ircserv <port> <password>.
 BIN			= $(BINDIR)/$(NAME)
 
-#  Written by the link recipe and consumed by `build`, so the closing banner
-#  can say "built" or "is up to date" without guessing. The wording matters:
-#  scripts/audit.hellish proves `make` does not relink by re-running it and
-#  looking for exactly that phrase.
 LINKSTAMP	= $(OBJDIR)/.relinked
 
-# ── libcpp: the project's own C++98-clean modules, compiled in ──────────────
-#  ircserv compiles these sources itself and links plain object files. It
-#  does NOT link libcpp's archive, and that is the deliberate choice:
-#  subject.txt:91 forbids external libraries, and the least ambiguous way to
-#  satisfy it is for no .a to appear on the link line at all. Compiling the
-#  sources in keeps the claim literally true and leaves nothing for an
-#  evaluator to have to interpret.
-#
-#  The named lists below are therefore the routing table: they are what says
-#  which libcpp modules are part of ircserv. Adding one means adding its name
-#  here, after checking it is C++98-clean.
-#
-#  libcpp can still be built standalone the way a 42 library is expected to
-#  be — `make -C vendor/libcpp c98` produces libftpp98.a from the same 28
-#  C++98-clean modules, and `make -C vendor/libcpp` the full C++17 libftpp.a.
-#  Those exist for libcpp's other consumers and to prove the subset compiles;
-#  ircserv just does not consume the output. What ircserv DOES rely on from
-#  that work is the include graph: libcpp/config.hpp defines
-#  LIBCPP_HAS_CXX11, and the umbrella headers gate their C++11-only modules
-#  on it, so a C++98 translation unit can include libcpp/libcpp.hpp without a
-#  parse error.
-#
-#  The libcpp objects are listed BEFORE the ft_irc objects in the $(NAME)
-#  prerequisites so the dependency compiles first — .NOTPARALLEL makes
-#  prerequisite order literal build order, so a libcpp breakage surfaces
-#  immediately instead of after nineteen project files.
 LIBCPP		= vendor/libcpp
 INCLUDES	= -I include -I $(LIBCPP)/include -I $(LIBCPP)/c98/include
 
-# ── Source groups (names without dir/extension) ─────────────────────────────
 CORE_NAMES	= main \
 			  tiers/tier_$(TIER) \
 			  Server \
@@ -214,10 +145,6 @@ endif
 
 SRCS		= $(addprefix $(SRCDIR)/,$(addsuffix .cpp,$(SRC_NAMES)))
 
-# str/* is used by the kernel (casemapped parsing, to_string, consttime
-# compare, base64 relay validation, safe filename components); data/date for
-# the one wall-clock timestamp helper every log line goes through;
-# util/config + term/* only by the full tier (config, console).
 LIBCPP_CORE_NAMES	= str/format str/case str/utf8 str/secure str/base64 \
 					  data/date
 LIBCPP_FULL_NAMES	= util/config term/color term/style term/table \
@@ -230,10 +157,6 @@ endif
 
 LIBCPP_SRCS		= $(addprefix $(LIBCPP)/src/,$(addsuffix .cpp,$(LIBCPP_NAMES)))
 
-# libcpp C++98 tier (vendor/libcpp/c98): generic building blocks promoted
-# out of this project — line framing, streaming CSV, epoll registration,
-# per-descriptor traffic counters. expiring_registry.hpp comes from the same
-# tier but is a class template, so there is no object to list.
 LIBCPP98_NAMES	= line_buffer csv_writer reactor buffered_socket \
 				  traffic_stats
 LIBCPP98_SRCS	= $(addprefix $(LIBCPP)/c98/src/,$(addsuffix .cpp,$(LIBCPP98_NAMES)))
@@ -242,7 +165,6 @@ OBJS			= $(SRCS:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 LIBCPP_OBJS		= $(LIBCPP_SRCS:$(LIBCPP)/src/%.cpp=$(OBJDIR)/libcpp/%.o)
 LIBCPP98_OBJS	= $(LIBCPP98_SRCS:$(LIBCPP)/c98/src/%.cpp=$(OBJDIR)/libcpp98/%.o)
 
-# ── Tier entry points (recursive: re-evaluates the source lists per tier) ───
 all:
 	@$(PR_MSG) '%b\n' '' '$(C_DIM)$(S_BAR)$(C_RST) $(C_BLD)ft_irc$(C_RST) $(C_DIM)$(S_DOT)$(C_RST) $(C_MAG)full tier$(C_RST) $(C_DIM)$(S_DOT) $(CXX) $(CXXFLAGS)$(C_RST)'
 	@$(MAKE) --no-print-directory TIER=full build
@@ -255,11 +177,6 @@ mandatory:
 	@$(PR_MSG) '%b\n' '' '$(C_DIM)$(S_BAR)$(C_RST) $(C_BLD)ft_irc$(C_RST) $(C_DIM)$(S_DOT)$(C_RST) $(C_MAG)mandatory tier$(C_RST) $(C_DIM)$(S_DOT) $(CXX) $(CXXFLAGS)$(C_RST)'
 	@$(MAKE) --no-print-directory TIER=mandatory build
 
-# Verify all three tiers in STRICT SEQUENCE — never concurrently. The tier
-# marker (obj/.tier_$(TIER)) forces the needed relink between tiers, so no
-# fclean is required. This is the safe way to check -Werror across tiers:
-# one make invocation, serialized, each capped by .NOTPARALLEL above. Building
-# tiers in parallel is what OOM-freezes machines; this makes it impossible.
 verify-tiers:
 	@$(MAKE) --no-print-directory mandatory
 	@$(MAKE) --no-print-directory bonus
@@ -274,11 +191,6 @@ build: $(BIN)
 		$(PR_MSG) '%b\n' '' '$(C_GRN)$(S_OK)$(C_RST)  $(C_BLD)$(NAME)$(C_RST) is up to date $(C_DIM)$(S_DOT)$(C_RST) $(TIER) tier' '$(HINT)' ''; \
 	fi
 
-# The marker forces a relink when switching tiers (one binary name, three
-# object sets) and keeps a same-tier repeat a no-op.
-#  Everything on this line is a plain object file — no archive, so link order
-#  carries no meaning and the libcpp objects can stay first, matching the
-#  build order.
 $(BIN): $(OBJROOT)/.tier_$(TIER) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(OBJS)
 	$(call tag,$(C_GRN),LINK  ,$(C_BLD)$(BIN)$(C_RST))
 	@mkdir -p $(BINDIR)
@@ -307,11 +219,6 @@ $(OBJDIR)/libcpp98/%.o: $(LIBCPP)/c98/src/%.cpp
 
 -include $(OBJS:.o=.d) $(LIBCPP_OBJS:.o=.d) $(LIBCPP98_OBJS:.o=.d)
 
-#  clean drops every object tree under build/obj -- the three server tiers
-#  and the test suite's, since they all live there now. fclean removes what
-#  is left of build/ (the binaries), leaving no generated file anywhere in
-#  the tree. The stray `rm -f $(NAME)` sweeps away a root ircserv symlink
-#  left behind by a checkout from before the symlink was dropped.
 clean:
 	$(call act,$(C_YEL),CLEAN ,$(OBJROOT)/ $(C_DIM)(objects + deps, every tier)$(C_RST))
 	@rm -rf $(OBJROOT)
@@ -327,48 +234,19 @@ test:
 	$(call act,$(C_MAG),TEST  ,Google Test suite $(C_DIM)(C++17, via tests/Makefile)$(C_RST))
 	@$(MAKE) -C tests
 
-# ── norm: style + static-analysis gate ─────────────────────────────────────
-#  vendor/scripts/norminette.sh drives four tools over the sources — see
-#  .clang-format (layout), .clang-tidy (bug-finding), CPPLINT.cfg (style), and
-#  cppcheck. A tool that isn't installed is reported "skipped", not failed, so
-#  the target still runs on a bare machine:
-#      pip install --user cpplint clang-tidy      # clang-format: your distro
-#      cppcheck: distro package, or build from github.com/danmar/cppcheck
-#
-#  Scope is THIS repository's code: src/ and include/.
-#
-#  The libcpp modules ircserv compiles in used to be in scope too, and that
-#  was a quiet trap: vendor/libcpp is a submodule with its own repository and
-#  its own style, so `make norm-fix` reformatted files belonging to a
-#  different project and left the submodule dirty. It went unnoticed only
-#  because the two happened to agree at 80 columns; raising ColumnLimit to
-#  120 made every one of those files rewrite at once. A gate this repo cannot
-#  land a fix for is not a gate -- libcpp's four standing cpplint findings
-#  live in its own CI.
-#
-#  Override to widen the scope for a one-off sweep:
-#      make norm NORM_FILES="src include $(LIBCPP)/src/str/case.cpp"
 NORM_SCRIPT		= vendor/scripts/norminette.sh
 EVLOOP_SCRIPT	= scripts/check_event_loop.py
 AUDIT_SCRIPT	= scripts/audit.sh
 NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
 NORM_FILES		= src include
 
-# Everything after `--` is what clang-tidy parses the sources with, so it has
-# to match the real build. -Werror is deliberately left out: clang's warning
-# set differs from the build compiler's, and a clang-only diagnostic must not
-# be able to fail the lint gate.
 NORM_TIDY_FLAGS	= -std=c++98 $(INCLUDES)
 
-# The script is Python despite the .sh name, and ships non-executable; invoke
-# it through the interpreter rather than relying on its mode bits.
 norm:
 	$(call act,$(C_MAG),NORM  ,clang-format + clang-tidy + cpplint + cppcheck)
 	@PATH="$$HOME/.local/bin:$$PATH" python3 $(NORM_SCRIPT) $(NORM_FILES) \
 		-- $(NORM_TIDY_FLAGS)
 
-# Applies the mechanical half of `norm` in place (layout only — clang-format
-# never changes semantics). cpplint and the analyzer findings stay manual.
 norm-fix:
 	$(call act,$(C_MAG),FMT   ,clang-format -i over src/ and include/)
 	@PATH="$$HOME/.local/bin:$$PATH" clang-format -i \
@@ -376,15 +254,6 @@ norm-fix:
 		$(filter-out src include,$(NORM_FILES))
 	@$(PR_MSG) '%b\n' '$(C_GRN)$(S_OK)$(C_RST)  clang-format applied $(C_DIM)$(S_ARR) re-run: make norm$(C_RST)'
 
-# ── event-loop: the one rule the subject grades zero ───────────────────────
-#  "if you attempt to read/recv or write/send in any file descriptor without
-#   using poll() (or equivalent), your grade will be 0."
-#
-#  bircd -- the reference the school ships with the subject -- is the worked
-#  example of obeying it: declare interest, wait once, act only on readiness.
-#  This asserts our loop has the same shape. `evloop` reads the sources;
-#  `evloop-run` also straces the live server, which is the part a source read
-#  cannot prove. The runtime pass needs a built binary and strace.
 evloop:
 	$(call act,$(C_MAG),EVLOOP,one event wait $(C_DIM)- and no socket I/O behind its back$(C_RST))
 	@python3 $(EVLOOP_SCRIPT)
@@ -393,10 +262,6 @@ evloop-run: $(BIN)
 	$(call act,$(C_MAG),EVLOOP,static + strace of the live server)
 	@python3 $(EVLOOP_SCRIPT) --runtime --binary $(BIN)
 
-# ── audit: every subject-compliance gate at once ───────────────────────────
-#  Builds all three tiers, greps for C++11 tokens and forbidden calls, counts
-#  event-wait sites, checks the Makefile rules and the no-relink rule, and
-#  finishes with the two checks above. This is the one to run before pushing.
 audit:
 	$(call act,$(C_MAG),AUDIT ,subject compliance $(C_DIM)- three tiers, tokens, syscalls, loop$(C_RST))
 	@bash $(AUDIT_SCRIPT)
@@ -405,9 +270,7 @@ testclean:
 	$(call act,$(C_YEL),CLEAN ,test artifacts $(C_DIM)(tests/)$(C_RST))
 	@$(MAKE) -C tests fclean
 
-# ── help ───────────────────────────────────────────────────────────────────
-#  Kept as one printf so the whole screen is a single shell invocation. No
-#  apostrophes in the text: every line is single-quoted for the shell.
+
 help:
 	@printf '%b\n' \
 	'' \
