@@ -384,7 +384,7 @@ guards is broken.
 
 * [IRC client protocol notes](IRC_client_protocol.md) — the RFC extracts this
   page is checked against
-* [DEFENSE-MAP.md](DEFENSE-MAP.md) — every evaluation-sheet obligation and the
+* [DEFENSE-PLAYBOOK.md](DEFENSE-PLAYBOOK.md) — every evaluation-sheet obligation and the
   command that demonstrates it
 * [scenarios/](scenarios/README.md) — the same behaviour as walkthroughs
 * [`scripts/sim/verify_names.sh`](../scripts/sim/verify_names.sh) ·

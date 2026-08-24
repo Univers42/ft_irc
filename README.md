@@ -168,11 +168,11 @@ the 42 build. Secrets live only in the gitignored `.env`.
 | --- | --- |
 | [wiki/README.md](wiki/README.md) | Wiki index — start here |
 | [wiki/scenarios/](wiki/scenarios/README.md) | Scenarios and command reference |
-| [wiki/USER-GUIDE.md](wiki/USER-GUIDE.md) | Feature-by-feature prose walkthrough |
+| [wiki/USER_DOC.md](wiki/USER_DOC.md) | Feature-by-feature prose walkthrough |
 | [wiki/LOGGING.md](wiki/LOGGING.md) | Server-side protocol trace and log levels |
-| [wiki/DOCUMENTATION.md](wiki/DOCUMENTATION.md) | Architecture, extension seam, protocol details |
-| [wiki/ATTACK.md](wiki/ATTACK.md) | Adversarial playbook |
-| [wiki/DEFENSE-MAP.md](wiki/DEFENSE-MAP.md) | Subject obligations → the command that proves each |
+| [wiki/NETWORKING.md](wiki/NETWORKING.md) | Architecture: one thread, many clients, no locks |
+| [wiki/GRAMMAR-ARCHITECTURE.md](wiki/GRAMMAR-ARCHITECTURE.md) | The grammar subsystem and its two matchers |
+| [wiki/DEFENSE-PLAYBOOK.md](wiki/DEFENSE-PLAYBOOK.md) | Adversarial playbook, and the obligation each command proves |
 | [tests/TESTING.md](tests/TESTING.md) | QA discipline |
 | `subject.txt` / `en.subject.pdf` | The assignment |
 

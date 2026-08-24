@@ -64,7 +64,7 @@ are out of scope.
 
 * [RFC-CONFORMANCE.md](RFC-CONFORMANCE.md) — the measured conformance report
 * [scenarios/commands.md](scenarios/commands.md) — every command and its numerics
-* [DOCUMENTATION.md](DOCUMENTATION.md) — how the server is built
+* [NETWORKING.md](NETWORKING.md) — how the server is built
 * [RFC 2812](https://datatracker.ietf.org/doc/html/rfc2812) ·
   [RFC 1459](https://datatracker.ietf.org/doc/html/rfc1459) ·
   [Modern IRC](https://modern.ircdocs.horse/)

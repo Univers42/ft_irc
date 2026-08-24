@@ -63,6 +63,27 @@ real protocol. If your `nc` lacks `-C`:
 printf 'PASS pass\r\nNICK alice\r\nUSER a 0 * :A\r\n' | nc 127.0.0.1 6667
 ```
 
+### Run this in bash
+
+Every loop in this document relies on POSIX **word splitting** (`./ircserv $a`
+with `a="abc pass"` must become two arguments). `hellish` — this project's own
+shell, and possibly your login shell — does not split unquoted expansions, so
+those loops silently degrade into a single-argument call and every row reports
+the same wrong answer. Start the session with:
+
+```bash
+bash          # not hellish, not dash
+echo $BASH_VERSION
+```
+
+### Pick a port nothing else is using
+
+`tests/run_all.sh` binds **6667** and its cleanup runs
+`pgrep -x ircserv | xargs -r kill`, which kills *every* process named `ircserv`
+regardless of port. If a test suite, a CI job or a second terminal may be
+running, take a private port (`6767` below) so nothing pulls the server out from
+under you mid-check.
+
 ### A reusable one-shot helper
 
 Paste this into T4 once. Every "expected output" below assumes it.
@@ -100,8 +121,17 @@ type -a make ircserv nc valgrind 2>/dev/null | grep -v '^make is /usr'
 declare -f | head                                    # expect: no output
 
 # submodules — this project vendors libcpp
-git submodule update --init --recursive
+#   NOT --recursive: libcpp's own nested vendor/scripts is pinned at a commit
+#   that was never pushed, so --recursive aborts and leaves vendor/libcpp
+#   unchecked-out. CI initialises exactly these two, for exactly this reason.
+git submodule update --init vendor/libcpp vendor/googletest
 ```
+
+> **Check this before defense day.** At the time of writing, a clone made this
+> way still does not compile: six files the build needs live only in the
+> developer's local `vendor/libcpp` working tree and are not in the pinned
+> commit. See [`../err_log.md`](../err_log.md) §1 — it is the first thing to
+> fix, because §2.1 below is an instant-zero gate.
 
 | Check | Pass | Fail |
 | --- | --- | --- |
@@ -122,13 +152,27 @@ git submodule update --init --recursive
 ```bash
 grep -E '^(NAME|CXX|CXXFLAGS)' Makefile
 make re 2>&1 | tee /tmp/build.log
-grep -icE 'warning|error' /tmp/build.log     # expect 0
+grep -icE 'warning:|error:' /tmp/build.log   # expect 0
 ls -l ircserv                                 # the executable must be named exactly this
 file ircserv
 ```
 
+Match `warning:` / `error:` **with the colon** — that is the shape of a compiler
+diagnostic. A bare `grep -icE 'warning|error'` can never return 0 here, because
+the build banner itself prints the flag `-Werror`:
+
+```
+-- ft_irc - full tier - c++ -Wall -Wextra -Werror -std=c++98
+```
+
 **Expected:** `-Wall -Wextra -Werror -std=c++98` present, zero warnings, and an
 executable called `ircserv`.
+
+`ls -l ircserv` shows a **symlink** — `ircserv -> build/bin/ircserv`. That is
+deliberate (every generated file lives under `build/`, and the subject's
+`./ircserv <port> <password>` still works from the root). Say so before the
+grader asks; `file ircserv` reports `symbolic link to build/bin/ircserv`, and
+`file -L ircserv` reports the ELF binary.
 
 Required rules — all five must exist:
 
@@ -151,17 +195,32 @@ grep -rnE '\bnullptr\b|\bauto \b|unique_ptr|\[\[|= *default;|= *delete;' src inc
 ### 2.2 Exactly one poll/epoll — the classic instant zero
 
 ```bash
-grep -rnE '\b(poll|epoll_wait|select|kqueue)\s*\(' src/ include/ | grep -v '^.*://'
+grep -rnE '\b(poll|epoll_wait|select|kqueue)\s*\(' src/ include/ | grep -v '"'
 ```
 
 **Expected: exactly one line.**
 
 ```
-src/Server.cpp:272:    int nfds = epoll_wait(_reactor.fd(), events, MAX_EVENTS, 1000);
+src/Server.cpp:273:    int nfds = epoll_wait(_reactor.fd(), events, MAX_EVENTS, 1000);
 ```
 
-Say this out loud to the grader: *"one `epoll_wait`, in `Server::run`, line 272.
+The `| grep -v '"'` is not cheating and you should explain it rather than hide
+it: the very next line is the error path,
+
+```cpp
+throw std::runtime_error("epoll_wait() failed: " + std::string(strerror(errno)));
+```
+
+and the words `epoll_wait(` appear inside that **string literal**, so a raw grep
+reports two hits for one call site. Dropping lines containing a quote leaves the
+call itself. `scripts/audit.sh` filters the same way and prints
+`✓ exactly 1 event-wait call site`.
+
+Say this out loud to the grader: *"one `epoll_wait`, in `Server::run`.
 `epoll_ctl` appears more than once, but that is registration, not waiting."*
+
+Line numbers move; let grep print them rather than trusting the ones written
+here.
 
 ```bash
 grep -rn 'epoll_ctl' src/ vendor/libcpp/c98/src/reactor.cpp   # registration only
@@ -181,11 +240,11 @@ event dispatch:
 grep -nE '\b(accept|recv|send)\s*\(' src/*.cpp src/**/*.cpp
 ```
 
-| Call | Line | Reached only from |
+| Call | Line (at the time of writing) | Reached only from |
 | --- | --- | --- |
-| `accept` | `Server.cpp:308` | `acceptClient()` ← `EPOLLIN` on `_listenFd` |
-| `recv` | `Server.cpp:347` | `handleClientInput()` ← `EPOLLIN` on a client |
-| `send` | `Server.cpp:376` | `handleClientOutput()` ← `EPOLLOUT` on a client |
+| `accept` | `Server.cpp:309` | `acceptClient()` ← `EPOLLIN` on `_listenFd` |
+| `recv` | `Server.cpp:348` | `handleClientInput()` ← `EPOLLIN` on a client |
+| `send` | `Server.cpp:378` | `handleClientOutput()` ← `EPOLLOUT` on a client |
 
 Then prove no `errno` steering:
 
@@ -196,17 +255,18 @@ grep -n 'EAGAIN\|EWOULDBLOCK\|EINTR' src/*.cpp src/**/*.cpp
 **Expected: exactly one hit**, and it is *not* on an I/O path:
 
 ```
-src/Server.cpp:274:      if (errno == EINTR) continue;   // epoll_wait interrupted by a signal
+src/Server.cpp:275:      if (errno == EINTR) continue;   // epoll_wait interrupted by a signal
 ```
 
 Say: *"`EINTR` on `epoll_wait` is not I/O retry — it is the required way to
 resume a syscall a signal interrupted. No `recv`/`send` ever inspects `errno`;
 they return and wait for the next event."*
 
-Check the read path returns instead of looping:
+Check the read path returns instead of looping (grep, not a fixed line range —
+the numbers drift):
 
 ```bash
-sed -n '347,352p' src/Server.cpp
+grep -n -A4 'ssize_t bytesRead = recv' src/Server.cpp
 ```
 
 ```c
@@ -223,12 +283,18 @@ if (bytesRead <= 0) {
 grep -rn 'fcntl' src/ include/
 ```
 
-**Expected: exactly two hits, both identical in form.**
+**Expected: five hits — two calls, two error strings, one `#include`.** Only the
+two calls matter, and both carry `F_SETFL, O_NONBLOCK`:
 
 ```
-src/Server.cpp:232:  if (fcntl(_listenFd, F_SETFL, O_NONBLOCK) < 0)
-src/Server.cpp:317:  if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
+src/Server.cpp:4:#include <fcntl.h>
+src/Server.cpp:233:  if (fcntl(_listenFd, F_SETFL, O_NONBLOCK) < 0)
+src/Server.cpp:234:    throw std::runtime_error("fcntl() failed: " + std::string(strerror(errno)));
+src/Server.cpp:318:  if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
+src/Server.cpp:319:    Log::error() << "fcntl() failed on client fd: " << strerror(errno);
 ```
+
+To see just the calls: `grep -rn 'fcntl *(' src/ | grep -v '"'`.
 
 Any `F_GETFL`, `F_SETFD`, `FD_CLOEXEC` or `O_APPEND` → **grade 0**.
 
@@ -287,9 +353,34 @@ rejected rather than defaulted:
 | 10 | `./ircserv 80 pass` (non-root) | clean "bind failed", no crash | privileged port |
 
 ```bash
+# bash only — `./ircserv $a` depends on word splitting (see §0)
 for a in "" "6667" "6667 pass extra" "abc pass" "0 pass" "65536 pass" "-1 pass" "80 pass"; do
-  printf '%-22s -> ' "[$a]"; ./ircserv $a 2>&1 | head -1; echo "   exit=$?"
+  printf '%-22s -> ' "[$a]"
+  out=$(./ircserv $a 2>&1 | head -1); ./ircserv $a >/dev/null 2>&1
+  printf '%-58s exit=%s\n' "$out" "$?"
 done
+```
+
+Verified output — note that rows 4–9 must say **port**, not **usage**; if every
+row says `usage:` you are not in bash and the arguments never got split:
+
+```
+[]                     -> [ircserv] error: usage: ./ircserv <port> <password>        exit=1
+[6667]                 -> [ircserv] error: usage: ./ircserv <port> <password>        exit=1
+[6667 pass extra]      -> [ircserv] error: usage: ./ircserv <port> <password>        exit=1
+[abc pass]             -> [ircserv] error: port must be a number between 1 and 65535 exit=1
+[0 pass]               -> [ircserv] error: port must be a number between 1 and 65535 exit=1
+[65536 pass]           -> [ircserv] error: port must be a number between 1 and 65535 exit=1
+[-1 pass]              -> [ircserv] error: port must be a number between 1 and 65535 exit=1
+[80 pass]              -> [ircserv] error: fatal: bind() failed: Permission denied   exit=1
+```
+
+Row 7 (`0 pass`) is rejected outright rather than being bound as an ephemeral
+port — `parse_long(portStr, 1, 65535, port)` in `main.cpp` sets the floor at 1.
+The empty password is caught too, but you must quote it or the shell eats it:
+
+```bash
+./ircserv 6667 ""      # [ircserv] error: password cannot be empty   exit=1
 ```
 
 **Every one must exit cleanly. A segfault here ends the defense.**
@@ -1724,6 +1815,6 @@ BONUS (only if all the above is perfect)
 [ ] ../etc/passwd refused
 ```
 
-**See also:** [DEFENSE-MAP.md](DEFENSE-MAP.md) · [ATTACK.md](ATTACK.md) ·
+**See also:**
 [RFC-CONFORMANCE.md](RFC-CONFORMANCE.md) · [NETWORKING.md](NETWORKING.md) ·
 [TESTS.md](TESTS.md)

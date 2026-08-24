@@ -119,6 +119,6 @@ cost is that the receiver does the decoding, which is one `base64 -d`.
 * On `make mandatory`, `FILE` gives `421`.
 
 Guarded by `tests/test_filetransfer.cpp`. Full protocol spec in
-[`../DOCUMENTATION.md`](../DOCUMENTATION.md).
+[`../NETWORKING.md`](../NETWORKING.md).
 
 **Next:** [08 — Failure & resilience](08-resilience.md)
