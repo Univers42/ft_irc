@@ -429,8 +429,6 @@ you reach §8.
 | Nickname | ≤ 9 characters |
 | Uncheck | *Use SSL*, *Connect to selected server only* |
 
-Screenshots of a working session live in [`../assets/`](../assets/).
-
 ### 3.4 Multiple simultaneous connections, nc and HexChat together
 
 > *"The server should not block. It should be able to answer all demands."*
