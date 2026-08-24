@@ -138,6 +138,50 @@ CASES += [
        want="462", forbid=()),
 ]
 
+# The USER matrix, ported from a scratch probe that could not run in CI. Each
+# element of the production gets its own row: what a username may contain,
+# that <mode> and <unused> are free `middle`s the server does not interpret,
+# and where the colon before <realname> stops being optional.
+CASES += [
+    # username
+    _c("USER", "USER a~b#c 0 * :A", "user-cmd", "a username is a middle: punctuation is fine",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER ~alice 0 * :A", "user-cmd", "a leading '~' is not special to the server",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER a:b 0 * :A", "user-cmd", "':' inside a middle is legal after the first octet",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER a!b 0 * :A", "user-cmd", "'!' separates nick from user in a prefix, not here",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER a@b 0 * :A", "user-cmd", "'@' would forge the host half of a prefix",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
+    _c("USER", "USER abcdefghijKLMN 0 * :A", "user-cmd",
+       "over USERLEN: truncated to fit, not refused", state=PREAUTH, fresh=True),
+
+    # <mode> and <unused> are middles the server does not read
+    _c("USER", "USER u 99999999999999 * :R", "user-cmd", "<mode> is not parsed as a number",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER u -1 * :R", "user-cmd", "nor as a signed one",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER u abc * :R", "user-cmd", "nor as a number at all",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER u :0 * :R", "user-cmd", "a colon makes <mode> trailing, so <unused> is missing",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
+    _c("USER", "USER u 0 irc.example.org :R", "user-cmd", "<unused> is ignored whatever it holds",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER u 0 :* :R", "user-cmd", "a colon makes <unused> trailing, so <realname> is missing",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
+
+    # <realname>
+    _c("USER", "USER a 0 * :with :colons: inside", "user-cmd", "trailing keeps every ':' after the first",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER a 0 * :!@#$%^&*()", "user-cmd", "no character in trailing is special",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER a 0 * :" + "x" * 400, "user-cmd", "a long realname still fits inside 512",
+       state=PREAUTH, fresh=True),
+    _c("USER", "USER a 0 * x :y", "user-cmd", "a fifth parameter before the colon is one too many",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
+]
+
 # ── QUIT ─────────────────────────────────────────────────────────────────
 # quit-cmd = "QUIT" [ SPACE [ ":" ] quitmsg ] *SPACE
 CASES += [

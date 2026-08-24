@@ -17,7 +17,7 @@ architecture, attack playbook.
 ```bash
 git submodule update --init --recursive   # fresh clone only
 make all                                  # bare `make` prints the help screen
-./ircserv 6667 mypass
+./build/bin/ircserv 6667 mypass
 ```
 
 ```bash
@@ -57,13 +57,13 @@ tier, zero `#ifdef`. The full tier's extras are additionally gated behind the
 byte-for-byte like the bonus tier.
 
 ```bash
-./ircserv <port> <password>     # port 1–65535, password non-empty
+./build/bin/ircserv <port> <password>     # port 1–65535, password non-empty
 ```
 
 ### Watching the protocol
 
 ```bash
-FT_IRC_LOG=trace ./ircserv 6667 mypass
+FT_IRC_LOG=trace ./build/bin/ircserv 6667 mypass
 ```
 
 Prints every line crossing the socket, both directions, in RFC 2812 syntax
@@ -131,7 +131,7 @@ make norm                             # style gate
 ```
 
 Two suites proving different things: Google Test exercises the classes in
-process, the shell suite drives a live `./ircserv` over TCP and can do things
+process, the shell suite drives a live `./build/bin/ircserv` over TCP and can do things
 an in-process test cannot — split a command across packets, `kill -9` a client
 mid-sentence, freeze a reader with `Ctrl+Z`.
 See [`tests/README.md`](tests/README.md).

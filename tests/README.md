@@ -8,7 +8,7 @@ against each other.
 ## Quick start
 
 ```bash
-make                       # from the project root — builds ./ircserv
+make                       # from the project root — builds ./build/bin/ircserv
 cd tests
 ./check_config.sh          # show the resolved config and sanity-check it
 bash ./run_all.sh          # run the whole suite
@@ -52,7 +52,7 @@ how the hellish bugs listed at the bottom of this file were found.
 | `config.sh` | Ports, password, paths. Override any of it from the environment. |
 | `lib/irc_lib.sh` | The client harness. Every client is a backgrounded `nc` fed by a FIFO held open on a dedicated fd, which is what lets a command be sent in pieces. |
 | `00_shell_probe.sh` | Gate: does the running shell support what `irc_lib.sh` needs? Run it under two shells and diff. |
-| `01_startup.sh` | `./ircserv` argv handling — bad ports, missing args, double bind. |
+| `01_startup.sh` | `./build/bin/ircserv` argv handling — bad ports, missing args, double bind. |
 | `02_registration.sh` | PASS/NICK/USER, wrong password, duplicate nick, re-registration. |
 | `03_tcp_framing.sh` | One byte at a time, several commands per packet, partial trailing command, bare LF, 20 KB lines, garbage bytes. |
 | `04_disconnect.sh` | `kill -9` on the client — no QUIT — and the state it must free. |

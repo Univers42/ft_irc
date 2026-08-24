@@ -30,7 +30,7 @@ Start here depending on who you are:
 ```bash
 git submodule update --init --recursive   # fresh clone only
 make                                      # or: make mandatory / make bonus
-./ircserv 6667 mypass
+./build/bin/ircserv 6667 mypass
 ```
 
 ```bash

@@ -235,8 +235,8 @@ if [ "$START_SERVER" -eq 1 ]; then
         err "use --port, or --no-server to attach to it"
         rm -rf "$SIM_DIR"; exit 1
     fi
-    [ -x "$REPO_ROOT/ircserv" ] || { err "no ircserv binary — run make"; rm -rf "$SIM_DIR"; exit 1; }
-    nohup "$REPO_ROOT/ircserv" "$IRC_PORT" "$IRC_PASSWORD" > "$SIM_DIR/server.log" 2>&1 &
+    [ -x "$REPO_ROOT/build/bin/ircserv" ] || { err "no build/bin/ircserv — run make all"; rm -rf "$SIM_DIR"; exit 1; }
+    nohup "$REPO_ROOT/build/bin/ircserv" "$IRC_PORT" "$IRC_PASSWORD" > "$SIM_DIR/server.log" 2>&1 &
     sim_record_pid server $!
     disown 2>/dev/null || true
     SIM_OWN_SERVER=1

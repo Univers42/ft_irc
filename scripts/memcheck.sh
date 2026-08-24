@@ -87,7 +87,7 @@ if [ "$MODE" = "interactive" ]; then
 	build_tier "$TIER" >/dev/null || { echo "build failed"; exit 1; }
 	echo "Running ircserv on port $PORT under valgrind."
 	echo "Connect a client, then press Ctrl-C here for clean shutdown + leak report."
-	exec valgrind "${VG_FLAGS[@]}" ./ircserv "$PORT" "$PASS"
+	exec valgrind "${VG_FLAGS[@]}" ./build/bin/ircserv "$PORT" "$PASS"
 fi
 
 # ── scripted mode ────────────────────────────────────────────────────────
@@ -221,7 +221,7 @@ run_scripted() {
 
 	log="$(mktemp /tmp/ft_irc_memcheck.XXXXXX.log)"
 	valgrind "${VG_FLAGS[@]}" --error-exitcode="$VG_ERR_EXIT" \
-		./ircserv "$port" "$pass" >"$log" 2>&1 &
+		./build/bin/ircserv "$port" "$pass" >"$log" 2>&1 &
 	vg_pid=$!
 
 	if ! wait_for_listen "$port" 40; then

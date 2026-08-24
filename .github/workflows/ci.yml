@@ -94,7 +94,9 @@ jobs:
             echo "::error::object files outside build/:"; echo "$stray"; exit 1
           fi
           test -x build/bin/ircserv || { echo "::error::no build/bin/ircserv"; exit 1; }
-          test -L ircserv || { echo "::error::./ircserv symlink missing"; exit 1; }
+          # The binary is produced in build/bin/ and nowhere else -- the repo
+          # root must stay source-only, symlink included.
+          test ! -e ircserv || { echo "::error::./ircserv exists; the root must stay clean"; exit 1; }
 
   unit:
     name: unit — Google Test suite

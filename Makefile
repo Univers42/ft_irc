@@ -120,20 +120,19 @@ HINT = $(C_DIM)   make help  $(S_DOT)  targets, tiers and overridable flags$(C_R
 #  registerExtensions() TU each); the kernel sources are identical.
 #  Everything the build generates lives under build/: objects and dependency
 #  files in build/obj/<tier>/ (mirroring the source tree), linked binaries in
-#  build/bin/. The only generated name left in the repo root is the ./ircserv
-#  symlink below, so `rm -rf build ircserv` is a complete clean and the root
-#  listing stays source-only.
+#  build/bin/. Nothing generated is left in the repo root at all -- there is
+#  no ./ircserv symlink any more -- so `rm -rf build` is a complete clean and
+#  the root listing stays source-only.
 TIER		?= full
 BUILDDIR	= build
 BINDIR		= $(BUILDDIR)/bin
 OBJROOT		= $(BUILDDIR)/obj
 OBJDIR		= $(OBJROOT)/$(TIER)
 
-#  The subject runs the server as `./ircserv <port> <password>` from the repo
-#  root (subject.txt:191) and every script here does the same, so that name
-#  has to keep working. The link output is build/bin/ircserv; ./ircserv is a
-#  relative symlink onto it, created by the $(NAME) rule and removed by
-#  fclean. Nothing needs to know which of the two it is holding.
+#  build/bin/ircserv is the one and only place the binary is produced. The
+#  repo root used to carry a ./ircserv symlink onto it for the subject's run
+#  line (subject.txt:191); that is gone, so every script, test and CI step
+#  spells the real path out. Run it as ./build/bin/ircserv <port> <password>.
 BIN			= $(BINDIR)/$(NAME)
 
 #  Written by the link recipe and consumed by `build`, so the closing banner
@@ -267,10 +266,10 @@ verify-tiers:
 	@$(MAKE) --no-print-directory all
 	@$(PR_MSG) '%b\n' '$(C_GRN)$(S_OK)$(C_RST)  all three tiers built sequentially $(C_DIM)$(S_DOT)$(C_RST) -Werror clean' ''
 
-build: $(NAME)
+build: $(BIN)
 	@if [ -f $(LINKSTAMP) ]; then \
 		rm -f $(LINKSTAMP); \
-		$(PR_MSG) '%b\n' '' '$(C_GRN)$(S_OK)$(C_RST)  $(C_BLD)$(NAME)$(C_RST) $(C_DIM)$(S_DOT)$(C_RST) $(TIER) tier built $(C_DIM)$(S_ARR)$(C_RST) ./$(NAME) <port> <password>' '$(HINT)' ''; \
+		$(PR_MSG) '%b\n' '' '$(C_GRN)$(S_OK)$(C_RST)  $(C_BLD)$(NAME)$(C_RST) $(C_DIM)$(S_DOT)$(C_RST) $(TIER) tier built $(C_DIM)$(S_ARR)$(C_RST) ./$(BIN) <port> <password>' '$(HINT)' ''; \
 	else \
 		$(PR_MSG) '%b\n' '' '$(C_GRN)$(S_OK)$(C_RST)  $(C_BLD)$(NAME)$(C_RST) is up to date $(C_DIM)$(S_DOT)$(C_RST) $(TIER) tier' '$(HINT)' ''; \
 	fi
@@ -280,13 +279,6 @@ build: $(NAME)
 #  Everything on this line is a plain object file — no archive, so link order
 #  carries no meaning and the libcpp objects can stay first, matching the
 #  build order.
-#  make stats through the symlink, so once ./ircserv points at a freshly
-#  linked build/bin/ircserv the two share an mtime and this rule stays a
-#  no-op -- which is what keeps the audit's "second make is a no-op" check
-#  passing.
-$(NAME): $(BIN)
-	$(AT)ln -sf $(BIN) $(NAME)
-
 $(BIN): $(OBJROOT)/.tier_$(TIER) $(LIBCPP_OBJS) $(LIBCPP98_OBJS) $(OBJS)
 	$(call tag,$(C_GRN),LINK  ,$(C_BLD)$(BIN)$(C_RST))
 	@mkdir -p $(BINDIR)
@@ -317,14 +309,15 @@ $(OBJDIR)/libcpp98/%.o: $(LIBCPP)/c98/src/%.cpp
 
 #  clean drops every object tree under build/obj -- the three server tiers
 #  and the test suite's, since they all live there now. fclean removes what
-#  is left of build/ (the binaries) plus the ./ircserv symlink, leaving no
-#  generated file anywhere in the tree.
+#  is left of build/ (the binaries), leaving no generated file anywhere in
+#  the tree. The stray `rm -f $(NAME)` sweeps away a root ircserv symlink
+#  left behind by a checkout from before the symlink was dropped.
 clean:
 	$(call act,$(C_YEL),CLEAN ,$(OBJROOT)/ $(C_DIM)(objects + deps, every tier)$(C_RST))
 	@rm -rf $(OBJROOT)
 
 fclean: clean
-	$(call act,$(C_YEL),CLEAN ,$(BUILDDIR)/ $(C_DIM)+$(C_RST) ./$(NAME))
+	$(call act,$(C_YEL),CLEAN ,$(BUILDDIR)/ $(C_DIM)(+ a legacy ./$(NAME) symlink)$(C_RST))
 	@rm -f $(NAME)
 	@rm -rf $(BUILDDIR)
 
@@ -410,11 +403,10 @@ help:
 	'    $(C_CYA)build/obj/$$(TIER)/$(C_RST)   .o and .d, mirroring src/ (plus libcpp/, libcpp98/).' \
 	'    $(C_CYA)build/obj/tests/$(C_RST)     the Google Test suite objects.' \
 	'    $(C_CYA)build/bin/$(C_RST)           $(NAME) and test_runner.' \
-	'    $(C_CYA)./$(NAME)$(C_RST)            symlink to build/bin/$(NAME), so the subject'"'"'s' \
-	'                         ./$(NAME) <port> <password> keeps working from the root.' \
+	'    $(C_DIM)nothing generated is written to the repo root — no ./$(NAME).$(C_RST)' \
 	'' \
 	'  $(C_YEL)RUN$(C_RST)' \
-	'    ./$(NAME) <port> <password>          $(C_DIM)e.g. ./$(NAME) 6667 mypass$(C_RST)' \
+	'    ./$(BIN) <port> <password>  $(C_DIM)e.g. ./$(BIN) 6667 mypass$(C_RST)' \
 	'    nc -C 127.0.0.1 6667                 $(C_DIM)manual smoke test: PASS / NICK / USER / JOIN$(C_RST)' \
 	'' \
 	'  $(C_YEL)TESTS$(C_RST)' \
@@ -447,7 +439,7 @@ help:
 	'' \
 	'  $(C_YEL)HOUSEKEEPING$(C_RST)' \
 	'    $(C_GRN)clean$(C_RST)          remove build/obj/ (all tiers, tests included).' \
-	'    $(C_GRN)fclean$(C_RST)         clean + build/ + the ./$(NAME) symlink.' \
+	'    $(C_GRN)fclean$(C_RST)         clean + build/ (and a legacy root ./$(NAME), if any).' \
 	'    $(C_GRN)re$(C_RST)             fclean, then a full build.    $(C_GRN)help$(C_RST)     this screen.' \
 	'' \
 	'  $(C_YEL)OVERRIDABLE VARIABLES$(C_RST) $(C_DIM)— pass on the command line: make <target> VAR=value$(C_RST)' \
@@ -478,7 +470,7 @@ help:
 	'    bash scripts/audit.hellish             $(C_DIM)subject-compliance audit (3 tiers, C++98 scan)$(C_RST)' \
 	'    bash scripts/memcheck.hellish --auto   $(C_DIM)valgrind gate; exit 0 clean / 97 leak / 90 unverified$(C_RST)' \
 	'    bash scripts/normalize.sh              $(C_DIM)whitespace gate in place (--check = CI mode)$(C_RST)' \
-	'    cd tests && bash run_all.sh            $(C_DIM)black-box shell suite vs a live ./$(NAME)$(C_RST)' \
+	'    cd tests && bash run_all.sh            $(C_DIM)black-box shell suite vs a live $(BIN)$(C_RST)' \
 	'    docker compose up --build              $(C_DIM)ircserv + the ai-assistant companion$(C_RST)' \
 	''
 

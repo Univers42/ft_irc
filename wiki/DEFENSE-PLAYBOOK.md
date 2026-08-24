@@ -40,13 +40,13 @@ Use four terminals. Do not improvise this during the defense.
 
 ```bash
 make re                       # must be warning-free
-./ircserv 6667 pass
+./build/bin/ircserv 6667 pass
 ```
 
 For the parts that need to *see* the protocol:
 
 ```bash
-FT_IRC_LOG=trace ./ircserv 6667 pass
+FT_IRC_LOG=trace ./build/bin/ircserv 6667 pass
 ```
 
 ### The one flag that matters for nc
@@ -65,7 +65,7 @@ printf 'PASS pass\r\nNICK alice\r\nUSER a 0 * :A\r\n' | nc 127.0.0.1 6667
 
 ### Run this in bash
 
-Every loop in this document relies on POSIX **word splitting** (`./ircserv $a`
+Every loop in this document relies on POSIX **word splitting** (`./build/bin/ircserv $a`
 with `a="abc pass"` must become two arguments). `hellish` — this project's own
 shell, and possibly your login shell — does not split unquoted expansions, so
 those loops silently degrade into a single-argument call and every row reports
@@ -168,11 +168,10 @@ the build banner itself prints the flag `-Werror`:
 **Expected:** `-Wall -Wextra -Werror -std=c++98` present, zero warnings, and an
 executable called `ircserv`.
 
-`ls -l ircserv` shows a **symlink** — `ircserv -> build/bin/ircserv`. That is
-deliberate (every generated file lives under `build/`, and the subject's
-`./ircserv <port> <password>` still works from the root). Say so before the
-grader asks; `file ircserv` reports `symbolic link to build/bin/ircserv`, and
-`file -L ircserv` reports the ELF binary.
+The binary is at `build/bin/ircserv`, and that is the only copy — every
+generated file lives under `build/` and the repo root stays source-only. Run it
+as `./build/bin/ircserv <port> <password>`. Say so before the grader asks;
+`ls -l build/bin/ircserv` shows the ELF binary, and `ls ircserv` finds nothing.
 
 Required rules — all five must exist:
 
@@ -322,7 +321,7 @@ bash scripts/audit.sh | grep -i fcntl
 ### 3.1 Listens on all interfaces, on the port from argv
 
 ```bash
-./ircserv 6667 pass &
+./build/bin/ircserv 6667 pass &
 ss -ltnp | grep 6667
 ```
 
@@ -336,27 +335,27 @@ Prove the port really comes from the command line, and that bad input is
 rejected rather than defaulted:
 
 ```bash
-./ircserv 7777 pass & sleep 0.3; ss -ltn | grep -c 7777; kill %1
+./build/bin/ircserv 7777 pass & sleep 0.3; ss -ltn | grep -c 7777; kill %1
 ```
 
 | # | Invocation | Expected | Why |
 | --- | --- | --- | --- |
-| 1 | `./ircserv 6667 pass` | listens | nominal |
-| 2 | `./ircserv 7777 pass` | listens on 7777 | port really from argv |
-| 3 | `./ircserv` | usage error, exit ≠ 0 | too few args |
-| 4 | `./ircserv 6667` | usage error | missing password |
-| 5 | `./ircserv 6667 pass extra` | usage error | too many args |
-| 6 | `./ircserv abc pass` | error, no crash | non-numeric port |
-| 7 | `./ircserv 0 pass` | error or ephemeral | port 0 |
-| 8 | `./ircserv 65536 pass` | error | out of range |
-| 9 | `./ircserv -1 pass` | error | negative |
-| 10 | `./ircserv 80 pass` (non-root) | clean "bind failed", no crash | privileged port |
+| 1 | `./build/bin/ircserv 6667 pass` | listens | nominal |
+| 2 | `./build/bin/ircserv 7777 pass` | listens on 7777 | port really from argv |
+| 3 | `./build/bin/ircserv` | usage error, exit ≠ 0 | too few args |
+| 4 | `./build/bin/ircserv 6667` | usage error | missing password |
+| 5 | `./build/bin/ircserv 6667 pass extra` | usage error | too many args |
+| 6 | `./build/bin/ircserv abc pass` | error, no crash | non-numeric port |
+| 7 | `./build/bin/ircserv 0 pass` | error or ephemeral | port 0 |
+| 8 | `./build/bin/ircserv 65536 pass` | error | out of range |
+| 9 | `./build/bin/ircserv -1 pass` | error | negative |
+| 10 | `./build/bin/ircserv 80 pass` (non-root) | clean "bind failed", no crash | privileged port |
 
 ```bash
-# bash only — `./ircserv $a` depends on word splitting (see §0)
+# bash only — `./build/bin/ircserv $a` depends on word splitting (see §0)
 for a in "" "6667" "6667 pass extra" "abc pass" "0 pass" "65536 pass" "-1 pass" "80 pass"; do
   printf '%-22s -> ' "[$a]"
-  out=$(./ircserv $a 2>&1 | head -1); ./ircserv $a >/dev/null 2>&1
+  out=$(./build/bin/ircserv $a 2>&1 | head -1); ./build/bin/ircserv $a >/dev/null 2>&1
   printf '%-58s exit=%s\n' "$out" "$?"
 done
 ```
@@ -365,9 +364,9 @@ Verified output — note that rows 4–9 must say **port**, not **usage**; if ev
 row says `usage:` you are not in bash and the arguments never got split:
 
 ```
-[]                     -> [ircserv] error: usage: ./ircserv <port> <password>        exit=1
-[6667]                 -> [ircserv] error: usage: ./ircserv <port> <password>        exit=1
-[6667 pass extra]      -> [ircserv] error: usage: ./ircserv <port> <password>        exit=1
+[]                     -> [ircserv] error: usage: ./build/bin/ircserv <port> <password>        exit=1
+[6667]                 -> [ircserv] error: usage: ./build/bin/ircserv <port> <password>        exit=1
+[6667 pass extra]      -> [ircserv] error: usage: ./build/bin/ircserv <port> <password>        exit=1
 [abc pass]             -> [ircserv] error: port must be a number between 1 and 65535 exit=1
 [0 pass]               -> [ircserv] error: port must be a number between 1 and 65535 exit=1
 [65536 pass]           -> [ircserv] error: port must be a number between 1 and 65535 exit=1
@@ -380,7 +379,7 @@ port — `parse_long(portStr, 1, 65535, port)` in `main.cpp` sets the floor at 1
 The empty password is caught too, but you must quote it or the shell eats it:
 
 ```bash
-./ircserv 6667 ""      # [ircserv] error: password cannot be empty   exit=1
+./build/bin/ircserv 6667 ""      # [ircserv] error: password cannot be empty   exit=1
 ```
 
 **Every one must exit cleanly. A segfault here ends the defense.**
@@ -1334,7 +1333,7 @@ irc 6667 "PASS pass" "NICK second" "USER s 0 * :S" "JOIN #lc"         # 471
 trace log. Show it:
 
 ```bash
-FT_IRC_LOG=trace ./ircserv 6667 pass 2>&1 | grep 'MODE' &
+FT_IRC_LOG=trace ./build/bin/ircserv 6667 pass 2>&1 | grep 'MODE' &
 reg 6667 red "JOIN #r" "MODE #r +k topsecret"
 # trace shows:  MODE #r +k ***    — the key never reaches the log
 ```
@@ -1563,7 +1562,7 @@ reports the world as leaked.
 
 ```bash
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
-         --error-exitcode=42 ./ircserv 6667 pass 2>&1 | tee /tmp/vg.log &
+         --error-exitcode=42 ./build/bin/ircserv 6667 pass 2>&1 | tee /tmp/vg.log &
 sleep 2
 for i in $(seq 1 20); do reg 6667 "v$i" "JOIN #vg" "PRIVMSG #vg :m$i" "QUIT :bye"; done
 kill -INT $(pgrep -f 'ircserv 6667')      # SIGINT -> clean shutdown path
@@ -1593,7 +1592,7 @@ bash scripts/memcheck.sh
 The sheet asks for this explicitly. Run the freeze-and-flood under valgrind:
 
 ```bash
-valgrind --leak-check=full ./ircserv 6667 pass 2>&1 | tee /tmp/vg-flood.log &
+valgrind --leak-check=full ./build/bin/ircserv 6667 pass 2>&1 | tee /tmp/vg-flood.log &
 sleep 2
 nc -C 127.0.0.1 6667 <<< $'PASS pass\r\nNICK slow\r\nUSER s 0 * :S\r\nJOIN #f\r\n' &
 NCPID=$!; sleep 1; kill -STOP $NCPID              # the ^Z

@@ -156,7 +156,7 @@ anything. A broken `JOIN` once passed a green gate that way.
 Manual equivalent:
 
 ```bash
-valgrind --leak-check=full --show-leak-kinds=all ./ircserv 6667 mypass
+valgrind --leak-check=full --show-leak-kinds=all ./build/bin/ircserv 6667 mypass
 # connect, join, talk, then Ctrl+C
 ```
 

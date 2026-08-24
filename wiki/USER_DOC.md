@@ -20,8 +20,8 @@ make            # full build (mandatory + bonus + optional extras)
 make mandatory  # RFC core only — this is what the grade is decided on
 make bonus      # mandatory + Bot + FILE transfer
 
-./ircserv <port> <password>
-./ircserv 6667 test123
+./build/bin/ircserv <port> <password>
+./build/bin/ircserv 6667 test123
 
 ## connection ircserv... from one machine to another..
 hostname -i ## it should output the result

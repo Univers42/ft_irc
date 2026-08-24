@@ -380,7 +380,7 @@ the budget. The compiled matcher is opt-in via `FT_IRC_MATCHER=compiled`, and
 Try it:
 
 ```bash
-FT_IRC_MATCHER=compiled FT_IRC_LOG=debug ./ircserv 6667 pass
+FT_IRC_MATCHER=compiled FT_IRC_LOG=debug ./build/bin/ircserv 6667 pass
 # grammar: <embedded> -> compiled/pike, …
 ```
 

@@ -1,6 +1,7 @@
 # Build artifacts — the build writes everything under build/ (objects, deps
-# and binaries, server and test suite alike); ./ircserv is the root symlink
-# onto build/bin/ircserv that the subject's run line needs.
+# and binaries, server and test suite alike) and nothing into the repo root.
+# The bare `ircserv` line only keeps a stale root symlink from an old checkout
+# out of `git status`; nothing produces one any more (fclean removes it).
 build/
 ircserv
 

@@ -19,7 +19,7 @@ server-side at Anthropic.
 > build" conversation.
 
 > **Transcript convention.** Every transcript below that the *bot itself*
-> produces locally is captured from a live `./ircserv` + `ai-assistant` pair.
+> produces locally is captured from a live `./build/bin/ircserv` + `ai-assistant` pair.
 > The exchanges marked **illustrative** show the shape of a model-driven answer:
 > those need a funded API key and are non-deterministic, so they are not
 > reproducible line-for-line the way the rest of this wiki is.
@@ -351,5 +351,9 @@ docker run --rm -v "$PWD":/app:ro -w /app -e CARGO_TARGET_DIR=/build \
 **See also:** [06 — The bot](06-bot.md) for `ircbot`, the in-server virtual user
 · [09 — Platform extras](09-platform-extras.md) for the audit trail, the
 platform bus and the rest of the Docker stack ·
-[`companions/ai-assistant/README.md`](../../companions/ai-assistant/README.md)
-for the full environment reference.
+`companions/ai-assistant/README.md` for the full environment reference.
+
+> **Note.** `companions/` was removed from this repository in a7687f5, along
+> with the platform tier. This page still describes the assistant as it was;
+> nothing here builds from the current tree. Kept as a record rather than
+> deleted, but treat it as history, not instructions.

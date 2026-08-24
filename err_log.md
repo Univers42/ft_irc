@@ -161,7 +161,7 @@ ls build/bin/ircserv               # No such file or directory
 
 * Interactive mode (`bash scripts/memcheck.sh`, the form playbook §10.1 and
   `README.md` recommend) also routes through `build_tier ""` → `make`. With no
-  binary present it `exec valgrind … ./ircserv` and dies; with a **stale**
+  binary present it `exec valgrind … ./build/bin/ircserv` and dies; with a **stale**
   binary present it silently measures that one instead. After a
   `memcheck.sh --auto` run the stale binary is the *mandatory* tier, so a
   "full tier" leak check can quietly measure mandatory.

@@ -5,7 +5,7 @@ clients — every line, in both directions, in the exact RFC 2812 syntax it
 travels in.
 
 ```bash
-FT_IRC_LOG=trace ./ircserv 6667 mypass
+FT_IRC_LOG=trace ./build/bin/ircserv 6667 mypass
 ```
 
 ```

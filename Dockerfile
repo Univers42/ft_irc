@@ -6,7 +6,7 @@
 #  out in the build context (they are part of the repo working tree).
 #
 #  Targets:
-#    (default)  -> runtime image, ENTRYPOINT ./ircserv
+#    (default)  -> runtime image, ENTRYPOINT /app/ircserv
 #    --target test  -> runs the 138-assertion Google Test suite at build time
 # ─────────────────────────────────────────────────────────────────────────────
 

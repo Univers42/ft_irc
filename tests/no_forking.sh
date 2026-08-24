@@ -6,4 +6,4 @@ echo "== NO-FORK_TEST=="
 echo "Connect clients while this runs."
 echo "If we see fork(), vfork(), or clone(), investigate."
 
-exec strace -f -e trace=process ./ircserv "$PORT" "$PASS"
+exec strace -f -e trace=process ./build/bin/ircserv "$PORT" "$PASS"

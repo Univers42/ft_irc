@@ -443,7 +443,7 @@ flowchart TD
 Watch it happen:
 
 ```bash
-FT_IRC_LOG=trace ./ircserv 6667 pass
+FT_IRC_LOG=trace ./build/bin/ircserv 6667 pass
 ```
 
 Open two clients and you will see the interleaving from Part 4 — `fd 5` and

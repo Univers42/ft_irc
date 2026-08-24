@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
   Log::configureFromEnv();
 
   if (argc != 3) {
-    Log::error("usage: ./ircserv <port> <password>");
+    Log::error("usage: ircserv <port> <password>");
     return 1;
   }
 

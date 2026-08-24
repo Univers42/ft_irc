@@ -1,6 +1,6 @@
 # RFC 2812 conformance — measured, not claimed
 
-Every line on this page was produced by running `./ircserv` and reading what
+Every line on this page was produced by running `./build/bin/ircserv` and reading what
 came back. Nothing here is inferred from the source. Where the server departs
 from RFC 2812 it says so, with the RFC citation and the file and line that
 causes it.

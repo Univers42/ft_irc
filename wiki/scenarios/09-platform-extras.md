@@ -27,7 +27,7 @@ path    = ./audit.csv
 ```
 
 ```bash
-FT_IRC_CONFIG=$PWD/ft_irc.ini ./ircserv 6667 mypass
+FT_IRC_CONFIG=$PWD/ft_irc.ini ./build/bin/ircserv 6667 mypass
 ```
 
 ---

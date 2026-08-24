@@ -3,7 +3,7 @@
 #
 #    docker compose up --build
 #
-#  The image is the subject binary and nothing else: ./ircserv <port> <password>.
+#  The image is the subject binary and nothing else: ircserv <port> <password>.
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:

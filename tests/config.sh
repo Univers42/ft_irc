@@ -11,7 +11,9 @@
 
 : "${TEST_DIR:=$(pwd)}"
 : "${PROJECT_DIR:=$(cd "$TEST_DIR/.." && pwd)}"
-: "${BIN:=$PROJECT_DIR/ircserv}"
+# build/bin/ircserv is the only place the link step writes the binary; there
+# is no ./ircserv symlink in the repo root any more.
+: "${BIN:=$PROJECT_DIR/build/bin/ircserv}"
 : "${IRC_HOST:=127.0.0.1}"
 : "${IRC_PORT:=6667}"
 : "${IRC_PASSWORD:=pass}"

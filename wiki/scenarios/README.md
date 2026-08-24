@@ -2,7 +2,7 @@
 
 Each page here is one **context of use**: what you are trying to do, the
 HexChat path, the raw `netcat` path, and what the server must answer. Every
-transcript on these pages was **captured from a running `./ircserv`**, not
+transcript on these pages was **captured from a running `./build/bin/ircserv`**, not
 written from memory — you can replay them line for line.
 
 ## How to read a scenario
@@ -44,7 +44,7 @@ raw syntax, its HexChat equivalent, and the numerics it can answer with.
 ## Fastest possible start
 
 ```bash
-make && ./ircserv 6667 mypass       # terminal 1
+make && ./build/bin/ircserv 6667 mypass       # terminal 1
 nc -C 127.0.0.1 6667                # terminal 2
 ```
 

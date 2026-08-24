@@ -50,7 +50,7 @@ We first run the server:
 
 
 ```bash
-    strace -fe trace=process ./ircserv 6667 pass
+    strace -fe trace=process ./build/bin/ircserv 6667 pass
 ```
 
 if the program calls `fork()`, `clone()`, etc. we'll see it.

@@ -18,15 +18,16 @@ make bonus        # mandatory + Bot + FILE transfer
 make mandatory    # pure RFC kernel — the binary to defend on
 make verify-tiers # all three, strictly sequential
 make re / clean / fclean
-./ircserv <port> <password>
+./build/bin/ircserv <port> <password>
 ```
 
 **Bare `make` prints the help screen and builds nothing** (`.DEFAULT_GOAL := help`).
 Anything scripted must say `make all`. `make help` documents every target and overridable
 variable and is the most current reference for the build.
 
-Everything generated lives under `build/` (`build/obj/<tier>/`, `build/bin/`); `./ircserv` is
-a symlink onto `build/bin/ircserv`. CI fails on any `.o`/`.d` outside `build/`.
+Everything generated lives under `build/` (`build/obj/<tier>/`, `build/bin/`); the binary is only ever
+written to `build/bin/ircserv` and the repo root stays source-only — there is no `./ircserv` symlink.
+CI fails on any `.o`/`.d` outside `build/`, and on an `ircserv` in the root.
 
 ### Tests
 
@@ -35,7 +36,7 @@ make test                                     # Google Test suite (C++17, in-pro
 make -C tests build && ./build/bin/test_runner --gtest_filter=Channel*   # a single case
 ./build/bin/test_runner --gtest_shuffle       # order-dependence check (CI does this)
 
-cd tests && bash run_all.sh                   # black-box shell suite vs a live ./ircserv
+cd tests && bash run_all.sh                   # black-box shell suite vs a live ./build/bin/ircserv
 cd tests && bash run_all.sh --only 05         # one numbered script
 cd tests && bash run_all.sh --skip-build      # skip 12_build_norm.sh (it runs `make re`)
 cd tests && ./run_dual.sh                     # same suite under bash + hellish, diffed

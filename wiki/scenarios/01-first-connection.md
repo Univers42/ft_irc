@@ -8,11 +8,11 @@ registered on it. Everything else in this wiki depends on this working.
 ## Starting the server
 
 ```bash
-./ircserv <port> <password>
-./ircserv 6667 mypass
+./build/bin/ircserv <port> <password>
+./build/bin/ircserv 6667 mypass
 ```
 
-* **port** — 1–65535, strictly parsed. `./ircserv 99999999999 x` is rejected
+* **port** — 1–65535, strictly parsed. `./build/bin/ircserv 99999999999 x` is rejected
   before a socket is ever created.
 * **password** — cannot be empty. This is the *server* password (IRC's `PASS`),
   not a per-user account.
@@ -21,9 +21,9 @@ Wrong argument count, bad port, or empty password all exit `1` with a usage
 line and no listening socket:
 
 ```console
-$ ./ircserv
-usage: ./ircserv <port> <password>
-$ ./ircserv 70000 mypass
+$ ./build/bin/ircserv
+usage: ./build/bin/ircserv <port> <password>
+$ ./build/bin/ircserv 70000 mypass
 port must be a number between 1 and 65535
 ```
 

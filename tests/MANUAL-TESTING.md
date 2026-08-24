@@ -18,7 +18,7 @@ any section — they are independent unless stated otherwise.
 
 ```bash
 make fclean && make mandatory
-./ircserv 6667 test123
+./build/bin/ircserv 6667 test123
 ```
 
 The mandatory binary is the one that matters. `bonus` and `full` add a bot, file transfer
@@ -662,7 +662,7 @@ These require the bonus build. Everything below was verified against it.
 
 ```bash
 make fclean && make bonus
-./ircserv 6667 test123
+./build/bin/ircserv 6667 test123
 ```
 
 ### A note on syntax when using `nc`
