@@ -143,11 +143,18 @@ declare -f | head                                    # expect: no output
 git submodule update --init vendor/libcpp vendor/googletest
 ```
 
-> **Check this before defense day.** At the time of writing, a clone made this
-> way still does not compile: six files the build needs live only in the
-> developer's local `vendor/libcpp` working tree and are not in the pinned
-> commit. See [`../err_log.md`](../err_log.md) §1 — it is the first thing to
-> fix, because §2.1 below is an instant-zero gate.
+> **Re-check this before defense day.** A clone made this way was verified to
+> build all three tiers on 2026-08-24. It did not, for a while: six files the
+> build needs existed only in the developer's local `vendor/libcpp` working
+> tree and not in the pinned commit, so the grader's very first command failed.
+> That is fixed — libcpp is pushed and the gitlink points at it — but it is
+> cheap to confirm again, and §2.1 below is an instant-zero gate:
+>
+> ```bash
+> rm -rf /tmp/eval && mkdir -p /tmp/eval && cd /tmp/eval
+> git clone <url> . && git submodule update --init vendor/libcpp vendor/googletest
+> make verify-tiers
+> ```
 
 | Check | Pass | Fail |
 | --- | --- | --- |
