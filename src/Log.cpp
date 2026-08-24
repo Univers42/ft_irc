@@ -1,12 +1,11 @@
 #include "Log.hpp"
 
 #include <cstdlib>
-#include <cstring>
-#include <ctime>
 #include <iostream>
 #include <string>
 
 #include "Dispatch.hpp"
+#include "libcpp/data/date.hpp"
 #include "libcpp/str/format.hpp"
 
 namespace {
@@ -24,14 +23,6 @@ const LevelName kLevelNames[] = {
 
 Log::ILogSink* g_sink = 0;
 Log::Level g_level = Log::LOG_INFO;
-
-std::string stamp() {
-  std::time_t now = std::time(NULL);
-  std::tm* lt = std::localtime(&now);
-  char buf[16];
-  if (!lt || std::strftime(buf, sizeof(buf), "%H:%M:%S", lt) == 0) return "--:--:--";
-  return std::string(buf);
-}
 
 void fallback(char kind, const std::string& msg) {
   switch (kind) {
@@ -51,10 +42,10 @@ void fallback(char kind, const std::string& msg) {
       std::cerr << "[ircserv] error: " << msg << std::endl;
       break;
     case 'd':
-      std::cout << "[ircserv] " << stamp() << " " << msg << std::endl;
+      std::cout << "[ircserv] " << libcpp::data::time_hms() << " " << msg << std::endl;
       break;
     case 't':
-      std::cout << "[ircserv] " << stamp() << " " << msg << std::endl;
+      std::cout << "[ircserv] " << libcpp::data::time_hms() << " " << msg << std::endl;
       break;
   }
 }
@@ -72,11 +63,12 @@ void Log::ILogSink::protocol(char dir, int fd, const std::string& peer, const st
   std::string arrow = (dir == '<') ? "<<" : ">>";
   std::string who = peer.empty() ? "*" : peer;
 
-  std::string out = "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' ') + "  " + arrow + "  " +
-                    libcpp::str::pad_right(who, 9, ' ') + "  " + line;
+  std::string out = Log::fdField(fd) + "  " + arrow + "  " + libcpp::str::pad_right(who, 9, ' ') + "  " + line;
   if (!note.empty()) out += "   [" + note + "]";
   write('t', out);
 }
+
+std::string Log::fdField(int fd) { return "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' '); }
 
 void Log::setSink(ILogSink* sink) {
   delete g_sink;
@@ -95,25 +87,15 @@ void Log::configureFromEnv() {
   if (entry != NULL) g_level = entry->level;
 }
 
-Log::Stream::Stream(char kind, Level required) : _out(NULL), _kind(kind) {
-  if (enabled(required)) _out = new std::ostringstream();
-}
-
-Log::Stream::Stream(const Stream& other) : _out(other._out), _kind(other._kind) { other._out = NULL; }
-
-Log::Stream::~Stream() {
-  if (_out == NULL) return;
-  render(_kind, _out->str());
-  delete _out;
-}
-
-Log::Stream Log::banner() { return Stream('b', LOG_ERROR); }
-Log::Stream Log::info() { return Stream('i', LOG_INFO); }
-Log::Stream Log::success() { return Stream('s', LOG_INFO); }
-Log::Stream Log::warn() { return Stream('w', LOG_WARN); }
-Log::Stream Log::error() { return Stream('e', LOG_ERROR); }
-Log::Stream Log::debug() { return Stream('d', LOG_DEBUG); }
-Log::Stream Log::trace() { return Stream('t', LOG_TRACE); }
+/* render() already has BasicStream's Emit signature, so it is the sink
+** callback directly — no adapter, no std::function. */
+Log::Stream Log::banner() { return Stream(&render, 'b', enabled(LOG_ERROR)); }
+Log::Stream Log::info() { return Stream(&render, 'i', enabled(LOG_INFO)); }
+Log::Stream Log::success() { return Stream(&render, 's', enabled(LOG_INFO)); }
+Log::Stream Log::warn() { return Stream(&render, 'w', enabled(LOG_WARN)); }
+Log::Stream Log::error() { return Stream(&render, 'e', enabled(LOG_ERROR)); }
+Log::Stream Log::debug() { return Stream(&render, 'd', enabled(LOG_DEBUG)); }
+Log::Stream Log::trace() { return Stream(&render, 't', enabled(LOG_TRACE)); }
 
 void Log::banner(const std::string& title) { banner() << title; }
 void Log::info(const std::string& msg) { info() << msg; }

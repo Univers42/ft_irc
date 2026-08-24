@@ -7,8 +7,12 @@
 #include "libcpp98/buffered_socket.hpp"
 #include "libcpp98/csv_writer.hpp"
 #include "libcpp98/reactor.hpp"
+#include "libcpp98/traffic_stats.hpp"
+#include "libcpp98/expiring_registry.hpp"
 
 #include <cstdio>
+#include <string>
+#include <vector>
 #include <fstream>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -216,4 +220,160 @@ TEST(Reactor98, CtlOpsOnRealFds)
 
 	close(pipefd[0]);
 	close(pipefd[1]);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * TrafficStats
+ * ════════════════════════════════════════════════════════════════════ */
+
+TEST(TrafficStats98, CountsPerKeyAndInTotal)
+{
+	libcpp98::TrafficStats s;
+	s.open(4);
+	s.open(7);
+	s.countIn(4, 10);
+	s.countIn(4, 20);
+	s.countOut(7, 5);
+
+	ASSERT_TRUE(s.get(4) != NULL);
+	EXPECT_EQ(s.get(4)->linesIn, 2UL);
+	EXPECT_EQ(s.get(4)->bytesIn, 30UL);
+	EXPECT_EQ(s.get(4)->linesOut, 0UL);
+
+	ASSERT_TRUE(s.get(7) != NULL);
+	EXPECT_EQ(s.get(7)->linesOut, 1UL);
+	EXPECT_EQ(s.get(7)->bytesOut, 5UL);
+
+	EXPECT_EQ(s.totals().linesIn, 2UL);
+	EXPECT_EQ(s.totals().bytesIn, 30UL);
+	EXPECT_EQ(s.totals().linesOut, 1UL);
+	EXPECT_EQ(s.sessionCount(), 2UL);
+	EXPECT_EQ(s.liveCount(), 2u);
+}
+
+TEST(TrafficStats98, ClosingAKeyDropsItsCountersButNotItsContributionToTheTotal)
+{
+	libcpp98::TrafficStats s;
+	s.open(3);
+	s.countIn(3, 100);
+	EXPECT_TRUE(s.close(3));
+
+	EXPECT_TRUE(s.get(3) == NULL) << "the retired key is gone";
+	EXPECT_EQ(s.liveCount(), 0u);
+	/* The point of keeping both: "lines served since startup" must not
+	 * fall every time somebody disconnects. */
+	EXPECT_EQ(s.totals().linesIn, 1UL);
+	EXPECT_EQ(s.totals().bytesIn, 100UL);
+	EXPECT_EQ(s.sessionCount(), 1UL) << "a closed session still happened";
+
+	EXPECT_FALSE(s.close(3)) << "closing twice reports the second as absent";
+}
+
+TEST(TrafficStats98, ReopeningAReusedDescriptorStartsFromZero)
+{
+	libcpp98::TrafficStats s;
+	s.open(5);
+	s.countIn(5, 40);
+	s.close(5);
+	s.open(5);  /* the kernel handed the same fd number to a new peer */
+
+	ASSERT_TRUE(s.get(5) != NULL);
+	EXPECT_EQ(s.get(5)->bytesIn, 0UL) << "the new peer must not inherit the old tally";
+	EXPECT_EQ(s.totals().bytesIn, 40UL) << "but the lifetime total keeps it";
+	EXPECT_EQ(s.sessionCount(), 2UL);
+}
+
+TEST(TrafficStats98, CountingAnUnopenedKeyStillRecordsTheBytes)
+{
+	libcpp98::TrafficStats s;
+	s.countIn(9, 7);  /* no open() first */
+	ASSERT_TRUE(s.get(9) != NULL);
+	EXPECT_EQ(s.get(9)->bytesIn, 7UL) << "bytes are never silently dropped";
+	EXPECT_EQ(s.sessionCount(), 0UL) << "though the session was never announced";
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * ExpiringRegistry
+ * ════════════════════════════════════════════════════════════════════ */
+
+namespace {
+struct Job {
+	std::string name;
+	Job() : name() {}
+	explicit Job(const std::string &n) : name(n) {}
+};
+}  // namespace
+
+TEST(ExpiringRegistry98, IdsAreMonotonicAndNeverReused)
+{
+	libcpp98::ExpiringRegistry<Job> reg;
+	const long a = reg.add(Job("a"), 1000);
+	const long b = reg.add(Job("b"), 1000);
+	EXPECT_EQ(a, 1L) << "id 0 is never allocated, so it is free as a sentinel";
+	EXPECT_EQ(b, 2L);
+
+	EXPECT_TRUE(reg.erase(a));
+	const long c = reg.add(Job("c"), 1000);
+	EXPECT_EQ(c, 3L) << "a freed id must not come back: a peer replaying a "
+					 << "stale id would otherwise reach somebody else's entry";
+	EXPECT_TRUE(reg.find(a) == NULL);
+}
+
+TEST(ExpiringRegistry98, FindAndTouchReportAbsence)
+{
+	libcpp98::ExpiringRegistry<Job> reg;
+	const long id = reg.add(Job("x"), 100);
+
+	ASSERT_TRUE(reg.find(id) != NULL);
+	EXPECT_EQ(reg.find(id)->name, "x");
+	reg.find(id)->name = "mutated";
+	EXPECT_EQ(reg.find(id)->name, "mutated") << "find() hands back a live reference";
+
+	EXPECT_TRUE(reg.find(999) == NULL);
+	EXPECT_FALSE(reg.touch(999, 100)) << "touching a vanished entry is reported, not ignored";
+	EXPECT_FALSE(reg.erase(999));
+	EXPECT_EQ(reg.size(), 1u);
+}
+
+TEST(ExpiringRegistry98, CollectExpiredReportsAndTouchReprieves)
+{
+	libcpp98::ExpiringRegistry<Job> reg;
+	const long old1 = reg.add(Job("old1"), 100);
+	const long old2 = reg.add(Job("old2"), 100);
+	const long fresh = reg.add(Job("fresh"), 100);
+
+	EXPECT_TRUE(reg.touch(fresh, 160));
+
+	std::vector<long> expired;
+	reg.collectExpired(170, 60, expired);  /* idle strictly more than 60 */
+
+	ASSERT_EQ(expired.size(), 2u);
+	EXPECT_EQ(expired[0], old1) << "ascending id order";
+	EXPECT_EQ(expired[1], old2);
+	EXPECT_EQ(reg.size(), 3u) << "collectExpired reports only; it erases nothing";
+
+	/* Boundary: strictly greater, so exactly-at-the-timeout survives. */
+	std::vector<long> atBoundary;
+	reg.collectExpired(160, 60, atBoundary);
+	EXPECT_EQ(atBoundary.size(), 0u) << "idle == timeout is not yet expired";
+}
+
+TEST(ExpiringRegistry98, TheSweepSurvivesErasingEveryEntryItReported)
+{
+	/* This is the hazard the class exists to remove: the caller acts on the
+	 * reported ids with no live iterator into the map. */
+	libcpp98::ExpiringRegistry<Job> reg;
+	for (int i = 0; i < 16; ++i) reg.add(Job("j"), 100);
+
+	std::vector<long> expired;
+	reg.collectExpired(1000, 60, expired);
+	ASSERT_EQ(expired.size(), 16u);
+
+	for (std::size_t i = 0; i < expired.size(); ++i) EXPECT_TRUE(reg.erase(expired[i]));
+	EXPECT_TRUE(reg.empty());
+
+	/* collectExpired appends rather than clearing, so a second sweep into
+	 * the same vector must leave what was already there. */
+	reg.collectExpired(1000, 60, expired);
+	EXPECT_EQ(expired.size(), 16u);
 }

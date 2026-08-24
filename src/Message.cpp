@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "IrcTrace.hpp"
 #include "grammar/MatchResult.hpp"
 #include "libcpp/str/format.hpp"
 
@@ -79,13 +80,26 @@ std::vector<std::string> Message::listKeepEmpty(const char* name, char separator
   return fields->listKeepEmpty(name, separator);
 }
 
+/*
+** Redacts as it renders, rather than leaving that to each call site. This
+** operator exists to put a message in a log, and a log is exactly where a
+** PASS password or a channel key must not appear — so the safe form is the
+** only form, and a future `<< msg` cannot reintroduce the leak.
+**
+** Read a parameter straight out of msg.params when you genuinely need the
+** value; that says plainly that you meant to.
+*/
 std::ostream& operator<<(std::ostream& os, const Message& msg) {
   os << (msg.command.empty() ? "(none)" : msg.command);
+  const int secret = IrcTrace::secretParamIndex(msg.command, msg.params);
   for (std::size_t i = 0; i < msg.params.size(); ++i) {
     const bool trailing = msg.trailingIndex >= 0 && static_cast<std::size_t>(msg.trailingIndex) == i;
     os << ' ';
     if (trailing) os << ':';
-    os << msg.params[i];
+    if (secret >= 0 && static_cast<std::size_t>(secret) == i)
+      os << "***";
+    else
+      os << msg.params[i];
   }
   if (msg.fields == NULL) os << " (unmatched)";
   return os;

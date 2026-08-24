@@ -1,4 +1,4 @@
-/* ─── Unit tests: vendor/libcpp str utilities ───
+/* ─── Unit tests: vendor/libcpp str + data utilities ───
  *
  * libcpp has no test suite of its own; ft_irc is its only real consumer, so
  * this is where its string layer is exercised. Everything here is compiled
@@ -11,6 +11,9 @@
 
 #include "libcpp/str/format.hpp"
 #include "libcpp/str/case.hpp"
+#include "libcpp/str/base64.hpp"
+#include "libcpp/str/secure.hpp"
+#include "libcpp/data/date.hpp"
 
 #include <cerrno>
 #include <climits>
@@ -239,4 +242,134 @@ TEST(LibcppAsciiCase, DiffersFromTheUnicodeAwareComparisonOnPurpose)
 	EXPECT_NE(libcpp::str::eq_nocase(upper, lower),
 			  libcpp::str::eq_ascii_nocase(upper, lower))
 		<< "the two comparisons are supposed to disagree here";
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * base64 — the codec the FILE relay validates chunks with
+ * ════════════════════════════════════════════════════════════════════ */
+
+TEST(LibcppBase64, EncodesEveryPaddingCase)
+{
+	EXPECT_EQ(libcpp::str::base64_encode(""), "");
+	EXPECT_EQ(libcpp::str::base64_encode("A"), "QQ==");
+	EXPECT_EQ(libcpp::str::base64_encode("AB"), "QUI=");
+	EXPECT_EQ(libcpp::str::base64_encode("ABC"), "QUJD");
+	EXPECT_EQ(libcpp::str::base64_encode("ABCD"), "QUJDRA==");
+	EXPECT_EQ(libcpp::str::base64_encode("sure."), "c3VyZS4=");
+}
+
+TEST(LibcppBase64, ValidationIsStrictNotJustAnAlphabetScan)
+{
+	EXPECT_TRUE(libcpp::str::is_base64(""));      /* encoding of no input */
+	EXPECT_TRUE(libcpp::str::is_base64("QUJD"));
+	EXPECT_TRUE(libcpp::str::is_base64("QQ=="));
+	EXPECT_TRUE(libcpp::str::is_base64("QUI="));
+
+	/* Each of these passes a naive "every byte is in the alphabet" check
+	 * and still decodes to garbage. Rejecting them is the whole point of
+	 * validating a chunk the relay will never itself decode. */
+	EXPECT_FALSE(libcpp::str::is_base64("QQ"))    << "length not a multiple of 4";
+	EXPECT_FALSE(libcpp::str::is_base64("QQ="))   << "length not a multiple of 4";
+	EXPECT_FALSE(libcpp::str::is_base64("a=b"))   << "padding in the interior";
+	EXPECT_FALSE(libcpp::str::is_base64("QU=D"))  << "padding in the interior";
+	EXPECT_FALSE(libcpp::str::is_base64("Q==="))  << "three padding bytes";
+	EXPECT_FALSE(libcpp::str::is_base64("QUJD=")) << "stray pad past a full quantum";
+
+	EXPECT_FALSE(libcpp::str::is_base64("not*base64!"));
+	EXPECT_FALSE(libcpp::str::is_base64("a b "))  << "SPACE is not in the alphabet";
+	EXPECT_FALSE(libcpp::str::is_base64(std::string("QU\0D", 4))) << "NUL octet";
+}
+
+TEST(LibcppBase64, DecodedSizeAccountsForPadding)
+{
+	EXPECT_EQ(libcpp::str::base64_decoded_size("QUJD"), 3u);
+	EXPECT_EQ(libcpp::str::base64_decoded_size("QUI="), 2u);
+	EXPECT_EQ(libcpp::str::base64_decoded_size("QQ=="), 1u);
+	EXPECT_EQ(libcpp::str::base64_decoded_size(""), 0u);
+
+	/* The shape the FILE relay actually meters: 300 raw bytes per chunk. */
+	const std::string chunk = libcpp::str::base64_encode(std::string(300, 'x'));
+	EXPECT_EQ(chunk.size(), 400u);
+	EXPECT_EQ(libcpp::str::base64_decoded_size(chunk), 300u);
+}
+
+TEST(LibcppBase64, RoundTripsBinaryAtEveryLength)
+{
+	std::string bin;
+	for (int i = 0; i < 260; ++i) {
+		const std::string enc = libcpp::str::base64_encode(bin);
+		std::string dec;
+		ASSERT_TRUE(libcpp::str::is_base64(enc)) << "own output rejected at length " << i;
+		ASSERT_EQ(libcpp::str::base64_decoded_size(enc), bin.size()) << "at length " << i;
+		ASSERT_TRUE(libcpp::str::base64_decode(enc, dec)) << "at length " << i;
+		ASSERT_EQ(dec, bin) << "round trip differs at length " << i;
+		/* NUL and high-bit bytes both occur in this sequence. */
+		bin += static_cast<char>((i * 37) & 0xFF);
+	}
+}
+
+TEST(LibcppBase64, DecodeLeavesOutUntouchedWhenItRejects)
+{
+	std::string out = "SENTINEL";
+	EXPECT_FALSE(libcpp::str::base64_decode("a=b", out));
+	EXPECT_EQ(out, "SENTINEL") << "bool+out-param contract: out is untouched on failure";
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * is_safe_path_component
+ * ════════════════════════════════════════════════════════════════════ */
+
+TEST(LibcppSafePath, RejectsTraversalAndSeparators)
+{
+	EXPECT_FALSE(libcpp::str::is_safe_path_component(""));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("."));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component(".."));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("../etc/passwd"));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("a/b"));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("a\\b"));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component(std::string("a\0b", 3)));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("a\tb"));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("a\x7F" "b"));
+
+	EXPECT_TRUE(libcpp::str::is_safe_path_component("report.tar.gz"));
+	EXPECT_TRUE(libcpp::str::is_safe_path_component("...")) << "three dots is an ordinary name";
+	EXPECT_TRUE(libcpp::str::is_safe_path_component(".hidden"));
+	EXPECT_TRUE(libcpp::str::is_safe_path_component("\xC3\xA9.txt")) << "UTF-8 passes through";
+}
+
+TEST(LibcppSafePath, SpaceAndCommaAreTheCallersDecisionNotTheLibrarys)
+{
+	/* Legal filesystem bytes: the bare form must accept them. */
+	EXPECT_TRUE(libcpp::str::is_safe_path_component("my file, v2.txt"));
+	/* IRC's wire format is space-delimited and comma-separated, so the
+	 * FILE relay passes " ," and they become rejects. */
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("my file.txt", " ,"));
+	EXPECT_FALSE(libcpp::str::is_safe_path_component("a,b.txt", " ,"));
+	EXPECT_TRUE(libcpp::str::is_safe_path_component("a-b.txt", " ,"));
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * data::format_now — the one timestamp helper
+ * ════════════════════════════════════════════════════════════════════ */
+
+TEST(LibcppNow, ProducesTheDocumentedShapes)
+{
+	const std::string hms = libcpp::data::time_hms();
+	ASSERT_EQ(hms.size(), 8u);
+	EXPECT_EQ(hms[2], ':');
+	EXPECT_EQ(hms[5], ':');
+
+	const std::string iso = libcpp::data::timestamp_iso();
+	ASSERT_EQ(iso.size(), 19u);
+	EXPECT_EQ(iso[4], '-');
+	EXPECT_EQ(iso[7], '-');
+	EXPECT_EQ(iso[10], 'T');
+	EXPECT_EQ(iso[13], ':');
+	EXPECT_EQ(iso[16], ':');
+}
+
+TEST(LibcppNow, EmptyAndNullFormatsAreEmptyNotUndefined)
+{
+	EXPECT_EQ(libcpp::data::format_now(""), "");
+	EXPECT_EQ(libcpp::data::format_now(0), "");
 }

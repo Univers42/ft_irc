@@ -1,7 +1,6 @@
 #include "IrcTrace.hpp"
 
 #include <cstddef>
-#include <map>
 #include <string>
 #include <vector>
 
@@ -10,6 +9,7 @@
 #include "Log.hpp"
 #include "Replies.hpp"
 #include "libcpp/str/format.hpp"
+#include "libcpp98/traffic_stats.hpp"
 
 namespace {
 struct NumericEntry {
@@ -21,27 +21,9 @@ struct NumericEntry {
 const NumericEntry kNumerics[] = {FT_IRC_REPLIES(FT_IRC_NUMERIC_ROW){0, 0}};
 #undef FT_IRC_NUMERIC_ROW
 
-struct Stats {
-  unsigned long linesIn;
-  unsigned long linesOut;
-  unsigned long bytesIn;
-  unsigned long bytesOut;
-  Stats() : linesIn(0), linesOut(0), bytesIn(0), bytesOut(0) {}
-};
-
-std::map<int, Stats>& sessions() {
-  static std::map<int, Stats> s;
+libcpp98::TrafficStats& stats() {
+  static libcpp98::TrafficStats s;
   return s;
-}
-
-Stats& total() {
-  static Stats t;
-  return t;
-}
-
-unsigned long& sessionCount() {
-  static unsigned long n = 0;
-  return n;
 }
 
 std::string commandOf(const std::string& line) {
@@ -99,40 +81,10 @@ std::vector<std::string> paramsOf(const std::string& line) {
 }
 
 std::string redact(const std::string& line) {
-  std::string cmd = ircToLower(commandOf(line));
-
-  if (cmd == "pass") return redactParam(line, 0);
-
-  if (cmd == "join") {
-    if (paramsOf(line).size() >= 2) return redactParam(line, 1);
-    return line;
-  }
-
-  if (cmd == "mode") {
-    std::vector<std::string> params = paramsOf(line);
-    if (params.size() < 2) return line;
-
-    const std::string& modeStr = params[1];
-    size_t keyParam = 0;
-    if (!ChannelModes::firstKeyParam(modeStr, params.size() - 2, &keyParam)) return line;
-
-    return redactParam(line, 2 + keyParam);
-  }
-
-  if (cmd == RPL_CHANNELMODEIS) {
-    std::vector<std::string> params = paramsOf(line);
-    if (params.size() < 3) return line;
-    const std::string& modeStr = params[2];
-    size_t keyParam = 0;
-    if (!ChannelModes::firstKeyParam(modeStr, params.size() - 3, &keyParam)) return line;
-
-    return redactParam(line, 3 + keyParam);
-  }
-
-  return line;
+  const int idx = IrcTrace::secretParamIndex(commandOf(line), paramsOf(line));
+  if (idx < 0) return line;
+  return redactParam(line, static_cast<size_t>(idx));
 }
-
-std::string fdField(int fd) { return "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' '); }
 
 std::string annotate(const std::string& line) {
   std::string cmd = commandOf(line);
@@ -144,6 +96,30 @@ std::string annotate(const std::string& line) {
 
 }  // namespace
 
+int IrcTrace::secretParamIndex(const std::string& command, const std::vector<std::string>& params) {
+  const std::string cmd = ircToLower(command);
+
+  if (cmd == "pass") return 0;  //< out of range on a bare PASS: the caller redacts nothing
+
+  if (cmd == "join") return params.size() >= 2 ? 1 : -1;  //< JOIN #a,#b key1,key2
+
+  if (cmd == "mode") {  //< MODE #chan +k key · the key's position depends on the mode string
+    if (params.size() < 2) return -1;
+    size_t keyParam = 0;
+    if (!ChannelModes::firstKeyParam(params[1], params.size() - 2, &keyParam)) return -1;
+    return static_cast<int>(2 + keyParam);
+  }
+
+  if (cmd == RPL_CHANNELMODEIS) {  //< 324 <nick> <chan> <modes> <args> — one param further along
+    if (params.size() < 3) return -1;
+    size_t keyParam = 0;
+    if (!ChannelModes::firstKeyParam(params[2], params.size() - 3, &keyParam)) return -1;
+    return static_cast<int>(3 + keyParam);
+  }
+
+  return -1;
+}
+
 std::string IrcTrace::numericName(const std::string& numeric) {
   if (numeric.size() != 3) return "";
   for (size_t i = 0; kNumerics[i].code; ++i)
@@ -152,55 +128,44 @@ std::string IrcTrace::numericName(const std::string& numeric) {
 }
 
 void IrcTrace::inbound(int fd, const std::string& peer, const std::string& line) {
-  Stats& s = sessions()[fd];
-  ++s.linesIn;
-  s.bytesIn += line.size() + 2;
-  ++total().linesIn;
-  total().bytesIn += line.size() + 2;
+  stats().countIn(fd, line.size() + 2);  //< +2: the CRLF framing is on the wire too
 
   if (!Log::enabled(Log::LOG_TRACE)) return;
   Log::protocol('<', fd, peer, redact(line), annotate(line));
 }
 
 void IrcTrace::outbound(int fd, const std::string& peer, const std::string& line) {
-  Stats& s = sessions()[fd];
-  ++s.linesOut;
-  s.bytesOut += line.size() + 2;
-  ++total().linesOut;
-  total().bytesOut += line.size() + 2;
+  stats().countOut(fd, line.size() + 2);
 
   if (!Log::enabled(Log::LOG_TRACE)) return;
   Log::protocol('>', fd, peer, redact(line), annotate(line));
 }
 
 void IrcTrace::sessionOpen(int fd, const std::string& host) {
-  sessions()[fd] = Stats();
-  ++sessionCount();
+  stats().open(fd);
   if (!Log::enabled(Log::LOG_DEBUG)) return;
-  Log::debug() << fdField(fd) << "  ++  connection from " << host;
+  Log::debug() << Log::fdField(fd) << "  ++  connection from " << host;
 }
 
 void IrcTrace::sessionRegistered(int fd, const std::string& prefix) {
   if (!Log::enabled(Log::LOG_DEBUG)) return;
-  Log::debug() << fdField(fd) << "  ==  registered as " << prefix;
+  Log::debug() << Log::fdField(fd) << "  ==  registered as " << prefix;
 }
 
 void IrcTrace::sessionClose(int fd, const std::string& peer, const std::string& reason) {
-  std::map<int, Stats>::iterator it = sessions().find(fd);
-  if (it != sessions().end()) {
-    if (Log::enabled(Log::LOG_DEBUG)) {
-      const Stats& s = it->second;
-      Log::debug() << fdField(fd) << "  --  " << (peer.empty() ? "*" : peer) << " left (" << reason << ") — "
-                   << s.linesIn << " in / " << s.linesOut << " out, " << s.bytesIn << " B / " << s.bytesOut << " B";
-    }
+  const libcpp98::TrafficCounters* s = stats().get(fd);
+  if (s == NULL) return;
 
-    sessions().erase(it);
+  if (Log::enabled(Log::LOG_DEBUG)) {
+    Log::debug() << Log::fdField(fd) << "  --  " << (peer.empty() ? "*" : peer) << " left (" << reason << ") — "
+                 << s->linesIn << " in / " << s->linesOut << " out, " << s->bytesIn << " B / " << s->bytesOut << " B";
   }
+  stats().close(fd);  //< after the read: close() drops this peer's counters
 }
 
 std::string IrcTrace::summary() {
-  const Stats& t = total();
-  return libcpp::str::to_string(sessionCount()) + " session(s), " + libcpp::str::to_string(t.linesIn) + " lines in / " +
-         libcpp::str::to_string(t.linesOut) + " out, " + libcpp::str::to_string(t.bytesIn) + " B in / " +
-         libcpp::str::to_string(t.bytesOut) + " B out";
+  const libcpp98::TrafficCounters& t = stats().totals();
+  return libcpp::str::to_string(stats().sessionCount()) + " session(s), " + libcpp::str::to_string(t.linesIn) +
+         " lines in / " + libcpp::str::to_string(t.linesOut) + " out, " + libcpp::str::to_string(t.bytesIn) +
+         " B in / " + libcpp::str::to_string(t.bytesOut) + " B out";
 }

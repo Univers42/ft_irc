@@ -8,6 +8,7 @@
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "Settings.hpp"
+#include "libcpp/data/date.hpp"
 #include "libcpp/str/format.hpp"
 
 const char* Bot::_jokes[] = {"Why do programmers prefer dark mode? Because light attracts bugs.",
@@ -76,11 +77,7 @@ void Bot::cmdHelp(Client* sender, const std::string& param) {
 
 void Bot::cmdTime(Client* sender, const std::string& param) {
   (void)param;
-  time_t now = std::time(NULL);
-  char buf[64];
-  struct tm* tm = std::localtime(&now);
-  std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm);
-  reply(sender, std::string("Server time: ") + buf);
+  reply(sender, "Server time: " + libcpp::data::format_now("%Y-%m-%d %H:%M:%S"));
 }
 
 void Bot::cmdInfo(Client* sender, const std::string& param) {

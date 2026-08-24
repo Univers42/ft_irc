@@ -1,9 +1,9 @@
 #include "extras/FancyLogSink.hpp"
 
-#include <ctime>
 #include <iostream>
 #include <string>
 
+#include "libcpp/data/date.hpp"
 #include "libcpp/str/format.hpp"
 #include "libcpp/term/color.hpp"
 #include "libcpp/term/style.hpp"
@@ -18,16 +18,8 @@ libcpp::Srgb cmdCol() { return libcpp::Srgb(235, 235, 245); }
 libcpp::Srgb errCol() { return libcpp::Srgb(240, 120, 120); }
 libcpp::Srgb noteCol() { return libcpp::Srgb(150, 130, 200); }
 
-const char* kReset = "\033[0m";
-
-std::string paint(const libcpp::Srgb& c, const std::string& text) { return c.to_ansi_fg() + text + kReset; }
-
-std::string stamp() {
-  std::time_t now = std::time(NULL);
-  std::tm* lt = std::localtime(&now);
-  char buf[16];
-  if (!lt || std::strftime(buf, sizeof(buf), "%H:%M:%S", lt) == 0) return "--:--:--";
-  return std::string(buf);
+std::string paint(const libcpp::Srgb& c, const std::string& text) {
+  return libcpp::TermUtils::apply_fg(c) + text + libcpp::TermUtils::reset();
 }
 
 bool isErrorNumeric(const std::string& note) {
@@ -67,7 +59,7 @@ void FancyLogSink::write(char kind, const std::string& msg) {
   std::ostream& os = (kind == 'w' || kind == 'e') ? std::cerr : std::cout;
 
   if (kind == 'd' || kind == 't') {
-    os << paint(dimGrey(), stamp()) << "  " << msg << std::endl;
+    os << paint(dimGrey(), libcpp::data::time_hms()) << "  " << msg << std::endl;
     return;
   }
 
@@ -106,9 +98,9 @@ void FancyLogSink::protocol(char dir, int fd, const std::string& peer, const std
   libcpp::Srgb bodyCol = isErrorNumeric(note) ? errCol() : cmdCol();
 
   std::string out;
-  out += paint(dimGrey(), stamp());
+  out += paint(dimGrey(), libcpp::data::time_hms());
   out += "  ";
-  out += paint(dimGrey(), "fd " + libcpp::str::pad_left(libcpp::str::to_string(fd), 3, ' '));
+  out += paint(dimGrey(), Log::fdField(fd));
   out += "  ";
   out += paint(arrowCol, arrow);
   out += "  ";

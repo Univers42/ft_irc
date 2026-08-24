@@ -1,11 +1,11 @@
 #ifndef FILETRANSFEREXT_HPP
 #define FILETRANSFEREXT_HPP
 
-#include <map>
 #include <string>
 
 #include "Dispatch.hpp"
 #include "ext/IServerExtension.hpp"
+#include "libcpp98/expiring_registry.hpp"
 
 class FileTransferExt : public IServerExtension {
  public:
@@ -26,6 +26,9 @@ class FileTransferExt : public IServerExtension {
   FileTransferExt(const FileTransferExt&);
   FileTransferExt& operator=(const FileTransferExt&);
 
+  /* No lastActivity member: the registry stamps every entry and owns the
+  ** expiry comparison, so a handler that forgets to touch() cannot leave a
+  ** transfer that never times out. */
   struct Transfer {
     int senderFd;
     int recipientFd;
@@ -33,8 +36,9 @@ class FileTransferExt : public IServerExtension {
     unsigned long declaredSize;
     unsigned long relayedBytes;
     bool accepted;
-    time_t lastActivity;
   };
+
+  typedef libcpp98::ExpiringRegistry<Transfer> Registry;
 
   typedef void (FileTransferExt::*SubHandler)(Server& server, Client& client, const Message& msg);
   typedef Dispatch::Entry<SubHandler> SubCommand;
@@ -54,8 +58,7 @@ class FileTransferExt : public IServerExtension {
   Transfer* findById(long id);
   long findActive(int senderFd, int recipientFd) const;
 
-  std::map<long, Transfer> _transfers;
-  long _nextId;
+  Registry _transfers;
 };
 
 #endif

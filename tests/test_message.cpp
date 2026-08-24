@@ -11,9 +11,11 @@
 
 #include <gtest/gtest.h>
 
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "IrcTrace.hpp"
 #include "Message.hpp"
 #include "grammar/EmbeddedGrammarSource.hpp"
 #include "grammar/Grammar.hpp"
@@ -220,4 +222,77 @@ TEST(LineParsing, ModeMultipleFlags)
 	EXPECT_EQ(msg.params[0], "#chan");
 	EXPECT_EQ(msg.params[1], "+itk");
 	EXPECT_EQ(msg.params[2], "secret");
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Secret redaction in the parsed renderer
+ *
+ * Server::handleLine traces every accepted message with `Log::trace() << msg`.
+ * That renderer once printed parameters verbatim, so a PASS password and a
+ * channel key reached the log in full even though the raw wire trace one line
+ * above showed them as *** -- IrcTrace::redact() only ever covered the wire
+ * form. operator<< now consults the same policy, so both agree.
+ * ════════════════════════════════════════════════════════════════════ */
+
+namespace {
+Message msgOf(const std::string& command, const char* p0 = 0, const char* p1 = 0, const char* p2 = 0,
+              const char* p3 = 0) {
+	Message m;
+	m.command = command;
+	const char* raw[4] = {p0, p1, p2, p3};
+	for (int i = 0; i < 4; ++i)
+		if (raw[i]) m.params.push_back(raw[i]);
+	return m;
+}
+
+std::string render(const Message& m) {
+	std::ostringstream os;
+	os << m;
+	return os.str();
+}
+}  // namespace
+
+TEST(MessageRedaction, PassPasswordNeverReachesTheStream)
+{
+	EXPECT_EQ(render(msgOf("PASS", "hunter2")), "PASS *** (unmatched)");
+	/* Case must not be an escape hatch: the policy folds the command. */
+	EXPECT_EQ(render(msgOf("pass", "hunter2")), "pass *** (unmatched)");
+	/* A bare PASS has nothing to redact and must not misbehave. */
+	EXPECT_EQ(render(msgOf("PASS")), "PASS (unmatched)");
+}
+
+TEST(MessageRedaction, JoinKeysAreRedactedButChannelsAreNot)
+{
+	EXPECT_EQ(render(msgOf("JOIN", "#room", "sekrit")), "JOIN #room *** (unmatched)");
+	/* Keyless JOIN: the channel is not a secret and must stay readable. */
+	EXPECT_EQ(render(msgOf("JOIN", "#room")), "JOIN #room (unmatched)");
+}
+
+TEST(MessageRedaction, ModeKeyIsFoundAtWhateverPositionTheModeStringPutsIt)
+{
+	EXPECT_EQ(render(msgOf("MODE", "#room", "+k", "sekrit")), "MODE #room +k *** (unmatched)");
+	/* +o takes an argument of its own, so the key is one slot further along
+	 * -- an index the policy computes rather than assumes. */
+	EXPECT_EQ(render(msgOf("MODE", "#room", "+ok", "alice", "sekrit")),
+			  "MODE #room +ok alice *** (unmatched)");
+	/* No +k in the mode string: nothing is a secret. */
+	EXPECT_EQ(render(msgOf("MODE", "#room", "+it")), "MODE #room +it (unmatched)");
+	EXPECT_EQ(render(msgOf("MODE", "#room")), "MODE #room (unmatched)");
+}
+
+TEST(MessageRedaction, OrdinaryTrafficIsPrintedVerbatim)
+{
+	EXPECT_EQ(IrcTrace::secretParamIndex("PRIVMSG", std::vector<std::string>()), -1);
+	Message m = msgOf("PRIVMSG", "#room", "hello there");
+	m.trailingIndex = 1;
+	EXPECT_EQ(render(m), "PRIVMSG #room :hello there (unmatched)");
+}
+
+TEST(MessageRedaction, ASecretInTheTrailingPositionKeepsItsColonAndLosesItsValue)
+{
+	/* The ':' marks the wire form; redaction replaces the value, not the
+	 * framing, so the rendered line still reads as the message it was. */
+	Message m = msgOf("PASS", "hunter2");
+	m.trailingIndex = 0;
+	EXPECT_EQ(render(m), "PASS :*** (unmatched)");
 }

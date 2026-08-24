@@ -3,8 +3,8 @@
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
-#include <map>
 #include <string>
+#include <vector>
 
 #include "Client.hpp"
 #include "IrcCase.hpp"
@@ -12,8 +12,18 @@
 #include "Limits.hpp"
 #include "Server.hpp"
 #include "Settings.hpp"
+#include "libcpp/str/base64.hpp"
 #include "libcpp/str/case.hpp"
 #include "libcpp/str/format.hpp"
+#include "libcpp/str/secure.hpp"
+
+namespace {
+/* Each of these is written at more than one site. The two abort reasons are
+** relayed to the peer, so a divergence between copies would be visible. */
+const char* const kAbortPeerGone = "peer disconnected";
+const char* const kAbortBadChunk = "malformed chunk";
+const char* const kNoSuchTransfer = "FILE: no transfer with id ";
+}  // namespace
 
 const FileTransferExt::SubCommand FileTransferExt::kSubCommands[] = {
     {"SEND", &FileTransferExt::cmdSend},
@@ -25,7 +35,7 @@ const FileTransferExt::SubCommand FileTransferExt::kSubCommands[] = {
     {NULL, NULL},
 };
 
-FileTransferExt::FileTransferExt() : _transfers(), _nextId(1) {}
+FileTransferExt::FileTransferExt() : _transfers() {}
 
 void FileTransferExt::cmdAccept(Server& server, Client& client, const Message& msg) {
   cmdAnswer(server, client, msg, true);
@@ -39,35 +49,12 @@ FileTransferExt::~FileTransferExt() {}
 
 const char* FileTransferExt::name() const { return "file-transfer"; }
 
+/* is_safe_path_component covers the filesystem half — empty, "." and "..",
+** separators, control bytes, DEL. Space and comma are ours to add: IRC's
+** wire format is space-delimited with comma-separated lists, so a filename
+** carrying either would reframe the command it travels in. */
 static bool isValidFilename(const std::string& name) {
-  if (name.empty() || name.size() > FileTransferExt::MAX_FILENAME) return false;
-  if (name == "." || name == "..") return false;
-  for (std::string::size_type i = 0; i < name.size(); ++i) {
-    unsigned char c = static_cast<unsigned char>(name[i]);
-    if (c <= ' ' || c == 0x7F || c == '/' || c == '\\' || c == ',') return false;
-  }
-  return true;
-}
-
-static bool isBase64Chunk(const std::string& chunk) {
-  if (chunk.empty() || chunk.size() > FileTransferExt::MAX_CHUNK_B64) return false;  //< "" · a chunk over the cap
-  for (std::string::size_type i = 0; i < chunk.size(); ++i) {
-    char c = chunk[i];
-    //< base64 alphabet — the '+' here is a DATA octet, nothing to do with MODE's sign
-    //< "QUJD" · "a+b/c" · "QQ==" pad · reject "a b" (SPACE) and any 8-bit octet
-    bool ok =
-        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=';
-    if (!ok) return false;
-  }
-  return true;
-}
-
-static unsigned long decodedBytes(const std::string& chunk) {
-  unsigned long pad = 0;
-  if (!chunk.empty() && chunk[chunk.size() - 1] == '=') ++pad;
-  if (chunk.size() > 1 && chunk[chunk.size() - 2] == '=') ++pad;
-  unsigned long raw = (static_cast<unsigned long>(chunk.size()) * 3UL) / 4UL;
-  return raw > pad ? raw - pad : 0;
+  return name.size() <= FileTransferExt::MAX_FILENAME && libcpp::str::is_safe_path_component(name, " ,");
 }
 
 static bool parseId(const std::string& s, long& id) { return libcpp::str::parse_long(s, 1, LONG_MAX, id); }
@@ -76,28 +63,26 @@ void FileTransferExt::notice(Server& server, Client& client, const std::string& 
   server.sendToClient(&client, "NOTICE " + client.getNickname() + " :" + text);
 }
 
-FileTransferExt::Transfer* FileTransferExt::findById(long id) {
-  std::map<long, Transfer>::iterator it = _transfers.find(id);
-  return it == _transfers.end() ? NULL : &it->second;
-}
+FileTransferExt::Transfer* FileTransferExt::findById(long id) { return _transfers.find(id); }
 
 long FileTransferExt::findActive(int senderFd, int recipientFd) const {
-  for (std::map<long, Transfer>::const_iterator it = _transfers.begin(); it != _transfers.end(); ++it) {
-    if (it->second.senderFd == senderFd && it->second.recipientFd == recipientFd) return it->first;
+  for (Registry::const_iterator it = _transfers.begin(); it != _transfers.end(); ++it) {
+    const Transfer& t = it->second.value;
+    if (t.senderFd == senderFd && t.recipientFd == recipientFd) return it->first;
   }
-  return 0;
+  return 0;  //< id 0 is never allocated, so it is free to mean "none active"
 }
 
 void FileTransferExt::abortTransfer(Server& server, long id, const std::string& why) {
-  std::map<long, Transfer>::iterator it = _transfers.find(id);
-  if (it == _transfers.end()) return;
+  Transfer* t = _transfers.find(id);
+  if (t == NULL) return;
 
   std::string line = "FILE ABRT " + libcpp::str::to_string(id) + " :" + why;
-  Client* sender = server.findClientByFd(it->second.senderFd);
-  Client* recipient = server.findClientByFd(it->second.recipientFd);
+  Client* sender = server.findClientByFd(t->senderFd);
+  Client* recipient = server.findClientByFd(t->recipientFd);
   if (sender) notice(server, *sender, line);
   if (recipient) notice(server, *recipient, line);
-  _transfers.erase(it);
+  _transfers.erase(id);
 }
 
 bool FileTransferExt::onCommand(Server& server, Client& client, const Message& msg) {
@@ -123,31 +108,20 @@ bool FileTransferExt::onCommand(Server& server, Client& client, const Message& m
 
 void FileTransferExt::onClientDisconnect(Server& server, Client& client, const std::string& reason) {
   (void)reason;
-  int fd = client.getFd();
-  std::map<long, Transfer>::iterator it = _transfers.begin();
-  while (it != _transfers.end()) {
-    if (it->second.senderFd == fd || it->second.recipientFd == fd) {
-      long id = it->first;
-      ++it;
-
-      abortTransfer(server, id, "peer disconnected");
-    } else {
-      ++it;
-    }
+  const int fd = client.getFd();
+  std::vector<Registry::Id> doomed;
+  for (Registry::const_iterator it = _transfers.begin(); it != _transfers.end(); ++it) {
+    const Transfer& t = it->second.value;
+    if (t.senderFd == fd || t.recipientFd == fd) doomed.push_back(it->first);
   }
+  //< abortTransfer erases, so the scan has to finish before any of it runs
+  for (std::size_t i = 0; i < doomed.size(); ++i) abortTransfer(server, doomed[i], kAbortPeerGone);
 }
 
 void FileTransferExt::onTick(Server& server, time_t now) {
-  std::map<long, Transfer>::iterator it = _transfers.begin();
-  while (it != _transfers.end()) {
-    if (now - it->second.lastActivity > IDLE_TIMEOUT) {
-      long id = it->first;
-      ++it;
-      abortTransfer(server, id, "timeout");
-    } else {
-      ++it;
-    }
-  }
+  std::vector<Registry::Id> expired;
+  _transfers.collectExpired(now, IDLE_TIMEOUT, expired);
+  for (std::size_t i = 0; i < expired.size(); ++i) abortTransfer(server, expired[i], "timeout");
 }
 
 void FileTransferExt::cmdSend(Server& server, Client& client, const Message& msg) {
@@ -183,7 +157,6 @@ void FileTransferExt::cmdSend(Server& server, Client& client, const Message& msg
     return;
   }
 
-  long id = _nextId++;
   Transfer t;
   t.senderFd = client.getFd();
   t.recipientFd = recipient->getFd();
@@ -191,8 +164,7 @@ void FileTransferExt::cmdSend(Server& server, Client& client, const Message& msg
   t.declaredSize = size;
   t.relayedBytes = 0;
   t.accepted = false;
-  t.lastActivity = std::time(NULL);
-  _transfers[id] = t;
+  const long id = _transfers.add(t, std::time(NULL));
 
   recipient->queueMessage(
       IrcMessage::relay(client.getPrefix(), "FILE",
@@ -219,7 +191,7 @@ void FileTransferExt::cmdAnswer(Server& server, Client& client, const Message& m
     return;
   }
 
-  t->lastActivity = std::time(NULL);
+  _transfers.touch(id, std::time(NULL));
   if (accept) {
     t->accepted = true;
     sender->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "OK " + libcpp::str::to_string(id)));
@@ -237,7 +209,7 @@ void FileTransferExt::cmdData(Server& server, Client& client, const Message& msg
   }
   Transfer* t = findById(id);
   if (!t || t->senderFd != client.getFd()) {
-    notice(server, client, "FILE: no transfer with id " + msg.params[1]);
+    notice(server, client, kNoSuchTransfer + msg.params[1]);
     return;
   }
   if (!t->accepted) {
@@ -246,23 +218,26 @@ void FileTransferExt::cmdData(Server& server, Client& client, const Message& msg
   }
 
   const std::string& chunk = msg.params[2];
-  if (!isBase64Chunk(chunk)) {
-    abortTransfer(server, id, "malformed chunk");
+  //< is_base64 is strict (length%4, padding only at the end), so a chunk that
+  //< would decode to garbage is refused here rather than relayed onward
+  if (chunk.size() > MAX_CHUNK_B64 || !libcpp::str::is_base64(chunk)) {
+    abortTransfer(server, id, kAbortBadChunk);
     return;
   }
 
-  if (decodedBytes(chunk) == 0) {
-    abortTransfer(server, id, "malformed chunk");
+  const unsigned long decoded = libcpp::str::base64_decoded_size(chunk);
+  if (decoded == 0) {  //< also catches the empty chunk
+    abortTransfer(server, id, kAbortBadChunk);
     return;
   }
-  if (t->relayedBytes + decodedBytes(chunk) > t->declaredSize) {
+  if (t->relayedBytes + decoded > t->declaredSize) {
     abortTransfer(server, id, "size overrun");
     return;
   }
 
   Client* recipient = server.findClientByFd(t->recipientFd);
   if (!recipient) {
-    abortTransfer(server, id, "peer disconnected");
+    abortTransfer(server, id, kAbortPeerGone);
     return;
   }
 
@@ -271,8 +246,8 @@ void FileTransferExt::cmdData(Server& server, Client& client, const Message& msg
     return;
   }
 
-  t->relayedBytes += decodedBytes(chunk);
-  t->lastActivity = std::time(NULL);
+  t->relayedBytes += decoded;
+  _transfers.touch(id, std::time(NULL));
   recipient->queueMessage(IrcMessage::relay(client.getPrefix(), "FILE", "DATA " + msg.params[1] + " " + chunk));
 }
 
@@ -284,7 +259,7 @@ void FileTransferExt::cmdEnd(Server& server, Client& client, const Message& msg)
   }
   Transfer* t = findById(id);
   if (!t || t->senderFd != client.getFd()) {
-    notice(server, client, "FILE: no transfer with id " + msg.params[1]);
+    notice(server, client, kNoSuchTransfer + msg.params[1]);
     return;
   }
 
@@ -303,7 +278,7 @@ void FileTransferExt::cmdAbort(Server& server, Client& client, const Message& ms
   }
   Transfer* t = findById(id);
   if (!t || (t->senderFd != client.getFd() && t->recipientFd != client.getFd())) {
-    notice(server, client, "FILE: no transfer with id " + msg.params[1]);
+    notice(server, client, kNoSuchTransfer + msg.params[1]);
     return;
   }
   abortTransfer(server, id, "aborted by " + client.getNickname());
