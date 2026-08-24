@@ -349,6 +349,8 @@ test:
 #  Override to widen the scope for a one-off sweep:
 #      make norm NORM_FILES="src include $(LIBCPP)/src/str/case.cpp"
 NORM_SCRIPT		= vendor/scripts/norminette.sh
+EVLOOP_SCRIPT	= scripts/check_event_loop.py
+AUDIT_SCRIPT	= scripts/audit.sh
 NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
 NORM_FILES		= src include
 
@@ -373,6 +375,31 @@ norm-fix:
 		$$(find src include -name '*.cpp' -o -name '*.hpp') \
 		$(filter-out src include,$(NORM_FILES))
 	@$(PR_MSG) '%b\n' '$(C_GRN)$(S_OK)$(C_RST)  clang-format applied $(C_DIM)$(S_ARR) re-run: make norm$(C_RST)'
+
+# ── event-loop: the one rule the subject grades zero ───────────────────────
+#  "if you attempt to read/recv or write/send in any file descriptor without
+#   using poll() (or equivalent), your grade will be 0."
+#
+#  bircd -- the reference the school ships with the subject -- is the worked
+#  example of obeying it: declare interest, wait once, act only on readiness.
+#  This asserts our loop has the same shape. `evloop` reads the sources;
+#  `evloop-run` also straces the live server, which is the part a source read
+#  cannot prove. The runtime pass needs a built binary and strace.
+evloop:
+	$(call act,$(C_MAG),EVLOOP,one event wait $(C_DIM)- and no socket I/O behind its back$(C_RST))
+	@python3 $(EVLOOP_SCRIPT)
+
+evloop-run: $(BIN)
+	$(call act,$(C_MAG),EVLOOP,static + strace of the live server)
+	@python3 $(EVLOOP_SCRIPT) --runtime --binary $(BIN)
+
+# ── audit: every subject-compliance gate at once ───────────────────────────
+#  Builds all three tiers, greps for C++11 tokens and forbidden calls, counts
+#  event-wait sites, checks the Makefile rules and the no-relink rule, and
+#  finishes with the two checks above. This is the one to run before pushing.
+audit:
+	$(call act,$(C_MAG),AUDIT ,subject compliance $(C_DIM)- three tiers, tokens, syscalls, loop$(C_RST))
+	@bash $(AUDIT_SCRIPT)
 
 testclean:
 	$(call act,$(C_YEL),CLEAN ,test artifacts $(C_DIM)(tests/)$(C_RST))
@@ -436,6 +463,11 @@ help:
 	'    $(C_GRN)norm-fix$(C_RST)       apply the mechanical half of norm (clang-format -i).' \
 	'                   $(C_DIM)Advisory only: .clang-format cannot reproduce two house$(C_RST)' \
 	'                   $(C_DIM)conventions, so a diff does not mean a file is wrong.$(C_RST)' \
+	'    $(C_GRN)evloop$(C_RST)         assert the one rule the subject grades zero: no recv/send/' \
+	'                   accept without a readiness event. Same shape as bircd.' \
+	'    $(C_GRN)evloop-run$(C_RST)     ...and strace the live server to prove it at runtime.' \
+	'    $(C_GRN)audit$(C_RST)          every subject-compliance gate: three tiers, C++98 tokens,' \
+	'                   forbidden calls, one event wait, Makefile rules, relink.' \
 	'' \
 	'  $(C_YEL)HOUSEKEEPING$(C_RST)' \
 	'    $(C_GRN)clean$(C_RST)          remove build/obj/ (all tiers, tests included).' \
@@ -475,4 +507,4 @@ help:
 	''
 
 .PHONY: all bonus mandatory build clean fclean re test testclean verify-tiers \
-	norm norm-fix help
+	norm norm-fix evloop evloop-run audit help
