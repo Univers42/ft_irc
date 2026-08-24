@@ -13,8 +13,12 @@ Start here depending on who you are:
 | A prose walkthrough of every feature | [USER-GUIDE.md](USER-GUIDE.md) |
 | **Watch the server talk to its clients** | [LOGGING.md](LOGGING.md) |
 | **Understand how it works** | [DOCUMENTATION.md](DOCUMENTATION.md) |
+| **How one thread serves many clients** — epoll, TCP, no locks | [NETWORKING.md](NETWORKING.md) |
+| How IRC lines are parsed — scanner, LL parser, AST, matchers | [GRAMMAR-ARCHITECTURE.md](GRAMMAR-ARCHITECTURE.md) |
+| The fast matcher explained from scratch | [THOMPSON-NFA.md](THOMPSON-NFA.md) |
 | **Check it against RFC 2812 / the subject** | [RFC-CONFORMANCE.md](RFC-CONFORMANCE.md) |
 | Read the RFC notes it is built against | [IRC_client_protocol.md](IRC_client_protocol.md) |
+| **Prepare for the defense** — the whole eval sheet, point by point | [DEFENSE-PLAYBOOK.md](DEFENSE-PLAYBOOK.md) |
 | **Break it** on purpose | [ATTACK.md](ATTACK.md) |
 | Prove a subject requirement | [DEFENSE-MAP.md](DEFENSE-MAP.md) |
 | Run the tests | [../tests/README.md](../tests/README.md) · [TESTS.md](TESTS.md) |

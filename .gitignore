@@ -22,3 +22,7 @@ CLAUDE/*
 # Python bytecode from the grammar test tooling
 __pycache__/
 *.pyc
+
+# A nested clone of the 42 evals site (53 MB of images/JS, its own .git).
+# Working material, not part of ft_irc.
+evals42/
