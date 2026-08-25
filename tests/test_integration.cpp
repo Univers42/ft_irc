@@ -863,8 +863,9 @@ struct DeadlineRefillProbe : public IServerExtension
 	int targetFd;
 	bool claimed; /* a subject was chosen once; never adopt another */
 	bool frozen;  /* the backlog stayed in userspace, as the test needs */
+	bool drained; /* ...or it did not: an EMPTY send buffer was observed */
 
-	DeadlineRefillProbe() : targetFd(-1), claimed(false), frozen(false) {}
+	DeadlineRefillProbe() : targetFd(-1), claimed(false), frozen(false), drained(false) {}
 
 	const char *name() const override { return "deadline-refill-probe"; }
 
@@ -959,6 +960,21 @@ struct DeadlineRefillProbe : public IServerExtension
 		** test cannot run in, not a bug in the deadline sweep. */
 		if (client->hasPendingData())
 			frozen = true;
+		else
+			drained = true;
+		/* `frozen` LATCHES, and that is why it is not sufficient on its own.
+		** It records "the queue was backed up at some sampled instant", which
+		** a loaded machine satisfies transiently even when the kernel then
+		** swallows the lot -- and drain-completion closes the connection at
+		** ~60ms against a 1000ms deadline, failing an assertion about a code
+		** path that never ran. Observed exactly that under a full parallel
+		** matrix; 5/5 green in isolation.
+		**
+		** `drained` is the discriminator that actually separates the two. The
+		** refill above keeps this buffer topped up to ~50-60 KB, so on a
+		** genuinely frozen peer it NEVER empties. Seeing it empty means the
+		** kernel absorbed everything, which is the environment the guard
+		** below is meant to skip. */
 		/* Top back up, staying clear of Limits::kSendQ (64 KiB): the ceiling
 		** here is 50000 + 10240 ~= 60 KB, so the refill never trips
 		** isSendQExceeded() and turns this into a SendQ close instead. */
@@ -1115,10 +1131,11 @@ TEST_F(DeferredCloseDeadlineTest, FrozenPeerClosedByDeadlineNotDrain)
 		** and drain-completion legitimately won the race. That is a property
 		** of the machine's socket buffers, not of the deadline sweep, so say
 		** so instead of reporting a failure the code cannot cause. */
-		if (!probe->frozen)
+		if (!probe->frozen || probe->drained)
 			GTEST_SKIP() << "kernel absorbed the whole backlog (elapsed "
-						 << elapsedMs
-						 << "ms) -- this machine's socket buffers cannot hold "
+						 << elapsedMs << "ms, frozen=" << probe->frozen
+						 << " drained=" << probe->drained
+						 << ") -- this machine's socket buffers cannot hold "
 							"a frozen peer, so the deadline path is untestable "
 							"here";
 

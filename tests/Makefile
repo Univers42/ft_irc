@@ -70,7 +70,13 @@ PROJ_SRCS	= ../src/tiers/tier_full.cpp \
 			  ../src/CommandOperator.cpp \
 			  ../src/CommandQuery.cpp \
 			  ../src/Bot.cpp \
-			  ../src/bonus/FileTransferExt.cpp
+			  ../src/bonus/FileTransferExt.cpp \
+			  ../src/bots/Emotion.cpp \
+			  ../src/bots/Lexicon.cpp \
+			  ../src/bots/Brain.cpp \
+			  ../src/bots/ABot.cpp \
+			  ../src/bots/Personalities.cpp \
+			  ../src/bots/BotColony.cpp
 
 # ── Test sources ──────────────────────────────────────────────
 TEST_SRCS	= test_main.cpp \

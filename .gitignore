@@ -27,3 +27,4 @@ __pycache__/
 # A nested clone of the 42 evals site (53 MB of images/JS, its own .git).
 # Working material, not part of ft_irc.
 evals42/
+.sim-manual/

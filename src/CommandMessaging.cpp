@@ -31,6 +31,22 @@ void Server::cmdPrivmsg(Client* client, const Message& msg) {
         continue;
       }
       chan->broadcastMessage(IrcMessage::relay(client->getPrefix(), "PRIVMSG", target, text), client);
+
+      /*
+      ** Let extensions OBSERVE channel traffic, after it has been delivered.
+      **
+      ** The return value is deliberately ignored here, unlike the private
+      ** branch below. onPrivmsg() returning true means "I consumed this", and
+      ** that is a coherent answer for a message addressed to one bot -- but a
+      ** channel line belongs to the channel. An extension that swallowed it
+      ** would silently stop the message reaching the people it was sent to,
+      ** and a resident bot deciding to eat somebody's sentence is exactly the
+      ** bug worth making structurally impossible.
+      **
+      ** Delivering first and observing second matters for the same reason: no
+      ** extension can interpose itself between a user and their channel.
+      */
+      for (size_t k = 0; k < _extensions.size(); ++k) _extensions[k]->onPrivmsg(*this, *client, target, text);
     } else {
       bool handled = false;
       for (size_t k = 0; k < _extensions.size() && !handled; ++k)

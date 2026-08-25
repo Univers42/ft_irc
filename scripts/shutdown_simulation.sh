@@ -41,6 +41,42 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# --- find a simulation, wherever it is -------------------------------------
+#
+# There is more than one state directory now: the automated simulation lives
+# in .sim/ and `make man_sim` runs in .sim-manual/ so the two can be up at
+# once. That made the obvious command useless -- a bare
+# `./scripts/shutdown_simulation.sh` looked only in .sim/, reported "nothing
+# to free" and left the sandbox running, with no hint that it had searched
+# the wrong place.
+#
+# So when SIM_DIR was not named explicitly and the default is empty, look
+# around before giving up. If several are up, free them all: "shut down the
+# simulation" has one obvious meaning and it is not "shut down whichever one
+# I happened to guess".
+if [ -z "${SIM_DIR_EXPLICIT:-}" ] && [ ! -f "$SIM_ENV_FILE" ]; then
+    _found=""
+    for _cand in "$(sim_repo_root)"/.sim*/; do
+        [ -f "${_cand}sim.env" ] || continue
+        _found="$_found ${_cand%/}"
+    done
+    set -- $_found
+    if [ $# -gt 1 ]; then
+        say "found $# running simulations — freeing all of them"
+        for _dir in "$@"; do
+            SIM_DIR="$_dir" SIM_DIR_EXPLICIT=1 \
+                bash "$0" $([ "$PURGE" -eq 1 ] && printf -- --purge) \
+                          $([ "$FORCE" -eq 1 ] && printf -- --force)
+        done
+        exit 0
+    fi
+    if [ $# -eq 1 ]; then
+        SIM_DIR="$1"
+        SIM_ENV_FILE="$SIM_DIR/sim.env"
+        say "using $SIM_DIR"
+    fi
+fi
+
 if ! sim_load_env; then
     warn "no simulation state at $SIM_ENV_FILE — nothing to free"
     # Still offer to clear a stray directory.
