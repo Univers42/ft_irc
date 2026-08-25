@@ -136,6 +136,8 @@ class ABot : public IServerExtension {
   void say(Server& server, const std::string& target, const std::string& text);
   std::string style(const std::string& text) const;
   std::string pick(const char* const* pool) const;
+  //< Substitute a nick into a "%s" greeting template.
+  std::string fill(const std::string& tmpl, const std::string& who) const;
 
   //< Walks the ladder. Not virtual -- every bot escalates the same way and
   //< only differs in what each rung SAYS and what rung 4 DOES.

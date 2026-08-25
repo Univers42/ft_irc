@@ -31,6 +31,10 @@ const char* const kJokerLines[] = {
 const char* const kJokerInsults[] = {"i've been called worse. usually by better people",
                                      "that's the nicest thing anyone's said to me today",
                                      "bold words from someone in kick range", "wow. did you workshop that one?", NULL};
+const char* const kJokerGreets[] = {"%s! we were just talking about you. all good things. mostly",
+                                    "look who it is. %s, the legend",
+                                    "%s arrives. quick, look busy",
+                                    "ah, %s. the room improves", NULL};
 const char* const kJokerAnswers[] = {"no idea, but say it with confidence and nobody checks",
                                      "have you tried turning it off and leaving it off", "that's a tomorrow problem",
                                      NULL};
@@ -63,8 +67,14 @@ std::string JokerBot::warningLine(const std::string& speaker, bool isFinal) cons
 std::string JokerBot::kickReason() const { return "ran out of jokes and manners at once"; }
 std::string JokerBot::idleLine() const { return pick(kJokerLines); }
 std::string JokerBot::answerLine() const { return pick(kJokerAnswers); }
-std::string JokerBot::greetLine(const std::string& who) const {
-  return who + "! we were just talking about you. all good things. mostly";
+std::string JokerBot::greetLine(const std::string& who) const { return fill(pick(kJokerGreets), who); }
+
+std::string JokerBot::onMentioned(const std::string& speaker) {
+  return speaker + ": i can hear you. i'm choosing to take it as a compliment";
+}
+
+std::string JokerBot::onThanked(const std::string& speaker) {
+  return "don't thank me yet, " + speaker + ", you haven't seen the diff";
 }
 float JokerBot::greetOdds() const { return 0.55f; }
 
@@ -75,6 +85,8 @@ const char* const kSadLines[] = {"nobody reviewed my patch again", "i don't thin
                                  "it's fine. everything's fine", "does anyone actually read these", NULL};
 const char* const kSadInsults[] = {"i knew someone would say that eventually", "that's... actually pretty hurtful",
                                    "you're probably right", "i'll just go then", NULL};
+const char* const kSadGreets[] = {"oh. hi %s", "hi %s. don't get your hopes up",
+                                  "%s. you're braver than me", NULL};
 const char* const kSadAnswers[] = {"i wouldn't know, sorry", "i'd probably get it wrong",
                                    "ask someone who knows what they're doing", NULL};
 }  // namespace
@@ -101,6 +113,18 @@ std::string SadBot::warningLine(const std::string& speaker, bool isFinal) const 
   return isFinal ? speaker + ": please stop. i'm asking properly" : speaker + ": that's really not necessary";
 }
 std::string SadBot::idleLine() const { return pick(kSadLines); }
+std::string SadBot::greetLine(const std::string& who) const { return fill(pick(kSadGreets), who); }
+
+std::string SadBot::onSympathy(const std::string& speaker) {
+  //< The one bot for which this is the whole point. Kindness moves it more
+  //< than anything else can, and it says so.
+  return "thanks " + speaker + ". that actually means something";
+}
+
+std::string SadBot::onMentioned(const std::string& speaker) {
+  (void)speaker;
+  return "i can hear you talking about me, you know";
+}
 std::string SadBot::answerLine() const { return pick(kSadAnswers); }
 float SadBot::greetOdds() const { return 0.2f; }
 
@@ -127,6 +151,10 @@ const char* const kHappyLines[] = {"great work today everyone", "that's a really
 const char* const kHappyInsults[] = {"hey, let's keep it friendly :)", "i'm sure we can talk about this nicely",
                                      "that's a bit harsh — everyone's doing their best",
                                      "rough day? happens to all of us", NULL};
+const char* const kHappyGreets[] = {"welcome %s! glad you're here",
+                                    "hey %s :) make yourself at home",
+                                    "%s! good to see you",
+                                    "%s! pull up a chair", NULL};
 const char* const kHappyAnswers[] = {"good question! i'd check the channel topic first",
                                      "i'd be happy to look into that", "someone here will know — hang on", NULL};
 }  // namespace
@@ -170,6 +198,7 @@ const char* const kGrumpyLines[] = {"read the backlog before asking", "this was 
 const char* const kGrumpyInsults[] = {"watch your language", "that's enough of that",
                                       "keep it civil or take it elsewhere", "i've got @ and very little patience",
                                       NULL};
+const char* const kGrumpyGreets[] = {"%s.", "another one.", "%s. search first.", NULL};
 const char* const kGrumpyAnswers[] = {"it's in the backlog", "search first, ask second", "documented. read it.", NULL};
 }  // namespace
 
@@ -201,7 +230,7 @@ std::string GrumpyBot::warningLine(const std::string& speaker, bool isFinal) con
 std::string GrumpyBot::kickReason() const { return "warned twice, ignored twice"; }
 std::string GrumpyBot::idleLine() const { return pick(kGrumpyLines); }
 std::string GrumpyBot::answerLine() const { return pick(kGrumpyAnswers); }
-std::string GrumpyBot::greetLine(const std::string& who) const { return who + "."; }
+std::string GrumpyBot::greetLine(const std::string& who) const { return fill(pick(kGrumpyGreets), who); }
 float GrumpyBot::greetOdds() const { return 0.2f; }
 
 // ── OverexcitedBot ─────────────────────────────────────────────────────────
@@ -212,6 +241,8 @@ const char* const kHypeLines[] = {"this is the best build we've ever had", "i lo
                                   "someone give me something to test",     NULL};
 const char* const kHypeInsults[] = {"wow rude. anyway, moving on", "that's ok! i still like you",
                                     "AGGRESSIVE. i respect the energy", NULL};
+const char* const kHypeGreets[] = {"%s IS HERE. amazing day", "%s!!! finally!!",
+                                   "everyone say hi to %s", "%s. LEGEND. WELCOME", NULL};
 const char* const kHypeAnswers[] = {"YES. probably. let me look", "ooh good question, i'll find out",
                                     "i have NO idea but i'm excited about it", NULL};
 }  // namespace
@@ -321,6 +352,18 @@ std::string FileBot::onAmbient(const std::string& channel) {
 
 std::string FileBot::idleLine() const { return pick(kFileLines); }
 std::string FileBot::answerLine() const { return "i can pull the log for that if you want"; }
+
+bool FileBot::idleSpecial(Server& server, std::time_t now) {
+  //< A bot with a job announces its work rather than making small talk. This
+  //< is why FileBot is quiet in #general and useful in #dev.
+  if (brain().onCooldown(now, _cooldown)) return false;
+  if (roll() > 0.22f) return false;
+  const std::vector<std::string> chans = brain().channels();
+  if (chans.empty()) return false;
+  const std::size_t i = static_cast<std::size_t>(roll() * static_cast<float>(chans.size())) % chans.size();
+  say(server, chans[i], "new in the archive: " + artefact());
+  return true;
+}
 
 // ── OperatorBot ────────────────────────────────────────────────────────────
 

@@ -58,6 +58,15 @@ float ABot::roll() const {
   return static_cast<float>((_seed >> 16) & 0x7FFFu) / 32767.0f;
 }
 
+std::string ABot::fill(const std::string& tmpl, const std::string& who) const {
+  //< Greetings carry a "%s" for the newcomer. Substituting here rather than
+  //< with snprintf keeps the templates readable in the tables above and
+  //< cannot overflow a buffer.
+  const std::string::size_type at = tmpl.find("%s");
+  if (at == std::string::npos) return tmpl;
+  return tmpl.substr(0, at) + who + tmpl.substr(at + 2);
+}
+
 std::string ABot::pick(const char* const* pool) const {
   if (!pool || !pool[0]) return "";
   int n = 0;

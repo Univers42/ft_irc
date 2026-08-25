@@ -48,6 +48,7 @@ class SadBot : public ABot {
   std::string idleLine() const;
   std::string answerLine() const;
   float greetOdds() const;
+  std::string greetLine(const std::string& who) const;
   std::string onSympathy(const std::string& speaker);
   std::string onMentioned(const std::string& speaker);
   //< Rung 4 for a bot that cannot kick: it LEAVES. The honest version of
