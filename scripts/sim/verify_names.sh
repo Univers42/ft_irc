@@ -121,9 +121,9 @@ else
     row_fail 'NICKLEN' "005 advertises '${_adv:-nothing}'"
 fi
 
-# A nick of exactly NICKLEN registers; anything past it draws 432. The server
-# used to truncate here instead -- see the NickLength note in
-# tests/test_conformance.cpp for why that was reversed.
+# A nick of exactly NICKLEN registers under its own name; anything past it
+# registers under its first NICKLEN characters. See the NickLength note in
+# tests/test_conformance.cpp for why truncation rather than 432.
 len_ok() {  # <nick> — must register under its own name
     if reg "$1" | grep -aqF " 001 $1 "; then
         row_pass "$1" "${#1} chars -> registers"
@@ -131,31 +131,32 @@ len_ok() {  # <nick> — must register under its own name
         row_fail "$1" "${#1} chars -> expected to register as '$1'"
     fi
 }
-len_refused() {  # <nick> — must draw 432 and register nothing
+len_cut() {  # <nick> <expected> — must register under <expected>
     _r="$(reg "$1")"
-    if ! printf '%s' "$_r" | grep -aq ' 432 '; then
-        row_fail "$1" "${#1} chars -> expected 432 ERR_ERRONEUSNICKNAME"
-    elif printf '%s' "$_r" | grep -aq ' 001 '; then
-        row_fail "$1" "${#1} chars -> refused but still registered"
+    if printf '%s' "$_r" | grep -aq ' 432 '; then
+        row_fail "$1" "${#1} chars -> 432; over-long is truncated, not refused"
+    elif printf '%s' "$_r" | grep -aqF " 001 $2 "; then
+        row_pass "$1" "${#1} chars -> registers as '$2'"
     else
-        row_pass "$1" "${#1} chars -> 432, nothing registered"
+        row_fail "$1" "${#1} chars -> expected to register as '$2'"
     fi
 }
-len_ok      'abcdefghi'                 # exactly 9, the bound itself
-len_refused 'abcdefghij'                # 10, one over
-len_refused 'probeclient'               # 11, the classic
+len_ok  'abcdefghi'                 # exactly 9, the bound itself
+len_cut 'abcdefghij' 'abcdefghi'    # 10, one over
+len_cut 'probeclient' 'probeclie'   # 11, the classic
 
-# While the server truncated, two different over-long nicks could shorten onto
-# the same name; whether they collided depended on truncation running before
-# the in-use check. Refusing removes the hazard -- neither name is created, so
-# a 433 here would mean truncation had come back.
+# An over-long nick registers under its first NICKLEN characters. The
+# TRUNCATION-INDUCED COLLISION -- two over-long nicks shortening onto one
+# name -- needs a connection held open to collide against, so it lives in the
+# casetestxZZ check further down, where such a connection exists. reg() here
+# closes its socket before returning, which frees the name again.
 _a="$(reg 'trunctestAA')"
-if printf '%s' "$_a" | grep -aq ' 433 '; then
-    row_fail 'trunctestAA' '433 means an over-long nick was truncated, not refused'
+if printf '%s' "$_a" | grep -aqF ' 001 trunctest '; then
+    row_pass 'trunctestAA' '11 chars -> registers as trunctest'
 elif printf '%s' "$_a" | grep -aq ' 432 '; then
-    row_pass 'trunctestAA' '11 chars -> 432, no truncated name to collide over'
+    row_fail 'trunctestAA' '432: over-long is truncated, not refused'
 else
-    row_fail 'trunctestAA' 'expected 432 ERR_ERRONEUSNICKNAME'
+    row_fail 'trunctestAA' '11 chars -> expected to register as trunctest'
 fi
 
 # --- collisions and casemapping --------------------------------------------
@@ -196,24 +197,17 @@ collide 'casetestx' 'exact match'
 collide 'CASETESTX' 'upper case'
 collide 'CaseTestX' 'mixed case'
 
-# Truncation-induced collision — the hazard that REFUSING over-long nicks
-# removes. The held nick is exactly 9 characters on purpose: truncation always
-# produced exactly NICKLEN characters, so 'casetestxZZ' would have shortened
+# Truncation-induced collision, against a nick held open on another
+# connection. The held nick is exactly 9 characters on purpose: truncation
+# always produces exactly NICKLEN characters, so 'casetestxZZ' shortens
 # straight onto it.
-#
-# This check asserted 433 while the server truncated. It rejects with 432 now,
-# deliberately (RFC 2812 3.1.2, and the grammar's own nickname production caps
-# a nick at 9 — see the NickLength note in tests/test_conformance.cpp), so there
-# is no truncated name left for this one to collide with. Same reasoning as the
-# trunctestAA check above, and a 433 here would likewise mean truncation had
-# come back.
 _z="$(reg 'casetestxZZ')"
 if printf '%s' "$_z" | grep -aq ' 433 '; then
-    row_fail 'casetestxZZ' '433 means it truncated onto casetestx instead of being refused'
+    row_pass 'casetestxZZ' '11 chars -> truncates onto casetestx -> 433'
 elif printf '%s' "$_z" | grep -aq ' 432 '; then
-    row_pass 'casetestxZZ' '11 chars -> 432, never truncated onto casetestx'
+    row_fail 'casetestxZZ' '432: over-long is truncated, not refused'
 else
-    row_fail 'casetestxZZ' 'expected 432 ERR_ERRONEUSNICKNAME'
+    row_fail 'casetestxZZ' 'expected 433: it truncates onto the held casetestx'
 fi
 
 kill "$_hold_keep" 2>/dev/null; kill "$_hold_nc" 2>/dev/null

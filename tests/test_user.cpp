@@ -21,12 +21,25 @@
  *      relayed line is nick!user@host, so a username carrying an "@" makes
  *      the prefix ambiguous about where the host begins.
  *
- *   3. <mode> is a BITMASK (RFC 2812 §3.1.3): bit 2 (value 4) sets user mode
- *      w, bit 3 (value 8) sets user mode i. Other bits carry no meaning, and
- *      a parameter that is not a number carries no bits at all — it is
- *      ignored rather than refused, because the RFC says "should be a
- *      numeric" and refusing registration over a cosmetic field would be the
- *      worse failure.
+ *   3. <mode> is a NUMERIC BITMASK (RFC 2812 §3.1.3): bit 2 (value 4) sets
+ *      user mode w, bit 3 (value 8) sets user mode i. Other bits carry no
+ *      meaning. A parameter that is not a numeric is REFUSED with 461.
+ *
+ *      This used to be tolerated — non-numeric modes were ignored, on the
+ *      argument that the RFC only says "should be a numeric" and that
+ *      refusing registration over a cosmetic field is the worse failure.
+ *      That argument missed what <mode> is actually load-bearing for. It is
+ *      the ONLY parameter of this command with a shape: <user> takes almost
+ *      any octet, <unused> is ignored entirely, <realname> is free text. So
+ *      with <mode> unconstrained, nothing distinguishes
+ *
+ *          USER dylan 0 * :Dylan          (correct)
+ *          USER dylan * 0 :Dylan          (arguments transposed)
+ *
+ *      and the second one registered happily, storing "*" as a mode that
+ *      meant nothing and "0" as a hostname nobody reads. Requiring a
+ *      numeric is what makes the parameter POSITIONS mean something, which
+ *      is the whole point of a positional command.
  *
  *   4. <unused> has no meaning. Clients send "*"; anything is accepted; it
  *      simply has to be PRESENT, because it holds the realname's position.
@@ -335,14 +348,16 @@ TEST_F(UserMatrixTest, ModeParameterIsABitmask)
 		{"1", "+", "bit 0 alone sets nothing"},
 		{"2", "+", "bit 1 alone sets nothing"},
 		{"3", "+", "…nor the two together"},
-		{"abc", "+", "a non-numeric mode carries no bits"},
-		{"*", "+", "…including the one clients send for <unused>"},
-		{"-5", "+", "a negative is not a bitmask"},
-		{"0x8", "+", "hex is not the RFC's numeric"},
 		{"08", "+i", "a leading zero is still decimal 8"},
-		{"99999999999999999999", "+", "an overflowing value carries no bits"},
+		{"000", "+", "…and so is a run of them"},
+		{"99999999999999999999", "+iw",
+		 "20 digits overflow every integer type this server has; the bits "
+		 "are accumulated mod 256, which preserves bits 2 and 3 exactly"},
 		{"", "+", "an empty mode carries no bits"},
 	};
+	/* The non-numeric values that USED to live in this table -- "abc", "*",
+	 * "-5", "0x8" -- moved to NonNumericModeIsRefused below. They are no
+	 * longer "a mode carrying no bits"; they are not modes at all. */
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
 	{
@@ -362,6 +377,77 @@ TEST_F(UserMatrixTest, ModeParameterIsABitmask)
 			<< cases[i].mode << "\"\n" << r.raw;
 		EXPECT_EQ(r.umodes, std::string(cases[i].umodes))
 			<< "USER <mode>=" << cases[i].mode << " — " << cases[i].why;
+	}
+}
+
+TEST_F(UserMatrixTest, NonNumericModeIsRefused)
+{
+	/* RFC 2812 3.1.3 says <mode> "should be a numeric", and lists exactly
+	 * two numerics for USER: 461 and 462. 461 is therefore the only reply
+	 * available for a malformed one.
+	 *
+	 * The transposition cases at the end are the ones that matter. They are
+	 * why this check exists at all: they are well-formed four-parameter
+	 * USER lines with a legal username, and the ONLY thing wrong with them
+	 * is that the arguments are in the wrong order. */
+	static const char *const refused[] = {
+		"abc",   /* not a number in any base */
+		"x",
+		"*",     /* <unused>'s conventional value, in <mode>'s slot */
+		"-1",    /* a bitmask has no sign */
+		"-42",
+		"+1",
+		"+0",
+		"+i",    /* MODE syntax, not a bitmask */
+		"-i",
+		"0x10",  /* numeric only to a C programmer */
+		"0.5",
+		"1e3",
+		" ",
+	};
+
+	for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+	{
+		const std::string nick = "nm" + itos2(static_cast<int>(i));
+		Registration r = registerWith(
+			serverPort, nick,
+			"USER u " + std::string(refused[i]) + " * :R");
+
+		EXPECT_FALSE(r.welcomed)
+			<< "USER <mode>=\"" << refused[i]
+			<< "\" is not a numeric and must not register\n" << r.raw;
+		EXPECT_NE(r.raw.find(" 461 "), std::string::npos)
+			<< "a non-numeric <mode> must draw 461 — the only numeric RFC "
+			   "2812 3.1.3 offers for a malformed USER\n" << r.raw;
+	}
+}
+
+TEST_F(UserMatrixTest, TransposedArgumentsAreRefused)
+{
+	/* The bug this suite was extended for, stated directly.
+	 *
+	 * Each line below is `USER` with its four parameters permuted. Only the
+	 * orders that leave a NUMERIC in the second slot may register — that is
+	 * the definition of the parameters being positional. */
+	struct Case { const char *line; bool ok; const char *why; };
+	static const Case cases[] = {
+		{"USER dylan 0 * :R",     true,  "canonical"},
+		{"USER dylan * 0 :R",     false, "<mode> and <unused> transposed"},
+		{"USER 0 dylan * :R",     false, "<mode> is 'dylan'"},
+		{"USER 0 * dylan :R",     false, "<mode> is '*'"},
+		{"USER * dylan 0 :R",     false, "<mode> is 'dylan'"},
+		{"USER * 0 dylan :R",     true,  "user='*' is odd but legal, mode=0"},
+		{"USER 0 0 * :R",         true,  "user='0' is legal"},
+		{"USER 1 2 3 :4",         true,  "all four slots numeric-looking"},
+	};
+
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+	{
+		const std::string nick = "tp" + itos2(static_cast<int>(i));
+		Registration r = registerWith(serverPort, nick, cases[i].line);
+
+		EXPECT_EQ(r.welcomed, cases[i].ok)
+			<< cases[i].line << " — " << cases[i].why << "\n" << r.raw;
 	}
 }
 
@@ -657,15 +743,21 @@ const Axis kUsers[] = {
 	{"a@b", false},    {"@a", false},   {"a@", false},
 };
 
-/* <mode>: which user modes the bitmask should produce. */
+/* <mode>: which user modes the bitmask should produce, and — since the
+ * numeric rule went in — whether the line registers at all. `umodes` is only
+ * meaningful when `valid` is true. */
 struct ModeAxis
 {
 	const char *value;
 	const char *umodes;
+	bool valid;
 };
 const ModeAxis kModes[] = {
-	{"0", "+"},   {"4", "+w"},  {"8", "+i"},   {"12", "+iw"},
-	{"7", "+w"},  {"abc", "+"}, {"-1", "+"},
+	{"0", "+", true},    {"4", "+w", true},  {"8", "+i", true},
+	{"12", "+iw", true}, {"7", "+w", true},
+	{"abc", "", false},  /* not a numeric */
+	{"-1", "", false},   /* a bitmask has no sign */
+	{"*", "", false},    /* <unused>'s value, in <mode>'s slot */
 };
 
 /* <unused>: never affects the outcome — unless it starts a trailing. */
@@ -705,8 +797,10 @@ TEST_F(UserMatrixTest, DenseCrossProductOfEveryParameterAxis)
 
 					/* The oracle, from the rules rather than a table: the
 					 * form is always well-shaped here (four params, trailing
-					 * fourth), so acceptance turns on <user> alone. */
-					const bool shouldAccept = kUsers[u].valid;
+					 * fourth), so acceptance turns on the two parameters
+					 * that have a shape — <user> and <mode>. <unused> and
+					 * <realname> never affect it. */
+					const bool shouldAccept = kUsers[u].valid && kModes[m].valid;
 
 					Registration got = registerWith(serverPort, nick, line);
 

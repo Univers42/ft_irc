@@ -169,13 +169,27 @@ irc_clear "$_n"; irc_send "$_n" "MODE $_n"
 expect_ok "$_n" "221 $_n \+i" 1.5 "USER <mode>=8 sets +i only"
 irc_close "$_n"
 
+# RFC 2812 3.1.3: <mode> "should be a numeric". A non-numeric one is refused
+# with 461 -- the only numeric the RFC offers USER for a malformed line. This
+# is the check that makes the parameter POSITIONS mean something: <unused> is
+# ignored and <realname> is free text, so without a rule on <mode> nothing
+# separates "USER u 0 * :R" from "USER u * 0 :R".
 _u=$((_u + 1)); _n="bm$_u"
 irc_connect "$_n"
 irc_send "$_n" "PASS $IRC_PASSWORD"; irc_send "$_n" "NICK $_n"
 sleep 0.2; irc_send "$_n" "USER u abc * :R"; sleep 0.6
-irc_clear "$_n"; irc_send "$_n" "MODE $_n"
-expect_ok "$_n" "221 $_n \+" 1.5 "a non-numeric <mode> is ignored, not refused"
-expect_none "$_n" "221 $_n \+[iw]" 0.5 "...and sets no user mode bits"
+expect_ok "$_n" "461" 1.5 "a non-numeric <mode> draws 461"
+expect_none "$_n" " 001 " 0.5 "...and does not complete registration"
+irc_close "$_n"
+
+# The transposition itself: four parameters, a legal username, and the only
+# thing wrong is the order.
+_u=$((_u + 1)); _n="tp$_u"
+irc_connect "$_n"
+irc_send "$_n" "PASS $IRC_PASSWORD"; irc_send "$_n" "NICK $_n"
+sleep 0.2; irc_send "$_n" "USER u * 0 :R"; sleep 0.6
+expect_ok "$_n" "461" 1.5 "<mode> and <unused> transposed draws 461"
+expect_none "$_n" " 001 " 0.5 "...and does not register with swapped arguments"
 irc_close "$_n"
 
 # --- the prefix keeps exactly one '@' --------------------------------------

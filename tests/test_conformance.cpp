@@ -11,18 +11,18 @@
  *   - UserModeCase.*       : MODE <nick> compared the target with operator!=
  *                            instead of ircEquals, the one place in the tree
  *                            that bypassed CASEMAPPING=ascii.
- *   - NickLength.*         : this one went back and forth. It first rejected
- *                            over-long nicks, was changed to truncate them
- *                            (naively at first: truncating after the
- *                            isNickInUse check let two different over-long
- *                            nicks shorten to the same name and both
- *                            register), and now rejects again with 432 --
- *                            deliberately, to match RFC 2812 3.1.2 and the
- *                            grammar's own 9-character nickname production.
- *                            The cost is real and was accepted: a client
- *                            whose collision retry appends to the nick
- *                            (HexChat's _ , _1) only makes an over-long nick
- *                            longer and cannot recover on its own.
+ *   - NickLength.*         : this one went back and forth. It truncated
+ *                            over-long nicks (naively at first: truncating
+ *                            after the isNickInUse check let two different
+ *                            over-long nicks shorten to the same name and
+ *                            both register), then rejected them with 432,
+ *                            and now truncates again -- correctly ordered
+ *                            this time. RFC 2812 bounds a nickname at nine
+ *                            characters but never says what to do with a
+ *                            longer one; rejecting locked out any client
+ *                            whose configured nick was too long, including
+ *                            the ones whose collision retry APPENDS to it
+ *                            (HexChat's _ , _1) and so can only get worse.
  *   - ModeReplyStorm.*     : handleChannelMode() answered per OCCURRENCE
  *                            rather than per distinct complaint, so one
  *                            512-octet MODE could produce hundreds of
@@ -522,39 +522,51 @@ TEST_F(ConformanceTest, UnregisteredConnectionStillReservesItsNick)
 }
 
 /* ════════════════════════════════════════════════════════════════════════
- * Suite: NickLength — over-long nicks are refused with 432, not truncated
+ * Suite: NickLength — over-long nicks are TRUNCATED to NICKLEN, not refused
  *
- * This suite used to assert the opposite. The server truncated to NICKLEN,
- * on the argument that HexChat's collision retries (_ , _1, ...) only make
- * an over-long nick longer, so a 432 can lock such a client out entirely.
- * That is a real cost and it was accepted deliberately: RFC 2812 3.1.2
- * answers ERR_ERRONEUSNICKNAME, and the grammar's own nickname production
- * -- ( letter / special ) *8( letter / digit / special / "-" ) -- caps a
- * nickname at 9 characters. Truncating silently rewrote what the user
- * asked for; refusing says so.
+ * This suite has asserted both answers over time, because RFC 2812 does not
+ * settle it: 1.2.1 bounds a nickname at nine characters and 2.3.1's
+ * production -- ( letter / special ) *8( letter / digit / special / "-" ) --
+ * says the same, but neither says what a server does with a longer one.
  *
- * The bound now lives in isValidNickname(), which is where every other
- * nickname rule already lives, so the length check cannot drift away from
- * the character checks or run in the wrong order relative to them.
+ * We truncate, which is what ircd has always done. Refusing reads better on
+ * paper and is worse in practice: a client whose configured nick is ten
+ * characters can never connect at all, and the 432 it gets names a nickname
+ * it did not choose to be invalid. Worse, the usual client-side recovery for
+ * a rejected nick is to APPEND to it (HexChat's _ , _1), which makes an
+ * over-long nick longer -- so the client retries its way further from
+ * success on every attempt.
+ *
+ * ORDER IS THE WHOLE PROBLEM HERE, and it is why this suite is long:
+ *
+ *   truncate BEFORE validating   so the retained prefix is what gets
+ *                                checked; a defect inside the first nine
+ *                                characters still draws 432
+ *   truncate BEFORE the in-use   so two different over-long nicks that
+ *                                check                shorten to the same
+ *                                name COLLIDE (433) instead of both
+ *                                registering. Getting this backwards is
+ *                                the historical bug this suite exists for.
  * ════════════════════════════════════════════════════════════════════ */
 
-TEST_F(ConformanceTest, OverlongNickIsRejectedNotTruncated)
+TEST_F(ConformanceTest, OverlongNickIsTruncatedNotRejected)
 {
-	/* RFC 2812 3.1.2: a nickname longer than the 9 characters the nickname
-	 * production allows draws 432. It must not be quietly shortened into a
-	 * different nickname than the one that was asked for. */
+	/* A 10-character nick is one over NICKLEN. It registers, under the
+	 * first nine characters. */
 	TestClient tc;
 	ASSERT_TRUE(tc.connect(serverPort));
 
 	tc.registerClient("testpass", "abcdefghij", "tuser");
 	std::string reply = tc.recvAll(300);
 
-	EXPECT_TRUE(tc.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
-		<< "a 10-char nick is one over NICKLEN and must draw 432";
-	EXPECT_FALSE(tc.hasNumeric(reply, "001"))
-		<< "an over-long nick must not complete registration";
-	EXPECT_EQ(reply.find("abcdefghi!"), std::string::npos)
-		<< "the server must not invent a truncated nick the client never sent";
+	EXPECT_TRUE(tc.hasNumeric(reply, "001"))
+		<< "a 10-char nick must register under its 9-char prefix";
+	EXPECT_FALSE(tc.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
+		<< "length alone is not an erroneous nickname -- it is truncated";
+	EXPECT_NE(reply.find("abcdefghi"), std::string::npos)
+		<< "the welcome must name the truncated nick";
+	EXPECT_EQ(reply.find("abcdefghij"), std::string::npos)
+		<< "the 10th character must not survive anywhere in the reply";
 }
 
 TEST_F(ConformanceTest, NickOfExactlyNicklenIsAccepted)
@@ -574,60 +586,83 @@ TEST_F(ConformanceTest, NickOfExactlyNicklenIsAccepted)
 		<< "9 characters is inside the bound, not over it";
 }
 
-TEST_F(ConformanceTest, InvalidCharacterPastNicklenStillRejects)
+TEST_F(ConformanceTest, ValidationRunsOnTheTruncatedNickNotTheWholeInput)
 {
-	/* Character validation must run on the full, untruncated nick: if
-	 * truncation happened first, an invalid char past position 9 would
-	 * never be seen and the nick would wrongly register. */
-	TestClient tc;
-	ASSERT_TRUE(tc.connect(serverPort));
+	/* The two halves of "truncate first, then validate", which is the only
+	 * self-consistent reading: what the client gets IS the first nine
+	 * characters, so those nine are what has to be legal, and anything past
+	 * them was never part of the nickname to begin with.
+	 *
+	 * This test asserted the opposite while the server refused over-long
+	 * nicks -- that '#' at position 10 had to reject. Under truncation that
+	 * would be incoherent: it would mean a character that is not in the
+	 * nickname can invalidate the nickname. */
+	TestClient junk, bad;
 
-	tc.registerClient("testpass", "abcdefghi#junk", "tuser");
-	std::string reply = tc.recvAll(300);
+	/* (a) a defect PAST position 9 is cut away with everything else. */
+	ASSERT_TRUE(junk.connect(serverPort));
+	junk.registerClient("testpass", "abcdefghi#junk", "tuser");
+	std::string reply = junk.recvAll(300);
 
-	EXPECT_TRUE(tc.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
-		<< "an invalid char at position 10 must still be rejected, not "
-		   "silently dropped by truncation";
-	EXPECT_FALSE(tc.hasNumeric(reply, "001"))
-		<< "a nick invalid past NICKLEN must not register";
+	EXPECT_TRUE(junk.hasNumeric(reply, "001"))
+		<< "'#' sits at position 10 and is not part of the nickname";
+	EXPECT_FALSE(junk.hasNumeric(reply, ERR_ERRONEUSNICKNAME));
+
+	/* (b) a defect INSIDE the first nine is still fatal -- this is the
+	 * assertion that keeps truncation from becoming a way to launder an
+	 * invalid nickname into a valid one. */
+	ASSERT_TRUE(bad.connect(serverPort));
+	bad.registerClient("testpass", "1abcdefghij", "tuser2");
+	std::string badReply = bad.recvAll(300);
+
+	EXPECT_TRUE(bad.hasNumeric(badReply, ERR_ERRONEUSNICKNAME))
+		<< "truncating '1abcdefghij' to '1abcdefgh' does not fix the "
+		   "leading digit, and must not be allowed to look like it did";
+	EXPECT_FALSE(bad.hasNumeric(badReply, "001"));
 }
 
 TEST_F(ConformanceTest, OverlongNicksCannotCollideByTruncation)
 {
-	/* While the server truncated, this was the sharpest hazard in the
-	 * whole area: two different over-long nicks shortening to the same
-	 * 9-char name, and whether they collided depended entirely on running
-	 * truncation before the in-use check. Refusing removes the hazard
-	 * rather than ordering around it -- neither nick is ever created, so
-	 * there is no shared name to collide over. Kept as a regression guard:
-	 * if truncation ever comes back, the second client registers here. */
+	/* THE historical bug in this area, and the reason truncation is risky
+	 * enough to need a suite of its own.
+	 *
+	 * "abcdefghiONE" and "abcdefghiTWO" are different nicknames that
+	 * shorten to the SAME name, "abcdefghi". Whether that is caught depends
+	 * entirely on running truncation before the in-use check. Truncate
+	 * after it and both clients pass a collision test against the names
+	 * they SENT -- which do not collide -- and both then register as
+	 * "abcdefghi", giving the server two clients under one nickname and
+	 * every lookup a coin flip.
+	 *
+	 * So: first one wins, second one gets 433 naming the TRUNCATED nick,
+	 * because that is the name actually taken. */
 	TestClient first, second;
 	ASSERT_TRUE(first.connect(serverPort));
 	ASSERT_TRUE(second.connect(serverPort));
 
 	first.registerClient("testpass", "abcdefghiONE", "u1");
 	std::string firstReply = first.recvAll(300);
-	EXPECT_TRUE(first.hasNumeric(firstReply, ERR_ERRONEUSNICKNAME))
-		<< "a 12-char nick must be refused, not shortened to 9";
-	EXPECT_FALSE(first.hasNumeric(firstReply, "001"));
+	EXPECT_TRUE(first.hasNumeric(firstReply, "001"))
+		<< "a 12-char nick registers under its 9-char prefix";
 
 	second.registerClient("testpass", "abcdefghiTWO", "u2");
 	std::string reply = second.recvAll(300);
 
-	EXPECT_TRUE(second.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
-		<< "the second over-long nick is refused for the same reason";
-	EXPECT_FALSE(second.hasNumeric(reply, ERR_NICKNAMEINUSE))
-		<< "nothing was registered under the truncated name, so 433 would "
-		   "mean truncation had happened after all";
+	EXPECT_TRUE(second.hasNumeric(reply, ERR_NICKNAMEINUSE))
+		<< "both nicks shorten to 'abcdefghi'; the second must collide. "
+		   "A 001 here means truncation ran AFTER the in-use check and two "
+		   "clients now share one nickname";
 	EXPECT_FALSE(second.hasNumeric(reply, "001"));
+	EXPECT_NE(reply.find("abcdefghi"), std::string::npos)
+		<< "433 must name the truncated nick -- the one that is taken";
 }
 
-TEST_F(ConformanceTest, RefusalMatchesTheAdvertisedNicklen)
+TEST_F(ConformanceTest, TruncationMatchesTheAdvertisedNicklen)
 {
 	/* The bound the server enforces and the bound it advertises in 005 have
 	 * to be the same number. 005 is built from Limits::kNickLen and so is
-	 * isValidNickname(), so this reads the advertised token back off the
-	 * wire and checks the refusal agrees with it. */
+	 * the truncation in cmdNick, so this reads the advertised token back
+	 * off the wire and checks the cut agrees with it. */
 	TestClient shorter, longer;
 	ASSERT_TRUE(shorter.connect(serverPort));
 	shorter.registerClient("testpass", "abcdefghi", "tuser");
@@ -642,13 +677,17 @@ TEST_F(ConformanceTest, RefusalMatchesTheAdvertisedNicklen)
 	longer.registerClient("testpass", "abcdefghijklmno", "tuser2");
 	std::string reply = longer.recvAll(300);
 
-	EXPECT_TRUE(longer.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
-		<< "a nick past the advertised NICKLEN must be refused";
-	EXPECT_EQ(reply.find("abcdefghi!"), std::string::npos)
-		<< "no prefix of the requested nick may be registered on its behalf";
+	/* "abcdefghi" is taken by `shorter` above, so a 15-char nick cut to
+	 * exactly NICKLEN lands on it -- 433 is the proof the cut happened at 9
+	 * and not at some other length. */
+	EXPECT_TRUE(longer.hasNumeric(reply, ERR_NICKNAMEINUSE))
+		<< "cut at NICKLEN, this collides with the 9-char nick already "
+		   "registered; a 001 would mean the cut fell somewhere else";
+	EXPECT_FALSE(longer.hasNumeric(reply, ERR_ERRONEUSNICKNAME))
+		<< "over-long is not erroneous";
 }
 
-TEST_F(ConformanceTest, PostRegistrationNickChangeIsRefusedWhenOverlong)
+TEST_F(ConformanceTest, PostRegistrationNickChangeIsTruncatedWhenOverlong)
 {
 	/* The four tests above only drive the pre-registration NICK, in the
 	 * initial PASS/NICK/USER burst. cmdNick is one shared function --
@@ -679,20 +718,25 @@ TEST_F(ConformanceTest, PostRegistrationNickChangeIsRefusedWhenOverlong)
 	std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
 	std::string selfEcho = subject.recvAll(300);
-	EXPECT_TRUE(subject.hasNumeric(selfEcho, ERR_ERRONEUSNICKNAME))
-		<< "a registered client's over-long NICK must be refused too";
-	EXPECT_EQ(selfEcho.find("NICK :abcdefghi"), std::string::npos)
-		<< "a refused NICK must not echo a nick change that did not happen";
+	EXPECT_NE(selfEcho.find("NICK :abcdefghi"), std::string::npos)
+		<< "a registered client's over-long NICK truncates like any other";
+	EXPECT_FALSE(subject.hasNumeric(selfEcho, ERR_ERRONEUSNICKNAME));
 
+	/* The broadcast is the half that is easy to get wrong: the peer has to
+	 * be told the TRUNCATED name, because that is the name the subject now
+	 * answers to. Relaying the untruncated one would leave every peer
+	 * addressing a nick the server does not have. */
 	std::string peerBroadcast = observer.recvAll(300);
-	EXPECT_EQ(peerBroadcast.find("NICK :"), std::string::npos)
-		<< "a refused NICK must not be broadcast to channel peers at all";
+	EXPECT_NE(peerBroadcast.find("NICK :abcdefghi"), std::string::npos)
+		<< "channel peers must see the truncated nick";
+	EXPECT_EQ(peerBroadcast.find("abcdefghijklmno"), std::string::npos)
+		<< "the untruncated nick must not reach a peer";
 
-	/* The nick that was there before must survive the refusal. */
+	/* And the new name is the one that stamps subsequent traffic. */
 	subject.sendCmd("PRIVMSG #posttrunc :still here");
 	std::this_thread::sleep_for(std::chrono::milliseconds(150));
-	EXPECT_NE(observer.recvAll(300).find("short1!"), std::string::npos)
-		<< "the original nick must be intact after a refused change";
+	EXPECT_NE(observer.recvAll(300).find("abcdefghi!"), std::string::npos)
+		<< "traffic after the change must carry the truncated nick";
 
 	subject.sendCmd("QUIT");
 	observer.sendCmd("QUIT");
@@ -741,10 +785,11 @@ TEST_F(ConformanceTest, DigitFirstNickIsRejected)
 	 * reordering truncation relative to validation: truncation
 	 * (nick.erase(Limits::kNickLen)) only ever removes trailing characters, and
 	 * the defect here is at position 0, so no truncate/validate ordering
-	 * can make this nick pass -- it fails isValidNickname's first-character
-	 * check either way. That's a structural difference from
-	 * InvalidCharacterPastNicklenStillRejects, where the invalid character
-	 * sits past position 9 and truncating first would genuinely hide it.
+	 * can make this nick pass -- it fails the first-character check either
+	 * way. That's a structural difference from
+	 * ValidationRunsOnTheTruncatedNickNotTheWholeInput, where a character
+	 * past position 9 IS hidden by truncating first -- deliberately, since
+	 * it is not part of the resulting nickname.
 	 * The red state actually recorded here is a direct mutation of
 	 * isValidNickname (temporarily allowing a leading digit), which flips
 	 * this test to FAIL as expected; reverted immediately after confirming. */

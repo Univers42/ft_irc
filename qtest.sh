@@ -5,9 +5,9 @@ PORT="6667"
 
 PASS="pass"
 NICK="dylan"
-USER="dylan"
-MODE="0"
-UNUSED="*"
+USER="dylanjsfkkahfkajfhkjahfjhsdfkhskhfkslhfjhsdfjhalhsfhlskdhfhlks"
+MODE="1"
+UNUSED="                   "
 REALNAME="A"
 
 TEST="REGISTER"

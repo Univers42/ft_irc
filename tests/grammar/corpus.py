@@ -103,11 +103,16 @@ CASES += [
        want="432", forbid=(), fresh=True),
     _c("NICK", "NICK -bad", "nickname", "'-' may not lead",
        want="432", forbid=(), fresh=True),
+    # Over-long nicks are TRUNCATED to NICKLEN, not refused: RFC 2812 1.2.1
+    # bounds a nickname at nine characters but never says what to do with a
+    # longer one, and refusing locks out any client whose configured nick is
+    # too long. See the NickLength suite in tests/test_conformance.cpp.
     _c("NICK", "NICK abcdefghijklmno", "nickname",
-       "past the 9-char bound of the nickname production: RFC 2812 3.1.2",
-       want="432", forbid=(), fresh=True),
+       "15 chars: registers under the first 9", fresh=True),
     _c("NICK", "NICK abcdefghij", "nickname",
-       "one character over the bound is already over it",
+       "one over the bound: cut to 9, not refused", fresh=True),
+    _c("NICK", "NICK 1abcdefghij", "nickname",
+       "truncating to '1abcdefgh' does not fix the leading digit",
        want="432", forbid=(), fresh=True),
     _c("NICK", "NICK freshnick   ", "nick-cmd", "trailing *SPACE", fresh=True),
 ]
@@ -157,13 +162,20 @@ CASES += [
     _c("USER", "USER abcdefghijKLMN 0 * :A", "user-cmd",
        "over USERLEN: truncated to fit, not refused", state=PREAUTH, fresh=True),
 
-    # <mode> and <unused> are middles the server does not read
-    _c("USER", "USER u 99999999999999 * :R", "user-cmd", "<mode> is not parsed as a number",
+    # <mode> MUST be a numeric (RFC 2812 3.1.3); <unused> is a middle the
+    # server never reads. That asymmetry is deliberate -- <mode> is the only
+    # parameter of USER with a shape, so it is the only thing that can catch
+    # a client sending the four arguments in the wrong order.
+    _c("USER", "USER u 99999999999999 * :R", "user-cmd",
+       "digits, however many: accumulated mod 256 rather than parsed",
        state=PREAUTH, fresh=True),
-    _c("USER", "USER u -1 * :R", "user-cmd", "nor as a signed one",
-       state=PREAUTH, fresh=True),
-    _c("USER", "USER u abc * :R", "user-cmd", "nor as a number at all",
-       state=PREAUTH, fresh=True),
+    _c("USER", "USER u -1 * :R", "user-cmd", "a bitmask has no sign",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
+    _c("USER", "USER u abc * :R", "user-cmd", "not a numeric at all",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
+    _c("USER", "USER u * 0 :R", "user-cmd",
+       "<mode> and <unused> transposed -- the case the numeric rule exists for",
+       want="461", forbid=(), state=PREAUTH, fresh=True),
     _c("USER", "USER u :0 * :R", "user-cmd", "a colon makes <mode> trailing, so <unused> is missing",
        want="461", forbid=(), state=PREAUTH, fresh=True),
     _c("USER", "USER u 0 irc.example.org :R", "user-cmd", "<unused> is ignored whatever it holds",
