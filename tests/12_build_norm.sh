@@ -69,9 +69,25 @@ fi
 # source with // comments and double-quoted string literals removed. Line
 # numbering is preserved (sed edits in place, line for line) so the reported
 # file:line still points at real code.
+# Comments and literals are not code. Without stripping BLOCK comments too,
+# a documentation paragraph that names epoll_wait() or fork() is counted as a
+# call site and this suite reports a compliance failure for a sentence. The
+# stripper is shared with scripts/audit.sh so the two gates cannot disagree.
+STRIPPER="$PROJECT_DIR/scripts/strip_code.awk"
 strip_code() {
-    sed -e 's|//.*$||' -e 's|"[^"]*"||g' "$1"
+    if [ -f "$STRIPPER" ]; then
+        awk -f "$STRIPPER" "$1"
+    else
+        # Degraded fallback: line comments and strings only. Announced once,
+        # because a gate that quietly measures less than it claims is worse
+        # than one that fails.
+        sed -e 's|//.*$||' -e 's|"[^"]*"||g' "$1"
+    fi
 }
+
+if [ ! -f "$STRIPPER" ]; then
+    t_fail "scripts/strip_code.awk is missing — block comments will be scanned as code"
+fi
 
 # grep_code <extended-regex> — matches across src/, ignoring comments and
 # string literals. Prints file:line:text.

@@ -27,6 +27,7 @@ check; --runtime adds the stronger proof, straced from the live process.
 import argparse
 import os
 import re
+import signal
 import subprocess
 import sys
 
@@ -151,11 +152,35 @@ def check_runtime(binary, port):
             probe.close()
 
     trace = "/tmp/ftirc_evloop.trace"
+    # Own process group, so teardown can signal strace AND the ircserv it
+    # traces. Terminating strace alone leaves the server orphaned and still
+    # holding its port -- which piles up one stray process per run, and the
+    # next run then drifts onto a different port looking for a free one.
     proc = subprocess.Popen(
         ["strace", "-f", "-tt", "-e", "trace=epoll_wait,recvfrom,sendto,recv,send,accept,accept4,read,write",
          "-o", trace, binary, str(port), "looppw"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True)
     time.sleep(1.5)
+
+    def teardown():
+        """Signal the whole group: strace and the traced server together."""
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            if proc.poll() is not None:
+                return
+            try:
+                os.killpg(os.getpgid(proc.pid), sig)
+            except OSError:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                return
+            try:
+                proc.wait(5)
+                return
+            except Exception:
+                continue
 
     if proc.poll() is not None:
         return ["the server exited during startup (port %d busy? wrong binary?)" % port], 0, 0
@@ -163,7 +188,7 @@ def check_runtime(binary, port):
     try:
         c = socket.create_connection(("127.0.0.1", port), 3)
     except (socket.error, OSError) as exc:
-        proc.terminate()
+        teardown()
         return ["cannot reach the server on port %d: %s" % (port, exc)], 0, 0
 
     try:
@@ -179,11 +204,7 @@ def check_runtime(binary, port):
         c.close()
     finally:
         time.sleep(0.3)
-        proc.terminate()
-        try:
-            proc.wait(5)
-        except Exception:
-            proc.kill()
+        teardown()
 
     if not os.path.exists(trace):
         return ["strace produced no output -- cannot verify at runtime"], 0, 0

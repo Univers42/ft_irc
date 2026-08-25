@@ -49,7 +49,13 @@ const char kGrammar[] =
     "password   =  middle\n"
     "newnick    =  middle\n"
     "username   =  middle\n"
-    "usermode   =  middle\n"
+    //< NOT middle. RFC 2812 3.1.3 says <mode> "should be a numeric", and this
+    //< is the only rule that gives USER's parameter positions any meaning --
+    //< see isUserModeParam() in CommandRegistration.cpp. Unbounded on purpose:
+    //< a bounded form would send an over-long digit string down the generic
+    //< fallback, where the handler would accept it, and the two paths would
+    //< then disagree about the same line.
+    "usermode   =  1*digit\n"
     "unused     =  middle\n"
     "realname   =  trailing\n"
     "quitmsg    =  trailing\n"

@@ -102,7 +102,9 @@ PM_SRC		= ../vendor/PostMan.cpp
 #  Shared with the server build: everything generated goes under the repo
 #  root's build/, so `make clean` up there wipes these objects too and the
 #  tests/ directory stays source-only.
-BUILDDIR	= ../build
+# Overridable; see the note in ../Makefile. No trailing comment on this
+# line: make keeps the whitespace before a '#' inside the value.
+BUILDDIR	?= ../build
 OBJDIR		= $(BUILDDIR)/obj/tests
 BINDIR		= $(BUILDDIR)/bin
 BIN			= $(BINDIR)/$(NAME)

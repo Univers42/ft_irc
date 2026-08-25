@@ -21,6 +21,7 @@ CXXFLAGS	= -Wall -Wextra -Werror -std=c++98
 .DEFAULT_GOAL := help
 
 SRCDIR		= src
+TESTS_DIR	= tests
 
 COLOR ?= auto
 ifeq ($(COLOR),auto)
@@ -90,7 +91,10 @@ act = @$(PR_MSG) '%b\n' '  $(1)$(2)$(C_RST)  $(3)'
 HINT = $(C_DIM)   make help  $(S_DOT)  targets, tiers and overridable flags$(C_RST)
 
 TIER		?= full
-BUILDDIR	= build
+# Overridable so a gate that runs `make re` can own a PRIVATE tree.
+# scripts/run_tests.py hands build-norm and audit their own BUILDDIR;
+# without that they fclean the tree every other suite is running against.
+BUILDDIR	?= build
 BINDIR		= $(BUILDDIR)/bin
 OBJROOT		= $(BUILDDIR)/obj
 OBJDIR		= $(OBJROOT)/$(TIER)
@@ -230,13 +234,234 @@ fclean: clean
 
 re: fclean all
 
-test:
-	$(call act,$(C_MAG),TEST  ,Google Test suite $(C_DIM)(C++17, via tests/Makefile)$(C_RST))
-	@$(MAKE) -C tests
+# ════════════════════════════════════════════════════════════════════════
+#  TEST ORCHESTRATION
+#
+#  Every suite in the repo is reachable from here, so nobody has to remember
+#  which script lives where or in what order they may run. Three layers:
+#
+#    STATIC   no server, no network -- norm, evloop, audit, headers, ws
+#    LIVE     drives a real ircserv over TCP -- unit, shell, grammar
+#    HEAVY    slow or environment-dependent -- sim, mem
+#
+#  Aggregates: `make check` (the everyday gate) and `make test-all`
+#  (everything). Both run EVERY phase even after one fails, print a single
+#  summary, and exit non-zero if any phase failed -- stopping at the first
+#  failure hides the other three.
+#
+#  `make test-list` prints the catalogue.
+# ════════════════════════════════════════════════════════════════════════
 
 NORM_SCRIPT		= vendor/scripts/norminette.sh
 EVLOOP_SCRIPT	= scripts/check_event_loop.py
 AUDIT_SCRIPT	= scripts/audit.sh
+HEADERS_SCRIPT	= scripts/check_tracked_headers.py
+WS_SCRIPT		= scripts/normalize.sh
+MEM_SCRIPT		= scripts/memcheck.sh
+SIM_SCRIPT		= scripts/simulation.sh
+SIM_DOWN_SCRIPT	= scripts/shutdown_simulation.sh
+SHELL_SUITE		= run_all.sh
+
+# Ports. Every suite gets its own so two of them can never collide, and each
+# is overridable so a second run (or a busy machine) can be moved out of the
+# way: make check IRC_PORT=7001
+IRC_PORT		?= 6667
+STARTUP_PORT	?= 6668
+GRAMMAR_PORT	?= 7500
+FUZZ_PORT		?= 7600
+SIM_PORT		?= 6700
+MEM_PORT		?= 6900
+
+FUZZ_CASES		?= 600
+FUZZ_MODE_CASES	?= 150
+SIM_USERS		?= 6
+MEM_TIER		?= full
+
+# Extra arguments forwarded to a suite, e.g.
+#   make test-shell SHELL_ARGS="--only 05"
+#   make test-unit  UNIT_ARGS="--gtest_filter=Channel*"
+SHELL_ARGS		?=
+UNIT_ARGS		?=
+
+TEST_ENV = IRC_PORT=$(IRC_PORT) STARTUP_PORT=$(STARTUP_PORT) \
+		   GRAMMAR_PORT=$(GRAMMAR_PORT) FUZZ_PORT=$(FUZZ_PORT) \
+		   FUZZ_CASES=$(FUZZ_CASES)
+
+# Phase lists. `check` is what you run before pushing; `test-all` adds the
+# two slow ones. Order is deliberate: cheap static gates first, so a typo is
+# reported in seconds rather than after a ten-minute shell suite.
+CHECK_PHASES	= headers whitespace norm evloop audit test-unit test-shell test-grammar
+ALL_PHASES		= $(CHECK_PHASES) test-sim test-mem
+QUICK_PHASES	= headers whitespace evloop test-unit
+
+# run_phases <label> <target-list>
+#   Runs each target in turn, records pass/fail, keeps going after a failure,
+#   then prints one summary. Exits 1 if anything failed.
+#   MAKEFLAGS is cleared per phase: some suites shell out to `make re`, and an
+#   inherited jobserver fd from this invocation makes that warn (or worse).
+define run_phases
+	@rc=0; log=$$(mktemp); \
+	start=$$(date +%s); \
+	for phase in $(2); do \
+		printf '\n%b\n' '$(C_DIM)$(S_BAR)$(S_BAR)$(S_BAR)$(C_RST) $(C_BLD)$(1)$(C_RST) $(C_DIM)$(S_DOT)$(C_RST) $(C_MAG)'"$$phase"'$(C_RST)'; \
+		t0=$$(date +%s); \
+		if MAKEFLAGS= $(MAKE) --no-print-directory $$phase; then \
+			printf '%s PASS %s\n' "$$phase" "$$(( $$(date +%s) - t0 ))" >> "$$log"; \
+		else \
+			printf '%s FAIL %s\n' "$$phase" "$$(( $$(date +%s) - t0 ))" >> "$$log"; \
+			rc=1; \
+		fi; \
+	done; \
+	printf '\n%b\n' '$(C_BLD)  $(1) summary$(C_RST) $(C_DIM)($(S_DOT) '"$$(( $$(date +%s) - start ))"'s total)$(C_RST)'; \
+	printf '%b\n' '$(C_DIM)  ----------------------------------------$(C_RST)'; \
+	while read -r name status secs; do \
+		if [ "$$status" = PASS ]; then \
+			printf '    %-16s $(C_GRN)%-6s$(C_RST) $(C_DIM)%ss$(C_RST)\n' "$$name" "$$status" "$$secs"; \
+		else \
+			printf '    %-16s $(C_YEL)%-6s$(C_RST) $(C_DIM)%ss$(C_RST)\n' "$$name" "$$status" "$$secs"; \
+		fi; \
+	done < "$$log"; \
+	rm -f "$$log"; \
+	printf '\n'; \
+	if [ $$rc -eq 0 ]; then \
+		printf '%b\n\n' '  $(C_GRN)$(S_OK)$(C_RST)  $(1): every phase passed'; \
+	else \
+		printf '%b\n\n' '  $(C_YEL)!!$(C_RST)  $(1): one or more phases FAILED $(C_DIM)(scroll up for the detail)$(C_RST)'; \
+	fi; \
+	exit $$rc
+endef
+
+# ── aggregates ─────────────────────────────────────────────────────────
+# `matrix` is the one to reach for: same suites, run concurrently behind a
+# live table. `check` is the serial equivalent -- slower, but it interleaves
+# nothing, so it is the one to use when you want to READ the output of a
+# single failing suite rather than a summary of all of them.
+RUNNER_SCRIPT	= scripts/run_tests.py
+RUNNER_ARGS		?=
+
+matrix:
+	@python3 $(RUNNER_SCRIPT) $(RUNNER_ARGS)
+
+matrix-quick:
+	@python3 $(RUNNER_SCRIPT) --quick $(RUNNER_ARGS)
+
+matrix-list:
+	@python3 $(RUNNER_SCRIPT) --list
+
+check:
+	$(call run_phases,check,$(CHECK_PHASES))
+
+test-all:
+	$(call run_phases,test-all,$(ALL_PHASES))
+
+test-quick:
+	$(call run_phases,test-quick,$(QUICK_PHASES))
+
+# ── LIVE: in-process unit tests ────────────────────────────────────────
+# `test` is kept as the historical name for the Google Test suite.
+test: test-unit
+
+test-unit:
+	$(call act,$(C_MAG),UNIT  ,Google Test suite $(C_DIM)(C++17, in-process, via tests/Makefile)$(C_RST))
+	@MAKEFLAGS= $(MAKE) --no-print-directory -C tests build
+	@$(BINDIR)/test_runner $(UNIT_ARGS)
+
+# ── LIVE: black-box shell suite ────────────────────────────────────────
+# Starts a real server and drives it over TCP the way a client would.
+# 12_build_norm.sh inside it shells out to `make re`, which is why this is
+# the slowest of the three live suites.
+test-shell: $(BIN)
+	$(call act,$(C_MAG),SHELL ,black-box suite $(C_DIM)(tests/$(SHELL_SUITE), live server on $(IRC_PORT))$(C_RST))
+	@cd $(TESTS_DIR) && $(TEST_ENV) MAKEFLAGS= bash ./$(SHELL_SUITE) $(SHELL_ARGS)
+
+# ── LIVE: RFC 2812 grammar conformance + fuzz ──────────────────────────
+# Each half starts its own short-lived server on its own port, so this needs
+# nothing running and cannot disturb anything that is.
+test-grammar: $(BIN)
+	$(call act,$(C_MAG),GRAMMR,RFC 2812 conformance $(C_DIM)(18 productions)$(C_RST))
+	@python3 $(TESTS_DIR)/grammar/conformance.py --binary $(BIN) --port $(GRAMMAR_PORT)
+	$(call act,$(C_MAG),FUZZ  ,structure-aware fuzz $(C_DIM)($(FUZZ_CASES) cases$(if $(FUZZ_SEED), seed $(FUZZ_SEED)))$(C_RST))
+	@python3 $(TESTS_DIR)/grammar/fuzz.py --binary $(BIN) --port $(FUZZ_PORT) \
+		--cases $(FUZZ_CASES) $(if $(FUZZ_SEED),--seed $(FUZZ_SEED))
+
+# ── HEAVY: populated simulation + its conformance probes ───────────────
+# The probes need a live simulation (simulation.sh's own require_running), so
+# this brings one up, runs all three, and tears it down whatever happens.
+test-sim: $(BIN)
+	$(call act,$(C_MAG),SIM   ,populated simulation $(C_DIM)($(SIM_USERS) users on $(SIM_PORT)) + conformance probes$(C_RST))
+	@rc=0; \
+	bash $(SIM_SCRIPT) --port $(SIM_PORT) --users $(SIM_USERS) --no-scenario >/dev/null || \
+		{ printf '  simulation failed to start\n' >&2; exit 1; }; \
+	trap 'bash $(SIM_DOWN_SCRIPT) >/dev/null 2>&1 || true' EXIT INT TERM; \
+	bash $(SIM_SCRIPT) --verify-names   || rc=1; \
+	bash $(SIM_SCRIPT) --verify-grammar || rc=1; \
+	bash $(SIM_SCRIPT) --fuzz-mode $(FUZZ_MODE_CASES) || rc=1; \
+	bash $(SIM_DOWN_SCRIPT) >/dev/null 2>&1 || true; \
+	trap - EXIT INT TERM; \
+	exit $$rc
+
+# ── HEAVY: valgrind ────────────────────────────────────────────────────
+# Exit codes are the script's own: 0 clean, 97 a leak, 90 the scripted client
+# setup could not be verified (an environment problem, not a leak) -- 90 is
+# reported as a skip so a flaky socket does not read as a memory bug.
+test-mem: $(BIN)
+	$(call act,$(C_MAG),MEM   ,valgrind $(C_DIM)(scripted, tier=$(MEM_TIER), port $(MEM_PORT))$(C_RST))
+	@bash $(MEM_SCRIPT) --auto --tier=$(MEM_TIER) $(MEM_PORT) mempass; rc=$$?; \
+	if [ $$rc -eq 0 ]; then \
+		printf '%b\n' '  $(C_GRN)$(S_OK)$(C_RST)  no leaks'; \
+	elif [ $$rc -eq 90 ]; then \
+		printf '%b\n' '  $(C_YEL)$(S_DOT)$(C_RST)  SKIP $(C_DIM)- client setup unverified, not a leak result$(C_RST)'; \
+		rc=0; \
+	else \
+		printf '%b\n' '  $(C_YEL)!!$(C_RST)  valgrind reported a problem $(C_DIM)(exit '"$$rc"')$(C_RST)'; \
+	fi; \
+	exit $$rc
+
+# ── STATIC: cheap gates ────────────────────────────────────────────────
+headers:
+	$(call act,$(C_MAG),HEADER,every #include names a tracked file)
+	@python3 $(HEADERS_SCRIPT)
+
+whitespace:
+	$(call act,$(C_MAG),WS    ,trailing whitespace + final newline $(C_DIM)(and the advisory reports)$(C_RST))
+	@bash $(WS_SCRIPT) --check
+
+test-list:
+	@printf '%b\n' \
+	'' \
+	'  $(C_BLD)test targets$(C_RST) $(C_DIM)$(S_DOT)$(C_RST) one entry point per suite; aggregates run them all' \
+	'' \
+	'  $(C_YEL)AGGREGATES$(C_RST)' \
+	'    $(C_GRN)matrix$(C_RST)         $(C_BLD)every suite, in parallel, behind a live table$(C_RST)' \
+	'                   $(C_DIM)build gates run serially first (they run make re), then$(C_RST)' \
+	'                   $(C_DIM)the rest run at once against a staged binary.$(C_RST)' \
+	'    $(C_GRN)matrix-quick$(C_RST)   ...without the two slow ones $(C_DIM)(sim, mem)$(C_RST)' \
+	'    $(C_GRN)matrix-list$(C_RST)    what the matrix would run' \
+	'    $(C_GRN)check$(C_RST)          $(C_DIM)serial: $(CHECK_PHASES)$(C_RST)' \
+	'    $(C_GRN)test-all$(C_RST)       check + the two slow ones $(C_DIM)(sim, mem)$(C_RST)' \
+	'    $(C_GRN)test-quick$(C_RST)     $(C_DIM)$(QUICK_PHASES)$(C_RST)' \
+	'' \
+	'  $(C_YEL)LIVE$(C_RST) $(C_DIM)- drive a real server over TCP$(C_RST)' \
+	'    $(C_GRN)test-unit$(C_RST)      Google Test, in-process     $(C_DIM)(= make test)$(C_RST)' \
+	'    $(C_GRN)test-shell$(C_RST)     black-box shell suite       $(C_DIM)port $(IRC_PORT)$(C_RST)' \
+	'    $(C_GRN)test-grammar$(C_RST)   RFC 2812 conformance + fuzz $(C_DIM)ports $(GRAMMAR_PORT)/$(FUZZ_PORT)$(C_RST)' \
+	'' \
+	'  $(C_YEL)HEAVY$(C_RST)' \
+	'    $(C_GRN)test-sim$(C_RST)       populated simulation + 3 probes $(C_DIM)port $(SIM_PORT)$(C_RST)' \
+	'    $(C_GRN)test-mem$(C_RST)       valgrind, scripted clients      $(C_DIM)port $(MEM_PORT)$(C_RST)' \
+	'' \
+	'  $(C_YEL)STATIC$(C_RST) $(C_DIM)- no server, no network$(C_RST)' \
+	'    $(C_GRN)norm$(C_RST)  $(C_GRN)evloop$(C_RST)  $(C_GRN)evloop-run$(C_RST)  $(C_GRN)audit$(C_RST)  $(C_GRN)headers$(C_RST)  $(C_GRN)whitespace$(C_RST)' \
+	'' \
+	'  $(C_YEL)KNOBS$(C_RST) $(C_DIM)- every port is overridable, so two runs never collide$(C_RST)' \
+	'    $(C_DIM)make check IRC_PORT=7001$(C_RST)' \
+	'    $(C_DIM)make test-unit UNIT_ARGS=--gtest_filter=Channel*$(C_RST)' \
+	'    $(C_DIM)make test-shell SHELL_ARGS="--only 05"$(C_RST)' \
+	'    $(C_DIM)make test-grammar FUZZ_CASES=5000 FUZZ_SEED=42$(C_RST)' \
+	'    $(C_DIM)make matrix RUNNER_ARGS="--only unit,grammar --jobs 2"$(C_RST)' \
+	'    $(C_DIM)make matrix RUNNER_ARGS=--ascii$(C_RST)  $(C_DIM)(no emoji)$(C_RST)' \
+	''
+
 NORM_LIBCPP_NAMES	= $(LIBCPP_CORE_NAMES) $(LIBCPP_FULL_NAMES)
 NORM_FILES		= src include
 
@@ -299,10 +524,17 @@ help:
 	'    ./$(BIN) <port> <password>  $(C_DIM)e.g. ./$(BIN) 6667 mypass$(C_RST)' \
 	'    nc -C 127.0.0.1 6667                 $(C_DIM)manual smoke test: PASS / NICK / USER / JOIN$(C_RST)' \
 	'' \
-	'  $(C_YEL)TESTS$(C_RST)' \
-	'    $(C_GRN)test$(C_RST)           build + run the Google Test suite (C++17, in-process,' \
-	'                   delegates to tests/Makefile). Single case:' \
-	'                   $(C_DIM)make -C tests build && ./build/bin/test_runner --gtest_filter=Channel*$(C_RST)' \
+	'  $(C_YEL)TESTS$(C_RST) $(C_DIM)— every suite in the repo has a target; make test-list for the lot$(C_RST)' \
+	'    $(C_GRN)matrix$(C_RST)         $(C_BLD)run everything in parallel behind a live status table.$(C_RST)' \
+	'                   Build gates go first, serially, because they run make re;' \
+	'                   the rest then run at once against a staged binary.' \
+	'    $(C_GRN)matrix-quick$(C_RST)   ...minus the two slow suites (sim, mem).' \
+	'    $(C_GRN)check$(C_RST)          the same suites, serially — slower, but one suite'"'"'s' \
+	'                   output at a time, which is what you want when reading a' \
+	'                   failure rather than counting them.' \
+	'    $(C_GRN)test$(C_RST)           the Google Test suite alone $(C_DIM)(= test-unit)$(C_RST). Single case:' \
+	'                   $(C_DIM)make test-unit UNIT_ARGS=--gtest_filter=Channel*$(C_RST)' \
+	'    $(C_GRN)test-list$(C_RST)      every test target, its port, and the knobs.' \
 	'    $(C_GRN)testclean$(C_RST)      remove the test build artifacts.' \
 	'' \
 	'  $(C_YEL)LIBRARY$(C_RST) $(C_DIM)— vendor/libcpp$(C_RST)' \
@@ -361,13 +593,15 @@ help:
 	'                   the settings override. Unset, the full binary behaves' \
 	'                   like bonus apart from the console sink.' \
 	'' \
-	'  $(C_YEL)NOT MAKE TARGETS$(C_RST) $(C_DIM)— out-of-band tooling, run them directly$(C_RST)' \
-	'    bash scripts/audit.hellish             $(C_DIM)subject-compliance audit (3 tiers, C++98 scan)$(C_RST)' \
-	'    bash scripts/memcheck.hellish --auto   $(C_DIM)valgrind gate; exit 0 clean / 97 leak / 90 unverified$(C_RST)' \
-	'    bash scripts/normalize.sh              $(C_DIM)whitespace gate in place (--check = CI mode)$(C_RST)' \
-	'    cd tests && bash run_all.sh            $(C_DIM)black-box shell suite vs a live $(BIN)$(C_RST)' \
+	'  $(C_YEL)OUT-OF-BAND$(C_RST) $(C_DIM)— everything else now has a target; these do not$(C_RST)' \
+	'    bash scripts/normalize.sh              $(C_DIM)APPLY whitespace fixes (make whitespace only checks)$(C_RST)' \
+	'    bash scripts/simulation.sh             $(C_DIM)a populated server you can join yourself$(C_RST)' \
+	'    bash scripts/shutdown_simulation.sh    $(C_DIM)...and free it again$(C_RST)' \
 	'    docker compose up --build              $(C_DIM)ircserv + the ai-assistant companion$(C_RST)' \
 	''
 
-.PHONY: all bonus mandatory build clean fclean re test testclean verify-tiers \
-	norm norm-fix evloop evloop-run audit help
+.PHONY: all bonus mandatory build clean fclean re testclean verify-tiers \
+	norm norm-fix evloop evloop-run audit help \
+	check test-all test-quick test-list matrix matrix-quick matrix-list \
+	test test-unit test-shell test-grammar test-sim test-mem \
+	headers whitespace

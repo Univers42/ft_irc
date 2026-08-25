@@ -42,6 +42,29 @@ src_files() {
 		-o -name '*.tpp' -o -name '*.ipp' -o -name '*.h' \) 2>/dev/null
 }
 
+# ── scanning code, not prose ─────────────────────────────────────────────────
+# Every scan below asks "does this SOURCE do X". Comments and string literals
+# are neither, and a scanner that cannot tell them apart reports a violation
+# for a sentence: a paragraph explaining why there is exactly one epoll_wait()
+# call counts, to a plain grep, as several more of them.
+#
+# The previous filter here was `grep -vE '//' | grep -v '"'`, which drops a
+# line comment but sails straight through a /* ... */ block. strip_code.awk
+# handles all four cases (block, line, string, char literal) and preserves
+# line numbering, and tests/12_build_norm.sh uses the same file, so the two
+# gates cannot drift apart.
+STRIPPER="$ROOT/scripts/strip_code.awk"
+
+# grep_code <extended-regex> <file>... — matches against code only.
+grep_code() {
+	local pat="$1"; shift
+	local f
+	for f in "$@"; do
+		[ -f "$f" ] || continue
+		awk -f "$STRIPPER" "$f" 2>/dev/null | grep -nE "$pat" | sed "s|^|$f:|"
+	done
+}
+
 # ── 1. clean compile under the mandated flags (all three tiers) ──────────────
 section "compile: c++ -std=c++98 -Wall -Wextra -Werror"
 BUILD_LOG="$(mktemp)"
@@ -85,8 +108,15 @@ declare -A CXX11=(
 )
 CXX_HIT=0
 FILES="$(src_files)"
+
+# A scanner that cannot strip comments measures less than it claims. Say so
+# rather than printing a clean result built on a degraded scan.
+if [ ! -f "$STRIPPER" ]; then
+	fail "scripts/strip_code.awk is missing — every scan below would read comments as code"
+fi
+
 for pat in "${!CXX11[@]}"; do
-	hits="$(grep -REn "$pat" $FILES 2>/dev/null)"
+	hits="$(grep_code "$pat" $FILES)"
 	if [ -n "$hits" ]; then
 		fail "C++11+ construct: ${CXX11[$pat]}"
 		echo "$hits" | sed 's/^/      /' | head -5
@@ -98,7 +128,7 @@ done
 # ── 3. forbidden functions ───────────────────────────────────────────────────
 section "forbidden functions"
 FORBIDDEN='\b(fork|vfork|system|popen|execve|execl|execlp|execvp|pthread_create)\b'
-hits="$(grep -REn "$FORBIDDEN" $FILES 2>/dev/null)"
+hits="$(grep_code "$FORBIDDEN" $FILES)"
 if [ -n "$hits" ]; then
 	fail "forbidden function call"; echo "$hits" | sed 's/^/      /' | head
 else
@@ -107,10 +137,9 @@ fi
 
 # ── 4. single event-wait call ────────────────────────────────────────────────
 section "single poll/epoll/select event loop"
-# Ignore matches inside string literals / comments (error messages mention the
-# name without being a call site).
-EV="$(grep -REn '\b(epoll_wait|[^_]poll|select|kqueue|kevent)[[:space:]]*\(' src 2>/dev/null \
-	| grep -vE '//' | grep -v '"' )"
+# grep_code strips comments and literals, so an error message or a paragraph
+# naming epoll_wait() is not mistaken for a second call site.
+EV="$(grep_code '\b(epoll_wait|[^_]poll|select|kqueue|kevent)[[:space:]]*\(' $FILES)"
 EVN="$(printf '%s' "$EV" | grep -c . )"
 if [ "$EVN" -le 1 ]; then
 	pass "exactly $EVN event-wait call site"
@@ -123,7 +152,7 @@ fi
 section "fcntl usage"
 # Only real calls have an argument list with a comma; the error strings are the
 # literal text "fcntl()". A compliant call carries F_SETFL + O_NONBLOCK.
-BADF="$(grep -REn '\bfcntl[[:space:]]*\([^)]*,' src 2>/dev/null | grep -v 'F_SETFL' | grep -v 'O_NONBLOCK')"
+BADF="$(grep_code '\bfcntl[[:space:]]*\([^)]*,' $FILES | grep -v 'F_SETFL' | grep -v 'O_NONBLOCK')"
 if [ -n "$BADF" ]; then
 	fail "fcntl used with disallowed flags"; echo "$BADF" | sed 's/^/      /'
 else
@@ -155,7 +184,13 @@ fi
 
 # ── 8. header cycles (delegate to libcpp) ────────────────────────────────────
 section "header include cycles"
-CYC="vendor/libcpp/vendor/scripts/check_header_cycles.py"
+# Prefer our own checker. The libcpp one scans for files named *.h, and every
+# header in this project is *.hpp -- so it matched nothing, printed "No header
+# files found" and exited 0, and this gate reported "no header cycles" without
+# ever having looked at a single file. Ours scans .hpp/.h/.tpp/.ipp and fails
+# loudly when it finds nothing to scan.
+CYC="scripts/check_header_cycles.py"
+[ -f "$CYC" ] || CYC="vendor/libcpp/vendor/scripts/check_header_cycles.py"
 if [ -f "$CYC" ]; then
 	# A checker that cannot run is a BROKEN GATE, not a clean result, and the
 	# two have to report differently. This gate silently degraded for a while:

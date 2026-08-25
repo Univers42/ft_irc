@@ -196,15 +196,24 @@ collide 'casetestx' 'exact match'
 collide 'CASETESTX' 'upper case'
 collide 'CaseTestX' 'mixed case'
 
-# Truncation-induced collision. The held nick is exactly 9 characters on
-# purpose: truncation always produces exactly NICKLEN characters, so an
-# 8-character name could never be collided with this way. This is the check
-# that proves truncation happens BEFORE the in-use test — reverse the two and
-# 'casetestxZZ' registers alongside the nick it truncates onto.
-if reg 'casetestxZZ' | grep -aqF " 433 "; then
-    row_pass 'casetestxZZ' 'truncates onto casetestx -> 433'
+# Truncation-induced collision — the hazard that REFUSING over-long nicks
+# removes. The held nick is exactly 9 characters on purpose: truncation always
+# produced exactly NICKLEN characters, so 'casetestxZZ' would have shortened
+# straight onto it.
+#
+# This check asserted 433 while the server truncated. It rejects with 432 now,
+# deliberately (RFC 2812 3.1.2, and the grammar's own nickname production caps
+# a nick at 9 — see the NickLength note in tests/test_conformance.cpp), so there
+# is no truncated name left for this one to collide with. Same reasoning as the
+# trunctestAA check above, and a 433 here would likewise mean truncation had
+# come back.
+_z="$(reg 'casetestxZZ')"
+if printf '%s' "$_z" | grep -aq ' 433 '; then
+    row_fail 'casetestxZZ' '433 means it truncated onto casetestx instead of being refused'
+elif printf '%s' "$_z" | grep -aq ' 432 '; then
+    row_pass 'casetestxZZ' '11 chars -> 432, never truncated onto casetestx'
 else
-    row_fail 'casetestxZZ' 'truncates onto casetestx -> expected 433'
+    row_fail 'casetestxZZ' 'expected 432 ERR_ERRONEUSNICKNAME'
 fi
 
 kill "$_hold_keep" 2>/dev/null; kill "$_hold_nc" 2>/dev/null

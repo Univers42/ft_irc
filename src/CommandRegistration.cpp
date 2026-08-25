@@ -45,6 +45,17 @@ void Server::cmdNick(Client* client, const Message& msg) {
 
   std::string nick = msg.fieldOr("newnick", 0);
 
+  //< RFC 2812 1.2.1 bounds a nickname at nine octets, but says nothing about
+  //< what a server does with a longer one, and the two readings differ:
+  //< refuse it, or keep the first nine. We TRUNCATE, the way ircd always has.
+  //< Refusing is defensible on paper and wrong in practice -- a client whose
+  //< configured nick is ten characters can never connect at all, and the 432
+  //< it gets back names a nickname it did not choose to be invalid.
+  //< Order matters here: truncate FIRST, then validate. "1abcdefghij" must
+  //< still be refused for its leading digit, not accepted because the cut
+  //< happened to remove the offending tail -- it does not.
+  if (nick.size() > Limits::kNickLen) nick.erase(Limits::kNickLen);
+
   if (!IrcName::isNickname(nick)) {  //< "1abc" "a.b" -> 432 · "z`tick" passes since D1 closed
     sendReply(client, ERR_ERRONEUSNICKNAME, nick);
     return;
@@ -79,9 +90,41 @@ void Server::cmdNick(Client* client, const Message& msg) {
   }
 }
 
+/*
+** RFC 2812 3.1.3: "The <mode> parameter should be a numeric".
+**
+** Digits, and nothing else. Not "+i", which is MODE syntax and not a bitmask.
+** Not "-1", because the parameter is a bitmask and a bitmask has no sign. Not
+** "0x10" or "0.5", which are numeric only to a C programmer.
+**
+** This is the check that makes USER's parameter POSITIONS mean something.
+** USER takes <user> <mode> <unused> <realname>, and <unused> is ignored by
+** every server -- so with no rule on <mode> there is nothing left to tell
+** `USER dylan 0 * :R` from `USER dylan * 0 :R`. Both have four parameters and
+** both have a valid username, and the second one would register happily with
+** its arguments in the wrong order. Requiring <mode> to be numeric is what
+** rejects it, and it is the only positional constraint the command has.
+*/
+static bool isUserModeParam(const std::string& param) {
+  if (param.empty()) return false;
+  for (std::string::size_type i = 0; i < param.size(); ++i)
+    if (!IrcName::isAsciiDigit(param[i])) return false;
+  return true;
+}
+
+/*
+** Apply the bitmask. Only two bits signify: bit 2 (4) sets 'w', bit 3 (8)
+** sets 'i'; RFC 2812 3.1.3 defines no others.
+**
+** Accumulated modulo 256 rather than parsed into a long, because <mode> is an
+** arbitrarily long digit string by now and "99999999999999999999" would
+** overflow. The modulus is a multiple of 16, so bits 2 and 3 survive it
+** exactly -- the answer is the same one a wide-enough integer would give.
+*/
 static void applyUserModeBitmask(Client* client, const std::string& param) {
-  long bits = 0;
-  if (!libcpp::str::parse_long(param, 0, 255, bits)) return;
+  unsigned int bits = 0;
+  for (std::string::size_type i = 0; i < param.size(); ++i)
+    bits = (bits * 10 + static_cast<unsigned int>(param[i] - '0')) % 256;
 
   if (bits & 4) client->setWallops(true);
   if (bits & 8) client->setInvisible(true);
@@ -109,6 +152,13 @@ void Server::cmdUser(Client* client, const Message& msg) {
     return;
   }
   client->setUsername(username);
+
+  //< <mode> is checked after <user> so a line wrong in both ways reports the
+  //< username first, matching the parameter order the client sent.
+  if (!isUserModeParam(msg.params[1])) {
+    sendNumeric(client, ERR_NEEDMOREPARAMS, "USER :<mode> must be numeric");
+    return;
+  }
 
   applyUserModeBitmask(client, msg.params[1]);
 

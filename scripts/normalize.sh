@@ -86,7 +86,10 @@ if command -v clang-format >/dev/null 2>&1; then
 fi
 
 # ── 3. header include cycles (non-destructive report) ───────────────────────
-CYC="vendor/libcpp/vendor/scripts/check_header_cycles.py"
+# Ours first: the libcpp checker only knows about *.h, and this project is
+# all *.hpp, so it reported an empty scan as a clean result.
+CYC="scripts/check_header_cycles.py"
+[ -f "$CYC" ] || CYC="vendor/libcpp/vendor/scripts/check_header_cycles.py"
 if [ -f "$CYC" ]; then
 	printf "\n${B}== header cycle report ==${Z}\n"
 	python3 "$CYC" include src 2>&1 | sed 's/^/  /' || true

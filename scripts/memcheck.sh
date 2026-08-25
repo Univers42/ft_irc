@@ -96,10 +96,20 @@ fi
 # ── scripted mode ────────────────────────────────────────────────────────
 
 # wait_for_listen <port> <max_tries>  — poll-connect instead of a fixed sleep.
+#
+# The refused attempts before the server finishes binding are EXPECTED, and
+# they are silenced deliberately. A redirection failure on /dev/tcp is reported
+# by bash itself, not by the command, so a `2>/dev/null` on the exec does not
+# suppress it -- the whole compound has to be wrapped. Left unwrapped it prints
+#
+#     memcheck.sh: line NN: /dev/tcp/127.0.0.1/PORT: Connection refused
+#
+# once per poll, which makes a perfectly healthy run look like a broken one and
+# costs somebody an investigation into a leak report that was never wrong.
 wait_for_listen() {
 	local port="$1" tries="$2" i fd
 	for ((i = 0; i < tries; i++)); do
-		if exec {fd}<>"/dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+		if { exec {fd}<>"/dev/tcp/127.0.0.1/$port"; } 2>/dev/null; then
 			exec {fd}<&-
 			return 0
 		fi
