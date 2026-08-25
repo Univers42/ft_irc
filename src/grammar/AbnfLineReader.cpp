@@ -6,6 +6,24 @@
 
 #include "grammar/AbnfChars.hpp"
 
+/*
+** Two jobs, both about physical layout rather than grammar meaning, and both
+** done before anything is parsed:
+**
+**   stripComment()  cuts the line at a ';', but tracks inQuote first, so the
+**                   ';' inside "a;b" survives as data.
+**   read()          folds continuation lines. An INDENTED line is glued onto
+**                   the one above (pending.text += " " + body), and a line
+**                   starting with a bare "=/" gets lastRuleName prepended so
+**                   it reads as a complete rule again.
+**
+** What comes out is a vector<Line>: one complete rule per string, each tagged
+** with the physical line it started on so later errors can point at real
+** source. GrammarBuilder therefore never has to think about newlines at all.
+**
+** The only error this file can raise is a leading "=/" with no rule above it
+** to attach to. Everything else is syntax, and syntax is GrammarBuilder's job.
+*/
 namespace Abnf {
 AbnfLineReader::AbnfLineReader() : _errorLine(0) {}
 
@@ -39,9 +57,9 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
   std::string raw;
   std::size_t physical = 0;
 
-  Line pending;
+  Line pending;  //< the rule being accumulated; empty means "none yet"
   pending.number = 0;
-  std::string lastRuleName;
+  std::string lastRuleName;  //< owner for a later bare "=/"; see the redefines branch
 
   while (std::getline(in, raw)) {
     ++physical;
@@ -61,6 +79,7 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
       continue;
     }
 
+    //< Not a continuation, so whatever was being accumulated is finished.
     if (!pending.text.empty()) {  //< a new rule starts here, so flush the one being built
       out.push_back(pending);
       pending.text.clear();
@@ -72,6 +91,8 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
         _error = "'=' continuation with no rule name above it";
         return false;
       }
+      //< RFC 5234's elided form: "=/ x" means "<previous rule> =/ x". Splicing
+      //< the name back in here is what lets parseRule() see one uniform shape.
       pending.text = lastRuleName + " " + body;
     } else {
       pending.text = body;
@@ -81,7 +102,7 @@ bool AbnfLineReader::read(const std::string& text, std::vector<Line>& out) {
       while (k < body.size() && AbnfChars::isRuleChar(body[k])) name += body[k++];  //< "params = *14(x)" -> "params"
       if (!name.empty()) lastRuleName = name;  //< remembered so a later bare "=/" can find its owner
     }
-    pending.number = physical;
+    pending.number = physical;  //< the FIRST physical line of this rule, for errors
   }
 
   if (!pending.text.empty()) out.push_back(pending);  //< last rule in the file, never flushed by a successor

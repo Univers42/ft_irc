@@ -9,6 +9,33 @@
 #include "grammar/AbnfLineReader.hpp"
 #include "grammar/GrammarValidator.hpp"
 
+/*
+** The real piece of work in the module: a recursive-descent parser that turns
+** one line of ABNF into GrammarNodes.
+**
+** The parse* functions below are ONE FUNCTION PER PRECEDENCE LEVEL, written
+** loosest-binding first. Each one consumes exactly what belongs to its level,
+** calls the next level down for its operands, and loops on its own operator:
+**
+**   parseRule           name "=" / "=/" then the body
+**     parseAlternation    branches separated by '/'        <- binds loosest
+**       parseConcatenation  adjacent elements, juxtaposition
+**         parseRepetition     an optional "*" prefix
+**           parseElement        (group) [option] "literal" %xNN $capture name
+**             parseAlternation  ...back to the top, for a group
+**
+** Shared contract, held by every parse* function:
+**   - takes (const string& s, size_t& i, int& out)
+**   - consumes from i forward, never moves it backwards
+**   - on success writes a node index to `out` and returns true
+**   - on failure returns false with _error already set, via fail()
+**
+** One structural rule worth stating once: a construct with only one part does
+** NOT get a node. A single-branch alternation, a one-element concatenation and
+** an unrepeated element each return their child index straight through. That
+** is why the AST has no chains of one-child wrappers in it.
+*/
+
 namespace Abnf {
 using AbnfChars::isAlpha;
 using AbnfChars::isDigit;
@@ -23,6 +50,9 @@ GrammarBuilder::~GrammarBuilder() {}
 
 const std::string& GrammarBuilder::error() const { return _error; }
 
+//< Returns false so callers can write `return fail("...")` and set both the
+//< error and the return value in one statement. Line 0 means "no single line
+//< is to blame" -- what the validator's errors get.
 bool GrammarBuilder::fail(const std::string& message) {
   std::ostringstream os;
   os << "grammar: line " << _lineNo << ": " << message;
@@ -31,16 +61,21 @@ bool GrammarBuilder::fail(const std::string& message) {
 }
 
 int GrammarBuilder::internRule(const std::string& name) {
-  const std::string key = lowered(name);
+  const std::string key = lowered(name);  //< RFC 5234: rule names are case-insensitive
   for (std::size_t i = 0; i < _grammar->_ruleNames.size(); ++i)
     if (_grammar->_ruleNames[i] == key) return static_cast<int>(i);
 
   _grammar->_ruleNames.push_back(key);
 
+  //< A brand-new rule starts with NO body. That is deliberate: it lets "a = b"
+  //< intern b on first reference, long before b's own line is read. Any rule
+  //< still sitting at kNoRule when the file ends is what the validator rejects.
   _grammar->_ruleRoots.push_back(Grammar::kNoRule);
   return static_cast<int>(_grammar->_ruleNames.size() - 1);
 }
 
+//< Note the missing lowered() compared to internRule: capture names keep their
+//< case, because they are OUR extension and are looked up verbatim by handlers.
 int GrammarBuilder::internCapture(const std::string& name) {
   for (std::size_t i = 0; i < _grammar->_captureNames.size(); ++i)
     if (_grammar->_captureNames[i] == name) return static_cast<int>(i);
@@ -54,6 +89,9 @@ int GrammarBuilder::addNode(const GrammarNode& node) {
   return static_cast<int>(_grammar->_nodes.size() - 1);
 }
 
+//< Children are appended and never reclaimed: each parent owns one contiguous
+//< slice of _children forever. Wasteful in principle, free in practice -- a
+//< grammar is built once at startup and then only read.
 int GrammarBuilder::addChildren(const std::vector<int>& children) {
   const int first = static_cast<int>(_grammar->_children.size());
   for (std::size_t i = 0; i < children.size(); ++i) _grammar->_children.push_back(children[i]);
@@ -290,12 +328,15 @@ bool GrammarBuilder::parseAlternation(const std::string& s, std::size_t& i, int&
   return true;
 }
 
+//< One logical line -> one installed rule. AbnfLineReader has already joined
+//< continuations and stripped comments, so `line` is guaranteed to be a whole
+//< rule on a single string.
 bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
-  _lineNo = lineNo;
+  _lineNo = lineNo;  //< every fail() from here down blames this line
 
   std::size_t i = 0;
   skipBlanks(line, i);
-  if (i >= line.size()) return true;
+  if (i >= line.size()) return true;  //< an all-blank line is a silent success, not an error
 
   if (!isAlpha(line[i])) return fail("a rule must begin with a rule name");
   std::string name;
@@ -306,7 +347,7 @@ bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
   ++i;
 
   bool incremental = false;
-  if (i < line.size() && line[i] == '/') {
+  if (i < line.size() && line[i] == '/') {  //< "=/" -- extend the rule rather than define it
     incremental = true;
     ++i;
   }
@@ -316,12 +357,17 @@ bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
   int body = 0;
   if (!parseAlternation(line, i, body)) return false;
 
+  //< parseAlternation stops at anything it does not understand, so leftover
+  //< text means a typo the parser silently walked past -- e.g. a stray ')'.
   skipBlanks(line, i);
   if (i < line.size()) return fail("trailing text after rule '" + name + "'");
 
   const std::size_t slot = static_cast<std::size_t>(rule);
 
   if (incremental) {
+    //< "=/" folds the OLD root and the new body into one Alternation, which is
+    //< precisely RFC 5234's definition of incremental alternation. The embedded
+    //< grammar uses it once, to give `params` a second, 14-parameter form.
     if (_grammar->_ruleRoots[slot] == Grammar::kNoRule)
       return fail("'" + name + " =/' before that rule was ever defined");
 
@@ -337,6 +383,8 @@ bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
     return true;
   }
 
+  //< Still kNoRule means "interned by a forward reference but never defined",
+  //< which is the normal case here. Anything else is a genuine redefinition.
   if (_grammar->_ruleRoots[slot] != Grammar::kNoRule)
     return fail("rule '" + name + "' is defined twice (use '=/' to extend it)");
 
@@ -344,6 +392,9 @@ bool GrammarBuilder::parseRule(const std::string& line, std::size_t lineNo) {
   return true;
 }
 
+//< The whole pipeline for stage 2, in three phases: unfold, parse, validate.
+//< `out` is cleared up front, so a failed compile leaves an empty Grammar
+//< rather than a half-built one.
 bool GrammarBuilder::compile(const std::string& text, Grammar& out) {
   _error.clear();
   _lineNo = 0;
@@ -361,9 +412,11 @@ bool GrammarBuilder::compile(const std::string& text, Grammar& out) {
   for (std::size_t i = 0; i < lines.size(); ++i)
     if (!parseRule(lines[i].text, lines[i].number)) return false;
 
+  //< Parsing succeeded, which says nothing about whether the grammar is USABLE.
+  //< Undefined references and left recursion are both well-formed on the page.
   GrammarValidator validator;
   if (!validator.validate(out)) {
-    _lineNo = 0;
+    _lineNo = 0;  //< a left-recursive cycle belongs to no single line
     return fail(validator.error());
   }
   return true;

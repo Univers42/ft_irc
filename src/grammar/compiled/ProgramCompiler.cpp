@@ -6,9 +6,45 @@
 
 #include "grammar/GrammarNode.hpp"
 
+/*
+** Lowers one Grammar rule into a flat Program. A single recursive walk,
+** emitNode(), with one case per GrammarNode::Kind:
+**
+**   OctetRange   one Class op over the range's bits
+**   Literal      one Class op per character, each holding BOTH cases
+**   Sequence     its children back to back; emits no instruction of its own
+**   Alternation  Split before each branch, Jump past the rest after it
+**   Repetition   emitRepetition(), below
+**   Reference    INLINED -- the referenced rule's body is emitted right here
+**   $capture     Save 2n ... body ... Save 2n+1
+**
+** Branches are emitted with placeholder targets and BACKPATCHED once the real
+** address is known: emit() returns the instruction's index precisely so the
+** caller can reach back and fill in .x or .y afterwards. Every Split and Jump
+** in this file works that way.
+**
+** ---- The two limitations, and why they are not bugs ----
+**
+** Inlining is what makes the program flat, and it is the root of both:
+**
+**   1. RECURSION is refused. Inlining a rule that references itself would not
+**      terminate, so _compiling[] flags each rule while its body is being
+**      emitted and a re-entry fails. TreeMatcher has no such limit, which is a
+**      real reason it is the default strategy.
+**   2. A CAPTURE UNDER AN UNBOUNDED REPETITION is refused. The loop form
+**      reuses one slot pair per iteration, so *( $x ) would report only its
+**      last match. A BOUNDED repetition is fine -- it unrolls, giving every
+**      iteration its own slots. That is why the embedded grammar writes
+**      *13( SPACE $modeparam ) with an explicit bound rather than a bare *.
+**
+** Both are reported at startup via ProgramMatcher::compileAll(), so a grammar
+** this strategy cannot express is a refusal to boot, not a silent misparse.
+*/
 namespace Abnf {
 namespace Compiled {
 namespace {
+//< Cap on how many copies a bounded repetition may unroll into. *14(x) is
+//< fine; *999(x) would emit thousands of instructions, so it is an error.
 const int kUnrollLimit = 64;
 
 char fold(char c) {
@@ -30,6 +66,8 @@ bool ProgramCompiler::fail(const std::string& message) {
   return false;
 }
 
+//< Returns the new instruction's address so a forward branch can be patched
+//< once its target is known. That return value is the whole backpatch mechanism.
 int ProgramCompiler::emit(Instruction::Op op, int x, int y) {
   Instruction ins;
   ins.op = op;
@@ -49,6 +87,10 @@ int ProgramCompiler::addClass(const unsigned char* bits) {
   return static_cast<int>(existing);
 }
 
+//< "Can this whole subtree only ever match EXACTLY one octet?" If yes, emitNode
+//< collapses it into a single Class op. Memoised, and the memo doubles as a
+//< cycle guard: 2 ("no") is written on entry, so a recursive rule answers no
+//< instead of looping forever.
 bool ProgramCompiler::isSingleOctet(int node) const {
   const std::size_t index = static_cast<std::size_t>(node);
   if (_octetMemo.size() < index + 1) const_cast<std::vector<char>&>(_octetMemo).resize(index + 1, 0);
@@ -67,6 +109,8 @@ bool ProgramCompiler::isSingleOctet(int node) const {
       yes = (_grammar->literal(n.literal).size() == 1);
       break;
     case GrammarNode::Reference: {
+      //< A CAPTURED reference answers no even when its body is one octet:
+      //< folding it into a class would throw away the Save pair.
       const int root = _grammar->ruleRoot(n.lo);
       yes = (n.capture == GrammarNode::kNoCapture) && root != Grammar::kNoRule && isSingleOctet(root);
       break;
@@ -86,6 +130,8 @@ bool ProgramCompiler::isSingleOctet(int node) const {
   return yes;
 }
 
+//< Flattens a subtree's octets into one 256-bit table. `bits` is pre-zeroed by
+//< the caller and OR'd into, so an Alternation just recurses into every branch.
 bool ProgramCompiler::buildClass(int node, unsigned char* bits) const {
   const GrammarNode& n = _grammar->node(node);
 
@@ -96,6 +142,7 @@ bool ProgramCompiler::buildClass(int node, unsigned char* bits) const {
     case GrammarNode::Literal: {
       const std::string& text = _grammar->literal(n.literal);
       if (text.size() != 1) return false;  //< "x" folds into a class · "JOIN" cannot, it is 4 octets
+      //< Set BOTH cases: RFC 5234 makes a quoted string case-insensitive.
       setBit(bits, static_cast<unsigned char>(text[0]));
       const char lower = fold(text[0]);
       const char upper = (lower >= 'a' && lower <= 'z') ? static_cast<char>(lower - 'a' + 'A') : lower;
@@ -116,6 +163,9 @@ bool ProgramCompiler::buildClass(int node, unsigned char* bits) const {
   }
 }
 
+//< Does a $capture live anywhere under this node? Follows Reference nodes into
+//< the rules they name, so it sees captures inlined from another rule too.
+//< Used only by emitRepetition(), to decide whether a loop must be refused.
 bool ProgramCompiler::hasCapture(int node) const {
   const GrammarNode& n = _grammar->node(node);
 
@@ -135,12 +185,14 @@ bool ProgramCompiler::emitBody(int node, int times) {
   return true;
 }
 
+//< Two shapes, chosen by whether there is an upper bound. See the file comment
+//< for why the unbounded one cannot carry a capture.
 bool ProgramCompiler::emitRepetition(int node) {
   const GrammarNode& n = _grammar->node(node);
   const int child = _grammar->child(n.first);
   const int least = n.lo < 0 ? 0 : n.lo;
 
-  if (!emitBody(child, least)) return false;
+  if (!emitBody(child, least)) return false;  //< the MANDATORY copies, emitted straight
 
   if (n.hi == GrammarNode::kUnbounded) {
     if (hasCapture(child))  //< REFUSED · *( $x ) reuses one slot pair, so only the last match would survive
@@ -149,6 +201,11 @@ bool ProgramCompiler::emitRepetition(int node) {
           "loop reuses one slot pair, so only the last match would survive. "
           "Give the repetition an upper bound so it can be unrolled.");
 
+    //< Unbounded: a real loop.  Split .x -> body, .y -> past the loop.
+    //<   loop: Split body, exit
+    //<   body: <child>
+    //<         Jump loop
+    //<   exit:
     const int loop = emit(Instruction::Split, 0, 0);
     _program->_code[static_cast<std::size_t>(loop)].x = static_cast<int>(_program->_code.size());
     if (!emitNode(child)) return false;
@@ -162,6 +219,9 @@ bool ProgramCompiler::emitRepetition(int node) {
   if (optional > kUnrollLimit)
     return fail("bounded repetition too large to unroll");  //< *14(x) unrolls · *999(x) will not
 
+  //< Bounded: unroll the optional copies, each behind its own Split whose .y
+  //< skips to the very end. Taking any exit therefore leaves the whole run --
+  //< which is what makes the repetition greedy but escapable at every count.
   std::vector<int> exits;
   for (int i = 0; i < optional; ++i) {
     const int split = emit(Instruction::Split, 0, 0);
@@ -174,6 +234,8 @@ bool ProgramCompiler::emitRepetition(int node) {
   return true;
 }
 
+//< The recursive heart of the compiler: one case per node kind, after first
+//< trying the single-octet class folding that keeps the programs small.
 bool ProgramCompiler::emitNode(int node) {
   if (isSingleOctet(node)) {  //< collapse an alt-of-ranges into ONE Class op · nospcrlfcl -> 1 bitmap
     unsigned char bits[32];
@@ -244,6 +306,9 @@ bool ProgramCompiler::emitNode(int node) {
       return true;
 
     case GrammarNode::Alternation: {
+      //< Per branch: Split (.x -> this branch, .y -> the next), body, Jump end.
+      //< The LAST branch needs neither -- falling off it lands at the end
+      //< anyway, and there is no next alternative to split toward.
       std::vector<int> jumps;
       for (int i = 0; i < n.count; ++i) {
         const bool last = (i == n.count - 1);
@@ -282,10 +347,10 @@ bool ProgramCompiler::compile(const Grammar& grammar, int rule, Program& out) {
   if (root == Grammar::kNoRule) return fail("no such rule");
 
   if (!emitNode(root)) {
-    out.clear();
+    out.clear();  //< cleared AGAIN so a caller never sees half a program
     return false;
   }
-  emit(Instruction::Match, 0, 0);
+  emit(Instruction::Match, 0, 0);  //< always terminated, so a program cannot run off its end
   return true;
 }
 

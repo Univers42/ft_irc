@@ -2,6 +2,21 @@
 
 #include <string>
 
+/*
+** Why this file exists at all, instead of just including <cctype>:
+**
+**   1. isalpha()/isdigit() are locale-dependent and take an int. Handing them
+**      a plain char that happens to be negative -- ANY byte >= 0x80, and the
+**      nospcrlfcl rule is built out of those -- is undefined behaviour. The
+**      versions here take a char and are ASCII-only by definition, which is
+**      exactly what RFC 5234 specifies.
+**   2. isRuleChar() and isBlank() have no standard-library equivalent at all.
+**      They are not character classes, they are ABNF grammar productions:
+**      the body of a rulename, and c-wsp.
+**
+** Every function is a pure predicate over one char. No state, no allocation,
+** no error path -- which is why they can sit in a namespace rather than a class.
+*/
 namespace Abnf {
 namespace AbnfChars {
 //< ABNF ALPHA = %x41-5A / %x61-7A · 'A' 'q' 'Z' ok · '_' '5' '-' no

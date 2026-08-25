@@ -7,6 +7,26 @@
 #include "grammar/Grammar.hpp"
 #include "libcpp/str/format.hpp"
 
+/*
+** The end of the pipeline: what a successful match hands back.
+**
+** The same captures are stored TWICE, because two callers want two shapes:
+**
+**   _values    one bucket per capture slot, each holding every value that
+**              capture grabbed. This is the by-name view -- get("chanlist").
+**              Command handlers use it.
+**   _sequence  every captured value flattened into one list, in the order the
+**              LINE produced them, with _owners recording which slot each came
+**              from. Server::fillParams() needs this: IRC parameters are
+**              positional, so "MODE #c +ov alice bob" has to keep alice before
+**              bob even though both landed in the same $modeparam slot.
+**
+** Neither view is derivable from the other cheaply, which is why both are kept.
+**
+** Every by-name accessor is TOTAL: an unknown name or an out-of-range index
+** gives "" rather than undefined behaviour, so a handler can probe without
+** guarding first. has() is there for when "absent" and "empty" must differ.
+*/
 namespace Abnf {
 namespace {
 const std::string& emptyString() {
@@ -33,6 +53,9 @@ MatchResult& MatchResult::operator=(const MatchResult& other) {
 
 MatchResult::~MatchResult() {}
 
+//< Every by-name accessor funnels through here. Linear over the capture names
+//< and case-SENSITIVE, matching Grammar::captureIndex(). Unbound (_grammar
+//< NULL) answers -1, which is what makes a default-constructed result inert.
 int MatchResult::slotOf(const std::string& name) const {
   if (_grammar == NULL) return -1;
   for (std::size_t i = 0; i < _grammar->captureCount(); ++i)
@@ -74,6 +97,10 @@ int MatchResult::sequenceOwner(std::size_t index) const {
   return _owners[index];
 }
 
+//< swap(), not assign: the matcher built these in its own scratch space and is
+//< done with them, so moving the buffers across costs nothing. That is also why
+//< the parameters are non-const references -- the caller's vectors come back
+//< empty, by design.
 void MatchResult::adoptSequence(std::vector<std::string>& sequence, std::vector<int>& owners) {
   _sequence.swap(sequence);
   _owners.swap(owners);
@@ -94,6 +121,9 @@ void MatchResult::clear() {
   _grammar = NULL;
 }
 
+//< Called at the top of every IMatcher::match(), which is what lets a caller
+//< hand the same MatchResult to call after call. Sizing _values to
+//< captureCount() here is what adopt() then relies on.
 void MatchResult::reset(const Grammar& grammar) {
   _grammar = &grammar;
   _sequence.clear();
@@ -103,8 +133,10 @@ void MatchResult::reset(const Grammar& grammar) {
 
 void MatchResult::adopt(std::vector<std::vector<std::string> >& values) { _values.swap(values); }
 
+//< Debug dump. Walks _values rather than _sequence so each value prints with
+//< its capture NAME, which is the useful thing when reading a trace.
 std::ostream& operator<<(std::ostream& os, const MatchResult& result) {
-  if (result._grammar == NULL) {
+  if (result._grammar == NULL) {  //< never reset() -- no names to resolve against
     os << "{unbound}";
     return os;
   }
