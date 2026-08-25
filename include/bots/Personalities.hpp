@@ -33,6 +33,8 @@ class JokerBot : public ABot {
   std::string idleLine() const;
   std::string answerLine() const;
   std::string greetLine(const std::string& who) const;
+  std::string onMentioned(const std::string& speaker);
+  std::string onThanked(const std::string& speaker);
   float greetOdds() const;
 };
 
@@ -46,6 +48,8 @@ class SadBot : public ABot {
   std::string idleLine() const;
   std::string answerLine() const;
   float greetOdds() const;
+  std::string onSympathy(const std::string& speaker);
+  std::string onMentioned(const std::string& speaker);
   //< Rung 4 for a bot that cannot kick: it LEAVES. The honest version of
   //< powerlessness -- a real IRC action with a real consequence, rather than
   //< pretending to moderate.
@@ -62,6 +66,8 @@ class HappyBot : public ABot {
   std::string idleLine() const;
   std::string answerLine() const;
   std::string greetLine(const std::string& who) const;
+  std::string onThanked(const std::string& speaker);
+  //< Checks on whoever was targeted, not just the room.
   float greetOdds() const;
 };
 
@@ -112,6 +118,8 @@ class FileBot : public ABot {
   std::string onAmbient(const std::string& channel);
   std::string idleLine() const;
   std::string answerLine() const;
+  //< Announces new artefacts instead of making small talk.
+  bool idleSpecial(Server& server, std::time_t now);
 
  private:
   std::string artefact() const;
@@ -129,6 +137,9 @@ class OperatorBot : public ABot {
   std::string idleLine() const;
   std::string answerLine() const;
   std::string greetLine(const std::string& who) const;
+  //< A quiet sweep for channels left locked down, and for regulars worth
+  //< trusting. Duty rather than coincidence.
+  bool idleSpecial(Server& server, std::time_t now);
 };
 
 //< Factory: a config word -> a bot. The only place the concrete classes are
