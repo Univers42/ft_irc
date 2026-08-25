@@ -115,6 +115,20 @@ class ABot : public IServerExtension {
   virtual std::string answerLine() const;
   virtual float greetOdds() const;
 
+  //< Somebody was talking ABOUT this bot to somebody else, rather than to it.
+  virtual std::string onMentioned(const std::string& speaker);
+  //< Warmth. Kept separate from onAddressed because a thank-you and a
+  //< question deserve genuinely different answers, and folding them together
+  //< is what makes a bot reply to gratitude with a shrug.
+  virtual std::string onThanked(const std::string& speaker);
+  virtual std::string onSympathy(const std::string& speaker);
+  //< A bot with a JOB: FileBot announces artefacts, OperatorBot sweeps for
+  //< channels it locked down and never reopened. Runs before idle chatter,
+  //< so a working bot is not merely a chatty one.
+  virtual bool idleSpecial(Server& server, std::time_t now);
+  //< Colours a line by how this bot feels about the person it is talking to.
+  virtual std::string flavourFor(const std::string& nick, const std::string& text) const;
+
   //< Rung 4. Default is a kick; SadBot overrides it to leave instead.
   virtual void sanction(Server& server, const std::string& channel, const std::string& speaker);
 
@@ -130,6 +144,10 @@ class ABot : public IServerExtension {
   //< this only decides who answers, so eleven bots do not pile onto one line.
   bool mayReact(const std::string& channel, const std::string& speaker, const Brain::Reading& r) const;
   void tighten(Server& server, const std::string& channel);
+  //< The other half of tighten(): give a calmed channel its modes back. A bot
+  //< that only ever locks rooms down leaves every channel permanently +i,
+  //< which is a worse outcome than never moderating at all.
+  bool relax(Server& server, const std::string& channel);
 
   Server* _server;
   Brain* _brain;  //< HAS-A, owned

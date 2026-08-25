@@ -109,17 +109,39 @@ bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, 
     return false;  //< never swallow the message; it is a real PRIVMSG
   }
 
-  // 2. warmth
-  if (Lexicon::isAppreciation(text) && r.atMe) {
+  // 2. warmth. Gratitude and sympathy move relationships, which then colour
+  //    everything this bot says to that person afterwards.
+  if (Lexicon::isAppreciation(text) && (r.atMe || r.aboutMe)) {
     _brain->warmedBy(speaker, 1);
+    if (!_brain->onCooldown(now, _cooldown / 3.0f) && roll() < 0.45f) {
+      say(server, replyTo, onThanked(speaker));
+      return false;
+    }
+  }
+  if (Lexicon::isSympathy(text) && (r.atMe || r.aboutMe)) {
+    _brain->warmedBy(speaker, 2);
+    const std::string reply = onSympathy(speaker);
+    if (!reply.empty()) {
+      say(server, replyTo, reply);
+      return false;
+    }
   }
 
   // 3. spoken to directly — the strongest obligation a bot has
   if (r.atMe) {
     if (_brain->onCooldown(now, _cooldown / 4.0f)) return false;
     if (roll() > _replyOdds) return false;
-    say(server, replyTo, onAddressed(r, speaker, text));
+    say(server, replyTo, flavourFor(speaker, onAddressed(r, speaker, text)));
     return false;
+  }
+
+  // 4. talked ABOUT rather than TO. Noticing this is most of what makes a
+  //    bot feel present in a room rather than merely responsive.
+  if (!r.addressee.empty() && r.addressee == _nick && roll() < 0.5f) {
+    if (!_brain->onCooldown(now, _cooldown / 3.0f)) {
+      say(server, replyTo, onMentioned(speaker));
+      return false;
+    }
   }
 
   // 4. ambient, governed by the thread rather than a bare die roll
@@ -279,6 +301,14 @@ void ABot::onTick(Server& server, std::time_t now) {
 
   const std::vector<std::string> chans = _brain->channels();
   if (chans.empty()) return;
+
+  //< Housekeeping first, and it is NOT gated by the chat cooldown: reopening
+  //< a channel this bot locked is a duty, not conversation.
+  for (std::vector<std::string>::size_type i = 0; i < chans.size(); ++i)
+    if (relax(server, chans[i])) return;
+
+  if (idleSpecial(server, now)) return;
+
   if (_brain->onCooldown(now, _cooldown)) return;
   if (roll() > _chattiness * 0.35f) return;
 
@@ -289,6 +319,19 @@ void ABot::onTick(Server& server, std::time_t now) {
     return;
   }
   say(server, chan, idleLine());
+}
+
+bool ABot::relax(Server& server, const std::string& channel) {
+  //< Only undo what this bot itself believes is set, and only once the thread
+  //< has actually cooled -- lifting a lockdown while the argument is still
+  //< running just restarts it.
+  const Thread* t = _brain->peekThread(channel);
+  if (!t || t->heat > 0.12f) return false;
+  if (!_brain->hasMode(channel, 'i')) return false;
+  _brain->sawMode(channel, 'i', false);
+  _brain->countAttempt();
+  say(server, channel, "things have settled — opening this back up");
+  return true;
 }
 
 // ── default hook bodies ────────────────────────────────────────────────────
@@ -317,5 +360,30 @@ std::string ABot::greetLine(const std::string& who) const { return "hi " + who; 
 std::string ABot::answerLine() const { return "not sure, honestly"; }
 
 float ABot::greetOdds() const { return 0.4f; }
+
+std::string ABot::onMentioned(const std::string& speaker) {
+  return speaker + ": i can hear you, you know";
+}
+
+std::string ABot::onThanked(const std::string& speaker) { return "anytime, " + speaker; }
+
+std::string ABot::onSympathy(const std::string& speaker) {
+  (void)speaker;
+  return "";  //< most bots do not need looking after; SadBot overrides this
+}
+
+bool ABot::idleSpecial(Server& server, std::time_t now) {
+  (void)server;
+  (void)now;
+  return false;
+}
+
+std::string ABot::flavourFor(const std::string& nick, const std::string& text) const {
+  //< A bot that talks to everybody identically has no relationships worth
+  //< tracking. This is the cheapest place they become audible.
+  if (_brain->likes(nick) && roll() < 0.30f) return text + " — good to hear from you";
+  if (_brain->dislikes(nick) && roll() < 0.30f) return text + ".";
+  return text;
+}
 
 }  // namespace Bots

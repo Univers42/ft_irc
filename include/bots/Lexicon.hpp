@@ -35,6 +35,10 @@ std::vector<std::string> keywords(const std::string& text, std::size_t limit);
 bool isQuestion(const std::string& text);
 bool isFileRequest(const std::string& text);
 bool isAppreciation(const std::string& text);
+//< "you ok?", "hang in there" — kindness aimed at someone who is
+//< struggling. Distinct from appreciation: thanking a bot and checking
+//< on it deserve different answers.
+bool isSympathy(const std::string& text);
 
 //< The worst phrase found, for the log. An eight-axis vector is the right
 //< thing to reason with and the wrong thing to print every line.

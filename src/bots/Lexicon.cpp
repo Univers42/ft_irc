@@ -216,6 +216,13 @@ const char* const kStopwords[] = {"the",   "and",  "for",   "you",  "are",   "wa
 const char* const kFileWords[] = {"file", "files", "upload", "download", "archive", "index",
                                   "log",  "logs",  "dump",   "trace",    NULL};
 
+//< Phrases, not single words: "you ok" only means sympathy as a phrase, and
+//< matching on "ok" alone would fire on half the channel.
+const char* const kSympathyPhrases[] = {"you ok",       "you okay",    "are you alright",
+                                        "sorry to hear", "that's rough", "hang in there",
+                                        "we're here",   "here for you", "don't worry",
+                                        "chin up",      NULL};
+
 const char* const kAppreciation[] = {"thanks", "thank", "appreciate", "grateful", "cheers", "agreed", "exactly", NULL};
 
 std::string lower(const std::string& s) {
@@ -406,6 +413,13 @@ bool isFileRequest(const std::string& text) {
   const std::vector<std::string> words = tokenise(text);
   for (std::vector<std::string>::size_type i = 0; i < words.size(); ++i)
     if (inList(kFileWords, words[i])) return true;
+  return false;
+}
+
+bool isSympathy(const std::string& text) {
+  const std::string low = lower(text);
+  for (int i = 0; kSympathyPhrases[i]; ++i)
+    if (low.find(kSympathyPhrases[i]) != std::string::npos) return true;
   return false;
 }
 
