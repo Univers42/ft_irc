@@ -4,10 +4,10 @@ HOST="10.11.7.5"
 PORT="6667"
 
 PASS="pass"
-NICK="dylan"
+NICK="hellohellohello"
 USER="dylanjsfkkahfkajfhkjahfjhsdfkhskhfkslhfjhsdfjhalhsfhlskdhfhlks"
 MODE="1"
-UNUSED="                   "
+UNUSED="         *          "
 REALNAME="A"
 
 TEST="REGISTER"

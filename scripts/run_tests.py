@@ -189,8 +189,12 @@ def build_suites():
         Suite("whitespace", "parallel",
               ["make", "--no-print-directory", "whitespace"],
               note="trailing whitespace, final newline"),
-        Suite("sim", "parallel",
-              ["make", "--no-print-directory", "test-sim", "SIM_PORT=6821"],
+        # `make auto_sim` is `make test-sim` -- the alias exists so this suite
+        # and the hand-driven `make man_sim` read as the pair they are. Port
+        # 6821, deliberately nowhere near man_sim's 6667: the two are meant to
+        # be able to run at the same time.
+        Suite("auto_sim", "parallel",
+              ["make", "--no-print-directory", "auto_sim", "SIM_PORT=6821"],
               note="populated simulation + 3 probes", heavy=True),
         Suite("mem", "parallel",
               ["make", "--no-print-directory", "test-mem", "MEM_PORT=6831"],

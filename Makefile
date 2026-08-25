@@ -277,6 +277,21 @@ FUZZ_MODE_CASES	?= 150
 SIM_USERS		?= 6
 MEM_TIER		?= full
 
+# ── the hand-driven sandbox (`make man_sim`) ────────────────────────────
+# Deliberately NOT the same knobs as the automated simulation. That one is
+# sized for assertions -- six personas on a private port, torn down the
+# moment its probes finish. This one is sized for a person: a bigger cast, a
+# lot more channels, the conventional IRC port, and it stays up until you
+# say otherwise.
+MAN_SIM_PORT	?= 6667
+MAN_SIM_PASS	?= pass
+MAN_SIM_ROSTER	?= scripts/sim/personas_manual.conf
+MAN_SIM_USERS	?= 19
+# 0 = personas connect, join, and then stay quiet; 1 = they keep talking.
+# Quiet is the default because small talk scrolling past makes it hard to
+# read your own replies.
+MAN_SIM_CHATTER	?= 0
+
 # Extra arguments forwarded to a suite, e.g.
 #   make test-shell SHELL_ARGS="--only 05"
 #   make test-unit  UNIT_ARGS="--gtest_filter=Channel*"
@@ -399,6 +414,55 @@ test-sim: $(BIN)
 	bash $(SIM_DOWN_SCRIPT) >/dev/null 2>&1 || true; \
 	trap - EXIT INT TERM; \
 	exit $$rc
+
+# `auto_sim` is test-sim under the name that pairs with man_sim. Same target,
+# so the matrix and this alias can never drift apart -- scripts/run_tests.py
+# runs `make test-sim`, and this is that.
+auto_sim: test-sim
+
+# ── the hand-driven sandbox ─────────────────────────────────────────────
+#
+# man_sim is auto_sim's opposite in every way that matters:
+#
+#              auto_sim (test-sim)         man_sim
+#   port       SIM_PORT, out of the way    MAN_SIM_PORT, the conventional one
+#   cast       SIM_USERS personas, fixed   MAN_SIM_USERS over 11 channels
+#   lifetime   torn down when its probes   stays up until you run
+#              finish, pass or fail        `make man_sim-down`
+#   purpose    asserting                   exploring
+#
+# The server binds INADDR_ANY (Server.cpp:386), so it is reachable from any
+# machine that can route here. The connect lines printed at the end name this
+# host's real addresses rather than assuming localhost, because the whole
+# point of this target is that someone else connects to it.
+man_sim: $(BIN)
+	$(call act,$(C_MAG),SIM   ,manual sandbox $(C_DIM)($(MAN_SIM_USERS) personas, port $(MAN_SIM_PORT), password $(MAN_SIM_PASS))$(C_RST))
+	@bash $(SIM_SCRIPT) --port $(MAN_SIM_PORT) --password $(MAN_SIM_PASS) \
+		--roster $(MAN_SIM_ROSTER) --users $(MAN_SIM_USERS) \
+		$(if $(filter 1,$(MAN_SIM_CHATTER)),--chatter,--no-scenario) \
+		|| { printf '  the sandbox failed to start\n' >&2; exit 1; }
+	@printf '\n'
+	$(call tag,$(C_GRN),READY ,the sandbox is up — connect to any of these)
+	@ip -4 addr show 2>/dev/null | grep -oP 'inet \K[\d.]+' | grep -v '^127\.' \
+		| while read -r _a; do \
+			printf '    %b\n' "$(C_BLD)/server $$_a $(MAN_SIM_PORT) $(MAN_SIM_PASS)$(C_RST)"; \
+		done
+	@printf '    %s\n' "$(C_DIM)nc:  { printf 'PASS $(MAN_SIM_PASS)\\r\\nNICK me\\r\\nUSER me 0 * :Me\\r\\nJOIN #general\\r\\n'; cat; } | nc -C <host> $(MAN_SIM_PORT)$(C_RST)"
+	@printf '\n'
+	$(call act,$(C_DIM),ROOMS ,#general #dev #ops #random #support #music #games #linux #42 #void #lurkers)
+	$(call act,$(C_DIM),OPS   ,alice bob carol peggy — the ones who can KICK / INVITE / TOPIC)
+	$(call act,$(C_DIM),NEXT  ,make man_sim-status $(S_DOT) make man_sim-logs NICK=alice $(S_DOT) make man_sim-down)
+
+man_sim-status:
+	@bash $(SIM_SCRIPT) --status
+
+# make man_sim-logs NICK=alice   (all personas if NICK is unset)
+man_sim-logs:
+	@bash $(SIM_SCRIPT) --logs $(NICK)
+
+man_sim-down:
+	$(call act,$(C_YEL),SIM   ,tearing the sandbox down)
+	@bash $(SIM_DOWN_SCRIPT) >/dev/null 2>&1 || true
 
 # ── HEAVY: valgrind ────────────────────────────────────────────────────
 # Exit codes are the script's own: 0 clean, 97 a leak, 90 the scripted client
@@ -604,4 +668,5 @@ help:
 	norm norm-fix evloop evloop-run audit help \
 	check test-all test-quick test-list matrix matrix-quick matrix-list \
 	test test-unit test-shell test-grammar test-sim test-mem \
+	auto_sim man_sim man_sim-status man_sim-logs man_sim-down \
 	headers whitespace
