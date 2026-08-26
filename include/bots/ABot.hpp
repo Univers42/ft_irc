@@ -12,6 +12,36 @@ class Server;
 class Client;
 class Channel;
 
+namespace Bots {
+class ABot;
+
+/*
+** How a bot hears its neighbours.
+**
+** A resident bot is not a Client, so when it speaks the line is broadcast
+** straight to the channel and never travels back through cmdPrivmsg() --
+** which means no extension callback fires and the other bots are deaf to it.
+** The first version had exactly that hole: eight bots in one room, none of
+** whom could hear each other, all answering the human in chorus and none of
+** them ever taking a second turn.
+**
+** So a bot reports what it said, and the colony fans it out. Two things fall
+** out of that, and both matter:
+**
+**   - conversation. A bot can answer another bot, which is what turns a
+**     chorus into an exchange.
+**   - RATE LIMITING. Thread::rate() counts messages it has been told about;
+**     if bot traffic is invisible then the limiter only ever sees the human,
+**     and eight residents can talk over each other indefinitely.
+*/
+class IBotAudience {
+ public:
+  virtual ~IBotAudience() {}
+  //< `from` is the speaking bot, so the colony can skip it when fanning out.
+  virtual void botSpoke(ABot* from, const std::string& target, const std::string& text) = 0;
+};
+}  // namespace Bots
+
 /*
 ** ABot — the algorithm every bot shares, and the hooks each one bends.
 **
@@ -84,6 +114,20 @@ class ABot : public IServerExtension {
   Brain& brain() { return *_brain; }
   const Brain& brain() const { return *_brain; }
 
+  //< Who to tell when this bot speaks. Not owned; the colony outlives its
+  //< residents.
+  void setAudience(IBotAudience* audience) { _audience = audience; }
+
+  //< Let this bot observe a line somebody else said. Same path a human's
+  //< message takes, so a bot reacts to a bot exactly as it would to a person.
+  void overhear(Server& server, const std::string& speaker, const std::string& target, const std::string& text);
+
+  //< The shared body of onPrivmsg() and overhear(). `speaker` is a nick,
+  //< whether it belongs to a human or to another resident -- a bot must not
+  //< treat the two differently, or it stops being a participant and becomes
+  //< a service desk.
+  void consider(Server& server, const std::string& speaker, const std::string& target, const std::string& text);
+
   //< Hand this bot a different mind. Takes ownership; the old one is freed.
   //< This is what composition buys that a base-class member would not.
   void setBrain(Brain* brain);
@@ -152,7 +196,8 @@ class ABot : public IServerExtension {
   bool relax(Server& server, const std::string& channel);
 
   Server* _server;
-  Brain* _brain;  //< HAS-A, owned
+  Brain* _brain;            //< HAS-A, owned
+  IBotAudience* _audience;  //< HAS-A, NOT owned — the colony outlives us
   std::string _nick;
   std::string _role;
   mutable unsigned int _seed;  //< tiny LCG; no <random> in C++98

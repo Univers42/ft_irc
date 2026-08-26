@@ -30,8 +30,6 @@ HEXCHAT_COUNT=0
 MAX_USERS=0
 RUN_SCENARIO=1
 RUN_CHATTER=0
-RUN_ECOSYSTEM=0
-ECO_ARGS=""
 START_SERVER=1
 SIM_OWN_SERVER=0
 ACTION="start"
@@ -50,12 +48,6 @@ STARTING
   --scenario FILE      conversation to replay          (sim/scenario_default.conf)
   --no-scenario        connect and join, then stay quiet
   --chatter            keep generating small talk until shutdown
-  --ecosystem          run the AUTONOMOUS bot ecosystem in the background
-                       (personalities, roles, reactions, boundary probes)
-  --eco-args "..."     extra flags for scripts/sim/ecosystem.py
-  --ecosystem-fg [...] attach the ecosystem to a RUNNING simulation, in
-                       the foreground, so you can watch it. Ctrl+C stops
-                       the ecosystem and leaves the clients connected.
   --no-server          attach to an ircserv that is already running
 
 DRIVING A LIVE SIMULATION
@@ -92,9 +84,6 @@ while [ $# -gt 0 ]; do
         --scenario)    SCENARIO="$2"; shift 2 ;;
         --no-scenario) RUN_SCENARIO=0; shift ;;
         --chatter)     RUN_CHATTER=1; shift ;;
-        --ecosystem)   RUN_ECOSYSTEM=1; RUN_CHATTER=0; shift ;;
-        --eco-args)    ECO_ARGS="$2"; shift 2 ;;
-        --ecosystem-fg) ACTION="ecosystem"; shift; ECO_ARGS="$*"; break ;;
         --no-server)   START_SERVER=0; shift ;;
         --send)        ACTION="send";    shift; ACTION_ARGS=("$@"); break ;;
         --cmd)         ACTION="cmd";     shift; ACTION_ARGS=("$@"); break ;;
@@ -140,14 +129,6 @@ case "$ACTION" in
         unset 'ACTION_ARGS[0]' 'ACTION_ARGS[1]'
         sim_say "$_n" "$_t" "${ACTION_ARGS[@]}" && ok "$_n -> $_t"
         exit $?
-        ;;
-    ecosystem)
-        # Foreground attach to a simulation that is already up. Ctrl+C stops
-        # the ecosystem ONLY -- the nc clients keep their connections, so the
-        # channels stay populated and a human stays connected through it.
-        require_running
-        exec env SIM_DIR="$SIM_DIR" python3 "$SIM_LIB_DIR/ecosystem.py" \
-            --sim-dir "$SIM_DIR" $ECO_ARGS
         ;;
     verify)
         require_running
@@ -376,19 +357,6 @@ if [ "$RUN_CHATTER" -eq 1 ]; then
     sim_record_pid chatter $!
     disown 2>/dev/null || true
     ok "chatter running until shutdown"
-fi
-
-# The autonomous ecosystem. It attaches to the clients started above rather
-# than opening connections of its own -- see scripts/sim/bot/client.py -- so
-# it is one more writer on the same FIFOs, alongside --send and the verify
-# probes, and none of them exclude the others.
-if [ "$RUN_ECOSYSTEM" -eq 1 ]; then
-    nohup env SIM_DIR="$SIM_DIR" NO_COLOR=1 python3 "$SIM_LIB_DIR/ecosystem.py" \
-        --sim-dir "$SIM_DIR" $ECO_ARGS \
-        > "$SIM_DIR/ecosystem.log" 2>&1 &
-    sim_record_pid ecosystem $!
-    disown 2>/dev/null || true
-    ok "ecosystem running until shutdown  ($SIM_DIR/ecosystem.log)"
 fi
 
 cat <<EOF

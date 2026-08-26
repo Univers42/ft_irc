@@ -36,7 +36,7 @@ const Resident kResidents[] = {
 
 }  // namespace
 
-BotColony::BotColony(Server* server) : _server(server), _lastTick(0) {}
+BotColony::BotColony(Server* server) : _server(server), _lastTick(0), _depth(0) {}
 
 BotColony::~BotColony() {
   for (std::vector<ABot*>::size_type i = 0; i < _bots.size(); ++i) delete _bots[i];
@@ -45,7 +45,22 @@ BotColony::~BotColony() {
 const char* BotColony::name() const { return "botcolony"; }
 
 void BotColony::add(ABot* bot) {
-  if (bot) _bots.push_back(bot);
+  if (!bot) return;
+  bot->setAudience(this);
+  _bots.push_back(bot);
+}
+
+void BotColony::botSpoke(ABot* from, const std::string& target, const std::string& text) {
+  //< See IBotAudience in ABot.hpp for why this exists at all. The guard is
+  //< the whole safety argument: without it, two bots that each find the
+  //< other worth answering recurse until the stack runs out.
+  if (_depth >= 1 || !_server) return;
+  ++_depth;
+  for (std::vector<ABot*>::size_type i = 0; i < _bots.size(); ++i) {
+    if (_bots[i] == from) continue;
+    _bots[i]->overhear(*_server, from->nick(), target, text);
+  }
+  --_depth;
 }
 
 void BotColony::populate() {

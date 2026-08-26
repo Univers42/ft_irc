@@ -29,6 +29,7 @@ ABot::ABot(Server* server, const std::string& nick, const std::string& role)
       _shouts(false),
       _server(server),
       _brain(NULL),
+      _audience(NULL),
       _nick(nick),
       _role(role),
       _seed(0) {
@@ -87,15 +88,23 @@ std::string ABot::style(const std::string& text) const {
 void ABot::say(Server& server, const std::string& target, const std::string& text) {
   if (text.empty()) return;
   _brain->noteSpoke(std::time(NULL));
-  const std::string line = ":" + _nick + " PRIVMSG " + target + " :" + style(text);
+  const std::string styled = style(text);
+  const std::string line = ":" + _nick + " PRIVMSG " + target + " :" + styled;
 
   if (!target.empty() && target[0] == '#') {
     Channel* chan = server.findChannel(target);
     if (chan) chan->broadcastMessage(line, NULL);
+    //< Tell the neighbours. Without this a bot is inaudible to every other
+    //< bot, and the channel rate limiter never learns that anyone spoke.
+    if (_audience) _audience->botSpoke(this, target, styled);
     return;
   }
   Client* who = server.findClientByNick(target);
   if (who) who->queueMessage(line);
+}
+
+void ABot::overhear(Server& server, const std::string& speaker, const std::string& target, const std::string& text) {
+  consider(server, speaker, target, text);
 }
 
 // ── the fixed algorithm ────────────────────────────────────────────────────
@@ -103,9 +112,16 @@ void ABot::say(Server& server, const std::string& target, const std::string& tex
 bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, const std::string& text) {
   if (!_brain) return false;
   if (ircEquals(sender.getNickname(), _nick)) return false;
+  consider(server, sender.getNickname(), target, text);
+  //< ALWAYS false. A resident bot observes conversation; it never consumes
+  //< it. Returning true would stop the line reaching the people it was for.
+  return false;
+}
 
+void ABot::consider(Server& server, const std::string& speaker, const std::string& target, const std::string& text) {
+  if (!_brain) return;
+  if (ircEquals(speaker, _nick)) return;  //< never answer yourself
   const std::time_t now = std::time(NULL);
-  const std::string speaker = sender.getNickname();
   const Brain::Reading r = _brain->read(text, speaker, target, now);
   const bool channel = !target.empty() && target[0] == '#';
   const std::string replyTo = channel ? target : speaker;
@@ -115,7 +131,7 @@ bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, 
   if (r.impact > 0.0f) {
     _brain->woundedBy(speaker, r.impact, _grudge);
     if (mayReact(target, speaker, r)) escalate(server, target, speaker, r);
-    return false;  //< never swallow the message; it is a real PRIVMSG
+    return;  //< never swallow the message; it is a real PRIVMSG
   }
 
   // 2. warmth. Gratitude and sympathy move relationships, which then colour
@@ -124,7 +140,7 @@ bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, 
     _brain->warmedBy(speaker, 1);
     if (!_brain->onCooldown(now, _cooldown / 3.0f) && roll() < 0.45f) {
       say(server, replyTo, onThanked(speaker));
-      return false;
+      return;
     }
   }
   if (Lexicon::isSympathy(text) && (r.atMe || r.aboutMe)) {
@@ -132,16 +148,16 @@ bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, 
     const std::string reply = onSympathy(speaker);
     if (!reply.empty()) {
       say(server, replyTo, reply);
-      return false;
+      return;
     }
   }
 
   // 3. spoken to directly — the strongest obligation a bot has
   if (r.atMe) {
-    if (_brain->onCooldown(now, _cooldown / 4.0f)) return false;
-    if (roll() > _replyOdds) return false;
+    if (_brain->onCooldown(now, _cooldown / 4.0f)) return;
+    if (roll() > _replyOdds) return;
     say(server, replyTo, flavourFor(speaker, onAddressed(r, speaker, text)));
-    return false;
+    return;
   }
 
   // 4. talked ABOUT rather than TO. Noticing this is most of what makes a
@@ -149,13 +165,13 @@ bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, 
   if (!r.addressee.empty() && r.addressee == _nick && roll() < 0.5f) {
     if (!_brain->onCooldown(now, _cooldown / 3.0f)) {
       say(server, replyTo, onMentioned(speaker));
-      return false;
+      return;
     }
   }
 
   // 4. ambient, governed by the thread rather than a bare die roll
-  if (!channel || _brain->onCooldown(now, _cooldown / 2.0f)) return false;
-  if (roll() > _brain->urgeToSpeak(target, _chattiness, now)) return false;
+  if (!channel || _brain->onCooldown(now, _cooldown / 2.0f)) return;
+  if (roll() > _brain->urgeToSpeak(target, _chattiness, now)) return;
 
   //< An unanswered question outranks whatever this bot had to say. A channel
   //< where somebody asks something and everyone carries on with their own
@@ -163,10 +179,10 @@ bool ABot::onPrivmsg(Server& server, Client& sender, const std::string& target, 
   const Thread* t = _brain->peekThread(target);
   if (t && t->questionOpen(now) && t->questionFrom != _nick) {
     say(server, target, answerLine());
-    return false;
+    return;
   }
   say(server, target, onAmbient(target));
-  return false;
+  return;
 }
 
 bool ABot::mayReact(const std::string& channel, const std::string& speaker, const Brain::Reading& r) const {
@@ -370,9 +386,7 @@ std::string ABot::answerLine() const { return "not sure, honestly"; }
 
 float ABot::greetOdds() const { return 0.4f; }
 
-std::string ABot::onMentioned(const std::string& speaker) {
-  return speaker + ": i can hear you, you know";
-}
+std::string ABot::onMentioned(const std::string& speaker) { return speaker + ": i can hear you, you know"; }
 
 std::string ABot::onThanked(const std::string& speaker) { return "anytime, " + speaker; }
 

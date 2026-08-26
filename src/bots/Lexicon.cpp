@@ -218,10 +218,17 @@ const char* const kFileWords[] = {"file", "files", "upload", "download", "archiv
 
 //< Phrases, not single words: "you ok" only means sympathy as a phrase, and
 //< matching on "ok" alone would fire on half the channel.
-const char* const kSympathyPhrases[] = {"you ok",       "you okay",    "are you alright",
-                                        "sorry to hear", "that's rough", "hang in there",
-                                        "we're here",   "here for you", "don't worry",
-                                        "chin up",      NULL};
+const char* const kSympathyPhrases[] = {"you ok",
+                                        "you okay",
+                                        "are you alright",
+                                        "sorry to hear",
+                                        "that's rough",
+                                        "hang in there",
+                                        "we're here",
+                                        "here for you",
+                                        "don't worry",
+                                        "chin up",
+                                        NULL};
 
 const char* const kAppreciation[] = {"thanks", "thank", "appreciate", "grateful", "cheers", "agreed", "exactly", NULL};
 

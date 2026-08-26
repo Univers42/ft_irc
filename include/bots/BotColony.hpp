@@ -31,7 +31,7 @@
 */
 namespace Bots {
 
-class BotColony : public IServerExtension {
+class BotColony : public IServerExtension, public IBotAudience {
  public:
   explicit BotColony(Server* server);
   ~BotColony();
@@ -55,6 +55,9 @@ class BotColony : public IServerExtension {
   bool onPrivmsg(Server& server, Client& sender, const std::string& target, const std::string& text);
   bool reservesNick(const std::string& nick) const;
 
+  // -- IBotAudience: one resident spoke; let the others hear it -----------
+  void botSpoke(ABot* from, const std::string& target, const std::string& text);
+
  private:
   BotColony(const BotColony& other);
   BotColony& operator=(const BotColony& other);
@@ -62,6 +65,11 @@ class BotColony : public IServerExtension {
   Server* _server;
   std::vector<ABot*> _bots;
   std::time_t _lastTick;
+  //< Depth guard. A replies to B, B replies to A, and without a bound the
+  //< fan-out recurses until the stack gives out. One level is enough for a
+  //< bot to answer a bot; beyond that the reply lands on the next tick like
+  //< any other conversation, which is also how a human would experience it.
+  int _depth;
 };
 
 }  // namespace Bots

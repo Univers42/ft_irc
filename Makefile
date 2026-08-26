@@ -298,11 +298,11 @@ MEM_TIER		?= full
 MAN_SIM_PORT	?= 6667
 MAN_SIM_PASS	?= pass
 MAN_SIM_ROSTER	?= scripts/sim/personas_manual.conf
-MAN_SIM_USERS	?= 16
-# The autonomous ecosystem: personalities, roles, reactions, boundary probes.
-# 1 = bots decide for themselves; 0 = they connect, join and stay quiet.
-MAN_SIM_ECO		?= 1
-MAN_SIM_ECO_ARGS ?= --tick 1.5
+MAN_SIM_USERS	?= 8
+# The autonomous bots are COMPILED INTO the server (src/bots/), so there is
+# nothing to launch and nothing to switch off here -- they are residents of
+# any bonus/full-tier ircserv. `make man_sim` just gives them a populated
+# room to live in. See include/bots/ABot.hpp for the design.
 # Its OWN state directory, and this is load-bearing rather than tidiness.
 # simulation.sh keeps one simulation per SIM_DIR and refuses to start a second
 # into a directory that already holds a sim.env. Both kinds defaulting to
@@ -310,9 +310,9 @@ MAN_SIM_ECO_ARGS ?= --tick 1.5
 # the port (they were always on different ones), on the state directory.
 MAN_SIM_DIR		?= .sim-manual
 # The OLD driver: a round-robin loop that picks a random channel and sends a
-# canned line. Superseded by MAN_SIM_ECO, kept because scripts/sim/driver.sh
-# is still the thing `--chatter` runs and nothing should silently change
-# under anyone using it.
+# canned line. Superseded by the in-server bot colony; kept because
+# scripts/sim/driver.sh is still what `--chatter` runs, and nothing should
+# silently change under anyone using it.
 MAN_SIM_CHATTER	?= 0
 
 # Extra arguments forwarded to a suite, e.g.
@@ -463,7 +463,6 @@ man_sim: $(BIN)
 	@SIM_DIR=$(MAN_SIM_DIR) bash $(SIM_SCRIPT) --port $(MAN_SIM_PORT) --password $(MAN_SIM_PASS) \
 		--roster $(MAN_SIM_ROSTER) --users $(MAN_SIM_USERS) \
 		$(if $(filter 1,$(MAN_SIM_CHATTER)),--chatter,--no-scenario) \
-		$(if $(filter 1,$(MAN_SIM_ECO)),--ecosystem --eco-args "$(MAN_SIM_ECO_ARGS)",) \
 		|| { printf '  the sandbox failed to start\n' >&2; exit 1; }
 	@printf '\n'
 	$(call tag,$(C_GRN),READY ,the sandbox is up — connect to any of these)
@@ -474,17 +473,12 @@ man_sim: $(BIN)
 	@printf '    %s\n' "$(C_DIM)nc:  { printf 'PASS $(MAN_SIM_PASS)\\r\\nNICK me\\r\\nUSER me 0 * :Me\\r\\nJOIN #general\\r\\n'; cat; } | nc -C <host> $(MAN_SIM_PORT)$(C_RST)"
 	@printf '\n'
 	$(call act,$(C_DIM),ROOMS ,#general #dev #ops #random #support #games #linux #files #secret #void #lurkers)
-	$(call act,$(C_DIM),OPS   ,alice bob GrumpyBot OpBot — the ones the SERVER gave @)
-	$(call act,$(C_DIM),BOTS  ,JokerBot GrumpyBot HappyBot HypeBot SadBot FileBot OpBot CalmBot)
+	$(call act,$(C_DIM),OPS   ,alice bob peggy — real clients the SERVER gave @)
+	$(call act,$(C_DIM),BOTS  ,JokerBot GrumpyBot HappyBot HypeBot SadBot FileBot OpBot CalmBot $(C_DIM)(in-server)$(C_RST))
+	$(call act,$(C_DIM),NOTE  ,bots are services like NickServ — they warn and escalate$(C_RST))
 	$(call act,$(C_DIM),TRY   ,say something rude in #general and watch them each react differently)
-	$(call act,$(C_DIM),WATCH ,make man_sim-eco $(S_DOT) tail -f $(MAN_SIM_DIR)/ecosystem.log)
+	$(call act,$(C_DIM),WATCH ,make man_sim-logs NICK=alice $(S_DOT) the bots live in the server itself)
 	$(call act,$(C_DIM),NEXT  ,make man_sim-status $(S_DOT) make man_sim-logs NICK=alice $(S_DOT) make man_sim-down)
-
-# Watch the bots think, in the foreground. Ctrl+C stops the ECOSYSTEM only --
-# the nc clients keep their connections, so the channels stay populated and
-# anyone connected stays connected.
-man_sim-eco:
-	@SIM_DIR=$(MAN_SIM_DIR) bash $(SIM_SCRIPT) --ecosystem-fg $(MAN_SIM_ECO_ARGS)
 
 man_sim-status:
 	@SIM_DIR=$(MAN_SIM_DIR) bash $(SIM_SCRIPT) --status
@@ -549,12 +543,11 @@ test-list:
 	'' \
 	'  $(C_YEL)SANDBOX$(C_RST) $(C_DIM)- a populated server for YOU, not for assertions$(C_RST)' \
 	'    $(C_GRN)man_sim$(C_RST)        $(MAN_SIM_USERS) autonomous clients, 11 channels $(C_DIM)port $(MAN_SIM_PORT), password $(MAN_SIM_PASS)$(C_RST)' \
-	'    $(C_GRN)man_sim-eco$(C_RST)    watch the bots decide $(C_DIM)(Ctrl+C leaves them connected)$(C_RST)' \
 	'    $(C_GRN)man_sim-status$(C_RST) who is up and where' \
 	'    $(C_GRN)man_sim-logs$(C_RST)   $(C_DIM)NICK=alice$(C_RST) what a persona received' \
 	'    $(C_GRN)man_sim-down$(C_RST)   free the port again' \
 	'    $(C_DIM)its own state dir ($(MAN_SIM_DIR)/), so it runs alongside the matrix$(C_RST)' \
-	'    $(C_DIM)MAN_SIM_ECO=0 for a quiet room $(S_DOT) personalities in scripts/sim/ecosystem.conf$(C_RST)' \
+	'    $(C_DIM)the 8 bots are compiled into ircserv $(S_DOT) see include/bots/ABot.hpp$(C_RST)' \
 	'' \
 	'  $(C_YEL)STATIC$(C_RST) $(C_DIM)- no server, no network$(C_RST)' \
 	'    $(C_GRN)norm$(C_RST)  $(C_GRN)evloop$(C_RST)  $(C_GRN)evloop-run$(C_RST)  $(C_GRN)audit$(C_RST)  $(C_GRN)headers$(C_RST)  $(C_GRN)whitespace$(C_RST)' \
@@ -710,5 +703,5 @@ help:
 	norm norm-fix evloop evloop-run audit help \
 	check test-all test-quick test-list matrix matrix-quick matrix-list \
 	test test-unit test-shell test-grammar test-sim test-mem \
-	auto_sim man_sim man_sim-eco man_sim-status man_sim-logs man_sim-down \
+	auto_sim man_sim man_sim-status man_sim-logs man_sim-down \
 	headers whitespace

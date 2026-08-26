@@ -1,6 +1,7 @@
 #include "bots/Personalities.hpp"
 
 #include <string>
+#include <vector>
 
 #include <cstdio>
 
@@ -32,8 +33,7 @@ const char* const kJokerInsults[] = {"i've been called worse. usually by better 
                                      "that's the nicest thing anyone's said to me today",
                                      "bold words from someone in kick range", "wow. did you workshop that one?", NULL};
 const char* const kJokerGreets[] = {"%s! we were just talking about you. all good things. mostly",
-                                    "look who it is. %s, the legend",
-                                    "%s arrives. quick, look busy",
+                                    "look who it is. %s, the legend", "%s arrives. quick, look busy",
                                     "ah, %s. the room improves", NULL};
 const char* const kJokerAnswers[] = {"no idea, but say it with confidence and nobody checks",
                                      "have you tried turning it off and leaving it off", "that's a tomorrow problem",
@@ -85,8 +85,7 @@ const char* const kSadLines[] = {"nobody reviewed my patch again", "i don't thin
                                  "it's fine. everything's fine", "does anyone actually read these", NULL};
 const char* const kSadInsults[] = {"i knew someone would say that eventually", "that's... actually pretty hurtful",
                                    "you're probably right", "i'll just go then", NULL};
-const char* const kSadGreets[] = {"oh. hi %s", "hi %s. don't get your hopes up",
-                                  "%s. you're braver than me", NULL};
+const char* const kSadGreets[] = {"oh. hi %s", "hi %s. don't get your hopes up", "%s. you're braver than me", NULL};
 const char* const kSadAnswers[] = {"i wouldn't know, sorry", "i'd probably get it wrong",
                                    "ask someone who knows what they're doing", NULL};
 }  // namespace
@@ -151,10 +150,8 @@ const char* const kHappyLines[] = {"great work today everyone", "that's a really
 const char* const kHappyInsults[] = {"hey, let's keep it friendly :)", "i'm sure we can talk about this nicely",
                                      "that's a bit harsh — everyone's doing their best",
                                      "rough day? happens to all of us", NULL};
-const char* const kHappyGreets[] = {"welcome %s! glad you're here",
-                                    "hey %s :) make yourself at home",
-                                    "%s! good to see you",
-                                    "%s! pull up a chair", NULL};
+const char* const kHappyGreets[] = {"welcome %s! glad you're here", "hey %s :) make yourself at home",
+                                    "%s! good to see you", "%s! pull up a chair", NULL};
 const char* const kHappyAnswers[] = {"good question! i'd check the channel topic first",
                                      "i'd be happy to look into that", "someone here will know — hang on", NULL};
 }  // namespace
@@ -186,7 +183,11 @@ std::string HappyBot::warningLine(const std::string& speaker, bool isFinal) cons
 }
 std::string HappyBot::idleLine() const { return pick(kHappyLines); }
 std::string HappyBot::answerLine() const { return pick(kHappyAnswers); }
-std::string HappyBot::greetLine(const std::string& who) const { return "welcome " + who + "! glad you're here"; }
+std::string HappyBot::greetLine(const std::string& who) const { return fill(pick(kHappyGreets), who); }
+
+std::string HappyBot::onThanked(const std::string& speaker) {
+  return "any time " + speaker + "! that's what we're here for :)";
+}
 float HappyBot::greetOdds() const { return 0.9f; }
 
 // ── GrumpyBot ──────────────────────────────────────────────────────────────
@@ -241,8 +242,8 @@ const char* const kHypeLines[] = {"this is the best build we've ever had", "i lo
                                   "someone give me something to test",     NULL};
 const char* const kHypeInsults[] = {"wow rude. anyway, moving on", "that's ok! i still like you",
                                     "AGGRESSIVE. i respect the energy", NULL};
-const char* const kHypeGreets[] = {"%s IS HERE. amazing day", "%s!!! finally!!",
-                                   "everyone say hi to %s", "%s. LEGEND. WELCOME", NULL};
+const char* const kHypeGreets[] = {"%s IS HERE. amazing day", "%s!!! finally!!", "everyone say hi to %s",
+                                   "%s. LEGEND. WELCOME", NULL};
 const char* const kHypeAnswers[] = {"YES. probably. let me look", "ooh good question, i'll find out",
                                     "i have NO idea but i'm excited about it", NULL};
 }  // namespace
@@ -270,7 +271,7 @@ std::string OverexcitedBot::onInsult(const Brain::Reading& r, const std::string&
 }
 std::string OverexcitedBot::idleLine() const { return pick(kHypeLines); }
 std::string OverexcitedBot::answerLine() const { return pick(kHypeAnswers); }
-std::string OverexcitedBot::greetLine(const std::string& who) const { return who + " IS HERE. amazing day"; }
+std::string OverexcitedBot::greetLine(const std::string& who) const { return fill(pick(kHypeGreets), who); }
 float OverexcitedBot::greetOdds() const { return 0.95f; }
 
 // ── CalmBot ────────────────────────────────────────────────────────────────
@@ -399,6 +400,29 @@ std::string OperatorBot::kickReason() const { return "abusive after two warnings
 std::string OperatorBot::idleLine() const { return pick(kOpLines); }
 std::string OperatorBot::answerLine() const { return "check the topic"; }
 std::string OperatorBot::greetLine(const std::string& who) const { return "welcome " + who + " — topic has the rules"; }
+
+bool OperatorBot::idleSpecial(Server& server, std::time_t now) {
+  /*
+  ** The duty half of being an operator: notice a room this bot locked down
+  ** and never reopened. ABot::relax() lifts +i opportunistically; doing +t
+  ** here as well makes reopening deliberate rather than a coincidence,
+  ** because a channel left restricted is a worse outcome than the argument
+  ** that caused the restriction.
+  */
+  (void)now;
+  if (roll() > 0.15f) return false;
+  const std::vector<std::string> chans = brain().channels();
+  for (std::vector<std::string>::size_type i = 0; i < chans.size(); ++i) {
+    const Thread* t = brain().peekThread(chans[i]);
+    if (!t || t->heat > 0.10f) continue;
+    if (!brain().hasMode(chans[i], 't')) continue;
+    brain().sawMode(chans[i], 't', false);
+    brain().countAttempt();
+    say(server, chans[i], "topic lock lifted — behave yourselves");
+    return true;
+  }
+  return false;
+}
 
 // ── factory ────────────────────────────────────────────────────────────────
 
